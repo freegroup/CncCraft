@@ -21,8 +21,8 @@ pub enum SnapKind {
     Grid,
 }
 
-/// The largest angle step accepted (original: 0x100785420 resets steps outside 0°..90°).
-pub const MAX_ANGLE_STEP: f64 = 90.0;
+/// The largest angle step accepted (original: 0x100785420 rejects values above 88.0).
+pub const MAX_ANGLE_STEP: f64 = 88.0;
 
 /// Snapping switches and distances. `radius` is in world units (the host converts its pixel
 /// setting with the zoom, as the original converts its snap radius to whole pixels).
@@ -65,7 +65,7 @@ impl Snapping {
 }
 
 /// `p` turned about `from` onto the nearest multiple of `step` degrees, keeping its distance.
-/// Steps outside 0°..90° are ignored, as in the original.
+/// Steps outside 0°..88° are ignored, as in the original (0x100785420).
 pub fn snap_angle(from: Pt, p: Pt, step: f64) -> Pt {
     if !(step > 0.0 && step <= MAX_ANGLE_STEP) {
         return p;
@@ -107,7 +107,8 @@ mod tests {
         assert!((p[0] - 10.0498756).abs() < 1e-6 && p[1].abs() < 1e-9, "flat");
         let p = snap_angle([0.0, 0.0], [7.0, 7.4], 45.0);
         assert!((p[0] - p[1]).abs() < 1e-9, "diagonal");
-        assert_eq!(snap_angle([0.0, 0.0], [3.0, 4.0], 120.0), [3.0, 4.0], "steps over 90° are refused");
+        assert_eq!(snap_angle([0.0, 0.0], [3.0, 4.0], 89.0), [3.0, 4.0], "steps over 88° are refused");
+        assert_ne!(snap_angle([0.0, 0.0], [3.0, 4.0], 88.0), [3.0, 4.0], "88° is accepted and snaps");
         assert_eq!(snap_angle([0.0, 0.0], [3.0, 4.0], 0.0), [3.0, 4.0]);
     }
 }

@@ -195,8 +195,8 @@ const SNAP_RADIUS_MAX_PX: f64 = 30.0; // estimated
 /// The grid spacing the original stores in its settings (vcSnapGridSpacingMM, with grid
 /// snapping off and the grid hidden: vcSnapGridDoSnap 0, vcSnapGridVisible 0).
 const GRID_SPACING: f64 = 5.0;
-/// Angle step for Shift while drawing lines; the original accepts 0°..90° (0x100785420).
-const ANGLE_STEP: f64 = 15.0; // estimated
+/// Angle step for Shift while drawing lines; the original accepts 0°..88° (0x100785420).
+const ANGLE_STEP: f64 = 15.0;
 
 struct Editor {
     tp: Toolpath,
