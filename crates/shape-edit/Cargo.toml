@@ -1,0 +1,11 @@
+[package]
+name = "shape-edit"
+version = "0.1.0"
+edition = "2021"
+description = "UI-independent 2D shape classes, boolean operations and select / move / resize / node-edit gestures"
+
+[dependencies]
+epaint_default_fonts = "0.29.1"
+geo = "0.33"
+serde = { version = "1", features = ["derive"] }
+ttf-parser = "0.25"

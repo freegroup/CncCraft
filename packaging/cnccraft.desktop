@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CncCraft
+GenericName=CNC-Entwurf und Fräsen
+Comment=Entwerfen, Werkzeugwege berechnen und G-Code für die CNC-Fräse ausgeben
+Exec=cnccraft
+Icon=cnccraft
+Terminal=false
+Categories=Graphics;Engineering;

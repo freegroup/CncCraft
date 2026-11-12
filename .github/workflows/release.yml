@@ -1,0 +1,84 @@
+# Release per Semantic Versioning aus den Commit-Messages (Conventional Commits) – ohne PR.
+#
+# Ablauf: Push auf main → semantic-release wertet die Commits seit dem letzten Tag aus,
+# bestimmt die neue Version, bumpt Cargo.toml + Cargo.lock, pflegt CHANGELOG.md, erstellt
+# Tag und GitHub-Release direkt. Danach bauen `linux` und `windows` die Pakete und hängen
+# sie an die Release.
+#
+# Version-Regeln:  fix: → Patch (0.1.1) · feat: → Minor (0.2.0) · feat!:/BREAKING CHANGE → Major (1.0.0)
+# Commits ohne passenden Typ (docs:, chore:, ci:, refactor: …) lösen kein Release aus.
+#
+# macOS (.dmg/.zip) wird lokal auf einem Mac gebaut und mit ./build_and_release.sh an die
+# erzeugte Release gehängt – dafür gibt es keinen passenden GitHub-Runner.
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.sr.outputs.new_release_published }}
+      tag: ${{ steps.sr.outputs.new_release_git_tag }}
+      version: ${{ steps.sr.outputs.new_release_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cycjimmy/semantic-release-action@v4
+        id: sr
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/exec
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  linux:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bibliotheken für Fenster und OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libx11-dev libxkbcommon-dev libwayland-dev libxcursor-dev libxrandr-dev libxi-dev libgtk-3-dev
+      - run: ./build.sh linux
+      - name: Pakete an die Release hängen
+        run: gh release upload "${{ needs.release.outputs.tag }}" dist/*.tar.gz dist/*.deb --clobber
+
+  windows:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Inno Setup für den Installer
+        run: choco install innosetup -y
+      - run: |
+          export PATH="$PATH:/c/Program Files (x86)/Inno Setup 6"
+          ./build.sh windows
+      - name: Pakete an die Release hängen
+        run: gh release upload "${{ needs.release.outputs.tag }}" dist/*-setup.exe --clobber
