@@ -16,7 +16,7 @@ Draw shapes, arrange toolpaths, preview the result in 3D, and export G-Code — 
 <td><img src="docs/assets/img/ansicht-3d.png" alt="3D workpiece preview" width="480"/><br/><em>3D workpiece preview with milled result</em></td>
 </tr>
 <tr>
-<td colspan="2"><img src="shots/start.png" alt="Welcome screen" width="480"/><br/><em>Welcome screen — new project, open file, or load the example</em></td>
+<td colspan="2"><img src="docs/assets/img/dunkel.png" alt="Welcome screen" width="480"/><br/><em>Welcome screen — new project, open file, or load the example</em></td>
 </tr>
 </table>
 
