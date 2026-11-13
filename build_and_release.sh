@@ -27,6 +27,32 @@ die() { echo "FEHLER: $*" >&2; exit 1; }
 command -v gh >/dev/null 2>&1 || die "GitHub-CLI 'gh' nicht gefunden (brew install gh)."
 gh auth status >/dev/null 2>&1 || die "Bitte zuerst mit 'gh auth login' anmelden."
 
+REPO="freegroup/$NAME"
+GH_USER="${REPO%%/*}"   # Konto, das dieses Repo beschreiben darf (= Repo-Owner)
+
+# Das aktuelle github.com-Konto merken, um es am Ende ggf. wiederherzustellen.
+PREV_GH_USER="$(gh api user --jq '.login' 2>/dev/null || true)"
+restore_gh() {
+  { [ -n "${PREV_GH_USER:-}" ] && [ "$PREV_GH_USER" != "$GH_USER" ]; } || return 0
+  if gh auth switch --hostname github.com --user "$PREV_GH_USER" >/dev/null 2>&1; then
+    say "gh-Konto auf '$PREV_GH_USER' zurückgesetzt."
+  else
+    echo "Hinweis: gh-Konto konnte nicht auf '$PREV_GH_USER' zurückgesetzt werden (aktuell: $GH_USER)."
+  fi
+}
+
+# Auf das richtige Konto erzwingen, falls nicht schon aktiv; danach (trap) zurückschalten.
+if [ "${PREV_GH_USER:-}" != "$GH_USER" ]; then
+  gh auth switch --hostname github.com --user "$GH_USER" >/dev/null 2>&1 \
+    || die "Konnte nicht auf gh-Konto '$GH_USER' wechseln. Ist es angemeldet? → gh auth login"
+  trap restore_gh EXIT
+  say "gh-Konto auf '$GH_USER' gesetzt (vorher: '${PREV_GH_USER:-unbekannt}')."
+fi
+
+# Schreibrecht verifizieren, sonst scheitert der Upload später mit HTTP 404.
+[ "$(gh api "repos/$REPO" --jq '.permissions.push' 2>/dev/null)" = "true" ] \
+  || die "gh-Konto '$GH_USER' hat kein Schreibrecht auf $REPO."
+
 # -------------------------------------------------- 1) Aktuellen Stand holen (Cargo.toml gibt die Version vor)
 branch="$(git rev-parse --abbrev-ref HEAD)"
 [ "$branch" = "main" ] || die "Bitte auf dem Branch 'main' bauen (aktuell: '$branch')."
@@ -38,10 +64,9 @@ git pull --ff-only
 VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
 [ -n "$VERSION" ] || die "Konnte die Version nicht aus Cargo.toml lesen."
 TAG="v$VERSION"
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "freegroup/$NAME")"
 
 # Die Release muss schon existieren (semantic-release legt sie beim Push auf main an).
-gh release view "$TAG" >/dev/null 2>&1 \
+gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 \
   || die "Release '$TAG' existiert nicht. Läuft der Release-Workflow für diese Version noch? (Cargo.toml = $VERSION)"
 
 say "Version $VERSION → Release $TAG"
@@ -65,6 +90,6 @@ shopt -u nullglob
 # -------------------------------------------------- 3) Artefakte anhängen
 say "Diese macOS-Pakete an Release '$TAG' hängen:"
 printf '  %s\n' "${MAC_ASSETS[@]}"
-gh release upload "$TAG" "${MAC_ASSETS[@]}" --clobber
+gh release upload "$TAG" "${MAC_ASSETS[@]}" --repo "$REPO" --clobber
 
 say "Fertig: https://github.com/$REPO/releases/tag/$TAG"
