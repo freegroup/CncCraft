@@ -22,33 +22,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Regel: Änderungen an .rs-Dateien müssen als feat:/fix: committet werden, damit
-  # semantic-release ein Release erzeugt. Dieser Job schlägt fehl, wenn seit dem
-  # letzten Release-Tag .rs-Dateien geändert wurden, aber kein feat:/fix:-Commit vorliegt.
-  guard-rs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - name: ".rs-Änderungen erfordern feat:/fix:-Commit"
-        run: |
-          base=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n1)
-          echo "Basis seit letztem Release: $base"
-          if git diff --name-only "$base"..HEAD | grep -qE '\.rs$'; then
-            if git log "$base"..HEAD --format='%s' | grep -qE '^(feat|fix)(\([^)]+\))?!?:'; then
-              echo "OK: .rs-Dateien geändert und feat:/fix:-Commit vorhanden."
-            else
-              echo "::error::.rs-Dateien wurden seit $base geändert, aber es gibt keinen feat:/fix:-Commit – es würde kein Release ausgelöst. Bitte die Code-Änderung als feat: oder fix: committen."
-              exit 1
-            fi
-          else
-            echo "Keine .rs-Änderungen seit $base – kein feat/fix erforderlich."
-          fi
-
   release:
-    needs: guard-rs
     runs-on: ubuntu-latest
     outputs:
       published: ${{ steps.sr.outputs.new_release_published }}
@@ -58,6 +32,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
+      # Regel: Änderungen an .rs-Dateien sollen immer mindestens ein Release erzeugen.
+      # Fehlt seit dem letzten Tag ein feat:/fix:-Commit, wird automatisch ein leerer
+      # fix:-Commit angelegt – semantic-release macht daraus einen Patch (statt abzubrechen).
+      - name: "Code-Änderungen ohne feat:/fix: automatisch als fix: freigeben"
+        run: |
+          base=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n1)
+          echo "Basis seit letztem Release: $base"
+          if git diff --name-only "$base"..HEAD | grep -qE '\.rs$' \
+             && ! git log "$base"..HEAD --format='%s' | grep -qE '^(feat|fix)(\([^)]+\))?!?:'; then
+            git config user.name "semantic-release-bot"
+            git config user.email "semantic-release-bot@martynus.net"
+            git commit --allow-empty -m "fix: Code-Änderungen ohne feat:/fix: automatisch als Patch freigegeben"
+            echo "Leeren fix:-Commit erzeugt – es wird ein Patch-Release ausgelöst."
+          else
+            echo "Kein Auto-fix nötig (keine .rs-Änderung oder bereits feat:/fix: vorhanden)."
+          fi
       - uses: cycjimmy/semantic-release-action@v4
         id: sr
         with:
