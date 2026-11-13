@@ -696,20 +696,26 @@ impl App {
         ui.add_space(4.0);
         ui.label("Postprozessor");
         let selected_label = self.pp().label();
-        egui::ComboBox::from_id_salt("post").width(260.0).selected_text(selected_label).show_ui(ui, |ui| {
-            for (i, pp) in self.postprocs.iter().enumerate() {
-                ui.selectable_value(&mut self.post_idx, i, pp.label());
-            }
-            ui.separator();
-            if ui.button("Verwalten…").clicked() {
-                let idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
-                self.pp_dialog = Some(super::PpDialog {
-                    editing: self.postprocs[idx].clone(),
-                    index: Some(idx),
-                    hook_tab: 0,
-                });
-            }
-        });
+        let pp_manage;
+        {
+            let post_idx = &mut self.post_idx;
+            let postprocs = &self.postprocs;
+            pp_manage = combo_with_manage(ui, "post", 260.0, &selected_label, |ui| {
+                for (i, pp) in postprocs.iter().enumerate() {
+                    if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
+                        *post_idx = i;
+                    }
+                }
+            });
+        }
+        if pp_manage {
+            let idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
+            self.pp_dialog = Some(super::PpDialog {
+                editing: self.postprocs[idx].clone(),
+                index: Some(idx),
+                hook_tab: 0,
+            });
+        }
 
         ui.add_space(6.0);
         if ui.add_enabled(count > 0, egui::Button::new("Werkzeugpfade speichern…").min_size(Vec2::new(200.0, 26.0))).clicked() {
@@ -907,6 +913,201 @@ impl App {
 
         ui.add_space(2.0);
         ui.label(egui::RichText::new("Platzhalter: {safe_z} {home_z} {tool_number} {rpm}").small().color(muted()));
+    }
+
+    pub(super) fn tool_dialog_ui(&mut self, ctx: &egui::Context) {
+        let Some(dlg) = &mut self.tool_dialog else { return };
+        let mut save = false;
+        let mut delete = false;
+        let mut pick: Option<usize> = None;
+        let mut close = false;
+
+        let mat = dlg.material.clone();
+        let mut open = true;
+        let screen = ctx.screen_rect();
+        egui::Window::new("Werkzeug-Verwaltung")
+            .id(egui::Id::new("tool_dialog_win"))
+            .open(&mut open)
+            .order(egui::Order::Foreground)
+            .resizable(true)
+            .default_width(520.0)
+            .min_width(380.0)
+            .default_height((screen.height() - 120.0).clamp(300.0, 520.0))
+            .max_height(screen.height() - 60.0)
+            .show(ctx, |ui| {
+                egui::TopBottomPanel::bottom("tool_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.add(egui::Button::new(egui::RichText::new("Speichern").strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                            save = true;
+                        }
+                        ui.add_space(4.0);
+                        if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+
+                egui::SidePanel::left("tool_list_panel").exact_width(160.0).resizable(false).frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 4.0, top: 0.0, bottom: 0.0 })).show_inside(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Werkzeuge").strong());
+                        ui.label(egui::RichText::new(format!("({})", crate::tools::material_label(&mat))).small().color(muted()));
+                    });
+                    egui::TopBottomPanel::bottom("tool_list_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 4.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("+").on_hover_text("Neues Werkzeug anlegen").clicked() {
+                                pick = Some(usize::MAX);
+                            }
+                            let can_delete = dlg.index.is_some();
+                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text("Ausgewähltes Werkzeug löschen").clicked() {
+                                delete = true;
+                            }
+                        });
+                    });
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                        for (i, entry) in dlg.entries.iter().enumerate() {
+                            if entry.material != mat {
+                                continue;
+                            }
+                            let is_selected = dlg.index == Some(i);
+                            let label = if is_selected { &dlg.editing.name } else { &entry.tool.name };
+                            let orig_tool = dlg.original.get(i).map(|e| &e.tool);
+                            let changed = if is_selected {
+                                orig_tool.map_or(true, |b| dlg.editing != *b)
+                            } else {
+                                orig_tool.map_or(true, |b| entry.tool != *b)
+                            };
+                            let text = if changed {
+                                egui::RichText::new(label).color(super::ACCENT)
+                            } else {
+                                egui::RichText::new(label)
+                            };
+                            if ui.selectable_label(is_selected, text).clicked() {
+                                pick = Some(i);
+                            }
+                        }
+                    });
+                });
+
+                egui::Frame::none().inner_margin(egui::Margin { left: 10.0, right: 0.0, top: 0.0, bottom: 0.0 }).show(ui, |ui| {
+                    Self::tool_editor(ui, dlg);
+                });
+            });
+
+        if let Some(p) = pick {
+            // write current edits back to working copy before switching
+            if let Some(dlg) = &mut self.tool_dialog {
+                if let Some(idx) = dlg.index {
+                    if idx < dlg.entries.len() {
+                        dlg.entries[idx].tool = dlg.editing.clone();
+                    }
+                } else {
+                    dlg.entries.push(crate::tools::ToolEntry { material: dlg.material.clone(), tool: dlg.editing.clone() });
+                }
+            }
+            if p == usize::MAX {
+                let new_tool = crate::tools::ToolLibrary::default_tool(crate::tools::ToolKind::EndMill);
+                if let Some(dlg) = &mut self.tool_dialog {
+                    dlg.editing = new_tool;
+                    dlg.index = None;
+                }
+            } else if let Some(dlg) = &mut self.tool_dialog {
+                if p < dlg.entries.len() {
+                    dlg.editing = dlg.entries[p].tool.clone();
+                    dlg.index = Some(p);
+                }
+            }
+            return;
+        }
+
+        if save {
+            // write current edits to working copy, then propagate to lib
+            if let Some(mut dlg) = self.tool_dialog.take() {
+                if let Some(idx) = dlg.index {
+                    if idx < dlg.entries.len() {
+                        dlg.entries[idx].tool = dlg.editing;
+                    }
+                } else {
+                    dlg.entries.push(crate::tools::ToolEntry { material: dlg.material, tool: dlg.editing });
+                }
+                self.lib.entries = dlg.entries;
+                self.status = "Werkzeuge gespeichert".into();
+            }
+            return;
+        }
+
+        if delete {
+            if let Some(dlg) = &mut self.tool_dialog {
+                if let Some(idx) = dlg.index {
+                    if idx < dlg.entries.len() {
+                        dlg.entries.remove(idx);
+                        self.status = "Werkzeug gelöscht".into();
+                    }
+                }
+                let mat_clone = dlg.material.clone();
+                let first = dlg.entries.iter().position(|e| e.material == mat_clone);
+                match first {
+                    Some(i) => {
+                        dlg.editing = dlg.entries[i].tool.clone();
+                        dlg.index = Some(i);
+                    }
+                    None => {
+                        dlg.editing = crate::tools::ToolLibrary::default_tool(crate::tools::ToolKind::EndMill);
+                        dlg.index = None;
+                    }
+                }
+            }
+            return;
+        }
+
+        if close || !open {
+            // cancel: discard working copy, lib stays unchanged
+            self.tool_dialog = None;
+        }
+    }
+
+    fn tool_editor(ui: &mut egui::Ui, dlg: &mut super::ToolDialog) {
+        let t = &mut dlg.editing;
+        ui.label(egui::RichText::new("Name").small().strong());
+        ui.text_edit_singleline(&mut t.name);
+        ui.add_space(4.0);
+        egui::Grid::new("tool_edit_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+            ui.label("Typ");
+            egui::ComboBox::from_id_salt("tool_kind").width(140.0).selected_text(t.kind.group()).show_ui(ui, |ui| {
+                for &k in crate::tools::ToolKind::all() {
+                    if ui.selectable_label(t.kind == k, k.group()).clicked() {
+                        t.kind = k;
+                    }
+                }
+            });
+            ui.end_row();
+            ui.label("Durchmesser");
+            ui.add(egui::DragValue::new(&mut t.diameter).speed(0.1).range(0.1..=100.0).max_decimals(2).suffix(" mm"));
+            ui.end_row();
+            if t.kind == crate::tools::ToolKind::VBit || t.kind == crate::tools::ToolKind::Drill {
+                ui.label("Winkel");
+                ui.add(egui::DragValue::new(&mut t.angle).speed(1.0).range(1.0..=180.0).suffix(" °"));
+                ui.end_row();
+            }
+            ui.label("Drehzahl");
+            ui.add(egui::DragValue::new(&mut t.rpm).speed(100).range(0..=60000).suffix(" U/min"));
+            ui.end_row();
+            ui.label("Vorschub");
+            ui.add(egui::DragValue::new(&mut t.feed).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
+            ui.end_row();
+            ui.label("Eintauchen");
+            ui.add(egui::DragValue::new(&mut t.plunge).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
+            ui.end_row();
+            ui.label("Zustellung");
+            ui.add(egui::DragValue::new(&mut t.stepdown).speed(0.05).range(0.01..=50.0).max_decimals(3).suffix(" mm"));
+            ui.end_row();
+            ui.label("Querzustellung");
+            let pct = if t.diameter > 0.0 { t.stepover / t.diameter * 100.0 } else { 0.0 };
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut t.stepover).speed(0.05).range(0.01..=50.0).max_decimals(3).suffix(" mm"));
+                ui.label(egui::RichText::new(format!("{pct:.0} %")).small().color(muted()));
+            });
+            ui.end_row();
+        });
     }
 
     /// The toolpath list: hide/show all, then one row per toolpath with its eye, colour, name
@@ -1127,6 +1328,82 @@ fn toolbar_group(ui: &mut egui::Ui, name: &str, add: impl FnOnce(&mut egui::Ui))
             });
         });
     });
+}
+
+/// A ComboBox whose popup has a scrollable item list and a pinned "Verwalten…" button below it.
+/// `items` draws the selectable rows; returns `true` when "Verwalten…" was clicked.
+pub(super) fn combo_with_manage(
+    ui: &mut egui::Ui,
+    id: &str,
+    width: f32,
+    selected: &str,
+    items: impl FnOnce(&mut egui::Ui),
+) -> bool {
+    let widget_id = ui.make_persistent_id(id);
+    let popup_id = widget_id.with("mgr_popup");
+    let is_open = ui.memory(|m| m.is_popup_open(popup_id));
+
+    let margin = ui.spacing().button_padding;
+    let icon_size = Vec2::splat(ui.spacing().icon_width);
+    let total_w = width.max(ui.spacing().combo_width);
+    let galley = ui.painter().layout_no_wrap(
+        selected.to_string(),
+        egui::FontId::default(),
+        ui.visuals().text_color(),
+    );
+    let desired = Vec2::new(total_w, galley.size().y.max(icon_size.y) + 2.0 * margin.y);
+    let (rect, button) = ui.allocate_exact_size(desired, Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let visuals = if is_open {
+            &ui.visuals().widgets.open
+        } else {
+            ui.style().interact(&button)
+        };
+        ui.painter().rect(rect, visuals.rounding, visuals.bg_fill, visuals.bg_stroke);
+        let inner = rect.shrink2(margin);
+        let icon_rect = egui::Align2::RIGHT_CENTER.align_size_within_rect(icon_size, inner);
+        let tri = Rect::from_center_size(icon_rect.center(), Vec2::new(icon_rect.width() * 0.7, icon_rect.height() * 0.45));
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![tri.left_top(), tri.right_top(), tri.center_bottom()],
+            visuals.fg_stroke.color,
+            Stroke::NONE,
+        ));
+        let text_rect = egui::Align2::LEFT_CENTER.align_size_within_rect(galley.size(), inner);
+        ui.painter().galley(text_rect.min, galley, visuals.text_color());
+    }
+
+    if button.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup_id));
+    }
+
+    let mut manage = false;
+    let above_or_below = if button.rect.center().y > ui.ctx().screen_rect().center().y {
+        egui::AboveOrBelow::Above
+    } else {
+        egui::AboveOrBelow::Below
+    };
+    egui::popup::popup_above_or_below_widget(
+        ui,
+        popup_id,
+        &button,
+        above_or_below,
+        egui::PopupCloseBehavior::CloseOnClick,
+        |ui| {
+            ui.set_min_width(width);
+            let max_h = (ui.ctx().screen_rect().height() * 0.45).max(120.0);
+            egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                items(ui);
+            });
+            ui.separator();
+            if ui.button("Verwalten\u{2026}").clicked() {
+                manage = true;
+                ui.memory_mut(|m| m.close_popup());
+            }
+        },
+    );
+    manage
 }
 
 /// Where a value between `lo` and `hi` sits on a 0–100 slider (spread logarithmically).

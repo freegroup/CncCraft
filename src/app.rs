@@ -180,6 +180,17 @@ struct PpDialog {
     hook_tab: usize,
 }
 
+struct ToolDialog {
+    editing: Tool,
+    /// The tool values when the dialog opened, for change-highlight in the list.
+    original: Vec<crate::tools::ToolEntry>,
+    material: String,
+    /// Index into `entries`; `None` = creating a new tool.
+    index: Option<usize>,
+    /// Working copy of the library; propagated to lib only on save.
+    entries: Vec<crate::tools::ToolEntry>,
+}
+
 /// A new shape being drawn by dragging. Selecting, moving, resizing and node editing are
 /// gestures of the shape editor (`shape_edit::Editor`).
 struct Drawing {
@@ -262,6 +273,7 @@ pub struct App {
     postprocs: Vec<gcode::PostProcessor>,
     post_idx: usize,
     pp_dialog: Option<PpDialog>,
+    tool_dialog: Option<ToolDialog>,
     undo: Vec<Vec<Item>>,
     redo: Vec<Vec<Item>>,
     path: Option<PathBuf>,
@@ -412,7 +424,7 @@ impl App {
             next_id: 1,
             toolpaths: vec![],
             editor: None,
-            lib: ToolLibrary::load(),
+            lib: cc.storage.and_then(|s| s.get_string("cnccraft_tools")).map_or_else(ToolLibrary::load, |json| ToolLibrary::load_from(&json)),
             tool: DrawTool::Select,
             drawing: None,
             edit: ShapeEditor::default(),
@@ -431,6 +443,7 @@ impl App {
             postprocs: gcode::builtins(),
             post_idx: cc.storage.and_then(|s| s.get_string("cnccraft_post_idx")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0),
             pp_dialog: None,
+            tool_dialog: None,
             undo: vec![],
             redo: vec![],
             path: None,
@@ -1270,6 +1283,7 @@ impl App {
     fn editor_ui(&mut self, ui: &mut egui::Ui) {
         let mut close = false;
         let mut apply = false;
+        let mut open_tool_dlg = false;
         let sel_count = self.edit.selection.len();
         let tools: Vec<Tool> = self.lib.tools_for(&self.job.material).into_iter().cloned().collect();
         let thickness = self.job.thickness;
@@ -1298,15 +1312,18 @@ impl App {
                         _ => t.kind != ToolKind::Drill,
                     })
                     .collect();
-                egui::ComboBox::from_id_salt("tool").width(160.0).selected_text(&tp.tool.name).show_ui(ui, |ui| {
-                    for t in allowed {
+                let tool_label = tp.tool.name.clone();
+                if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, |ui| {
+                    for t in &allowed {
                         if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, &t.name).clicked() {
                             let n = tp.tool.number;
-                            tp.tool = t.clone();
+                            tp.tool = (*t).clone();
                             tp.tool.number = n;
                         }
                     }
-                });
+                }) {
+                    open_tool_dlg = true;
+                }
                 ui.end_row();
                 fn mm(v: &mut f64, max: f64) -> egui::DragValue<'_> {
                     egui::DragValue::new(v).speed(0.05).range(0.0..=max).max_decimals(3).suffix(" mm")
@@ -1432,6 +1449,17 @@ impl App {
                 _ => self.toolpaths.push(tp),
             }
             self.sim = None;
+        }
+        if open_tool_dlg && self.tool_dialog.is_none() {
+            let mat = self.job.material.clone();
+            let entries = self.lib.entries.clone();
+            let original = entries.clone();
+            let first = entries.iter().position(|e| e.material == mat);
+            let (tool, idx) = match first {
+                Some(i) => (entries[i].tool.clone(), Some(i)),
+                None => (ToolLibrary::default_tool(ToolKind::EndMill), None),
+            };
+            self.tool_dialog = Some(ToolDialog { editing: tool, original, material: mat, index: idx, entries });
         }
     }
 
@@ -2606,6 +2634,7 @@ impl eframe::App for App {
         if let Ok(json) = serde_json::to_string(&paths) {
             storage.set_string("cnccraft_recent", json);
         }
+        storage.set_string("cnccraft_tools", self.lib.to_json());
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
@@ -2692,6 +2721,7 @@ impl eframe::App for App {
             shortcuts::window(ctx, &mut self.shortcuts_open);
         }
         self.pp_dialog_ui(ctx);
+        self.tool_dialog_ui(ctx);
         self.save_thumbnail(ctx);
         self.screenshot(ctx);
     }
