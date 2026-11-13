@@ -3,6 +3,7 @@
 
 use crate::tools::{Tool, ToolKind};
 use crate::toolpath::{Job, Toolpath};
+use crate::transform::from_gcode::Step;
 use egui::{Pos2, Rect, Stroke};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -277,26 +278,28 @@ impl Projection {
     }
 }
 
-/// Toolpath lines drawn over the 3D view: rapid/travel dashed cyan, plunge yellow, cut in strategy colour.
-pub fn paint_paths(painter: &egui::Painter, proj: &Projection, paths: &[(&Toolpath, egui::Color32)]) {
-    let rapid_col = egui::Color32::from_rgba_premultiplied(0x00, 0xbb, 0xcc, 0x70);
-    let plunge_col = egui::Color32::from_rgb(0xe0, 0xb0, 0x20).gamma_multiply(0.55);
-    for (tp, col) in paths {
-        let mut prev: Option<[f64; 3]> = None;
-        for m in &tp.moves {
-            let p = proj.to_screen([m.to[0] as f32, m.to[1] as f32, (m.to[2] as f32).min(0.3)]);
-            if let Some(pr) = prev {
-                let from = proj.to_screen([pr[0] as f32, pr[1] as f32, (pr[2] as f32).min(0.3)]);
-                if m.rapid {
-                    paint_dashed_3d(painter, from, p, 4.0, 3.0, Stroke::new(0.6_f32, rapid_col));
-                } else {
-                    let lateral = (m.to[0] - pr[0]).abs() > 1e-6 || (m.to[1] - pr[1]).abs() > 1e-6;
-                    let c = if lateral { *col } else { plunge_col };
-                    painter.line_segment([from, p], Stroke::new(1.0_f32, c));
-                }
+/// The machine's moves drawn over the 3D view at their true heights (job coordinates): travel dashed
+/// cyan, plunging and lifting yellow, cuts in the colour `cut_colour` gives for the G-code line.
+/// A ring marks where the machine starts (home).
+pub fn paint_steps(painter: &egui::Painter, proj: &Projection, steps: &[Step], cut_colour: &dyn Fn(usize) -> egui::Color32) {
+    use crate::transform::from_gcode::Kind;
+    let rapid_col = egui::Color32::from_rgba_premultiplied(0x00, 0xaa, 0xbb, 0xa0);
+    let plunge_col = egui::Color32::from_rgb(0xe0, 0xb0, 0x20).gamma_multiply(0.8);
+    let at = |p: [f64; 3]| proj.to_screen([p[0] as f32, p[1] as f32, p[2] as f32]);
+    for step in steps {
+        let (from, to) = (at(step.from), at(step.to));
+        match step.kind {
+            Kind::Rapid => paint_dashed_3d(painter, from, to, 4.0, 3.0, Stroke::new(1.0_f32, rapid_col)),
+            Kind::Feed => {
+                let lateral = (step.to[0] - step.from[0]).abs() > 1e-6 || (step.to[1] - step.from[1]).abs() > 1e-6;
+                painter.line_segment([from, to], Stroke::new(1.2_f32, if lateral { cut_colour(step.line) } else { plunge_col }));
             }
-            prev = Some(m.to);
         }
+    }
+    if let Some(first) = steps.first() {
+        let home = at(first.from);
+        painter.circle_stroke(home, 4.5, Stroke::new(1.5_f32, rapid_col));
+        painter.text(home + egui::Vec2::new(8.0, -4.0), egui::Align2::LEFT_BOTTOM, "Home", egui::FontId::proportional(11.0), rapid_col);
     }
 }
 

@@ -209,9 +209,11 @@ impl Toolpath {
     pub fn compute(&mut self, job: &Job, shapes: &[Item]) {
         self.warning = None;
         let contours: Vec<Contour> = shapes.iter().filter(|s| !s.hidden && self.shape_ids.contains(&s.id)).flat_map(|s| s.shape.contours()).collect();
+        // A toolpath starts at its first cut and ends over its last one, lifted to safe_z. It never
+        // visits home or 0/0: the way from home to the first toolpath, and from one toolpath to the
+        // next, is the first move of the next one, at safe_z (the job's hooks put the machine at home
+        // height at the start and at safe_z between toolpaths and tools).
         let mut out = Out { moves: vec![], job };
-        out.rapid([0.0, 0.0, job.home_z]);
-        out.rapid([0.0, 0.0, job.safe_z]);
         if contours.is_empty() {
             self.warning = Some("Keine Vektoren gewählt".into());
         } else {
@@ -221,15 +223,12 @@ impl Toolpath {
             }
         }
         out.retract();
-        let c = out.cur();
-        out.rapid([c[0], c[1], job.home_z]);
-        out.rapid([0.0, 0.0, job.home_z]);
         self.moves = out.moves;
     }
 
     pub fn stats(&self) -> Stats {
         let mut s = Stats::default();
-        let mut prev = [0.0, 0.0, self.moves.first().map(|m| m.to[2]).unwrap_or(0.0)];
+        let mut prev = self.moves.first().map(|m| m.to).unwrap_or([0.0; 3]);
         for m in &self.moves {
             let d = ((m.to[0] - prev[0]).powi(2) + (m.to[1] - prev[1]).powi(2) + (m.to[2] - prev[2]).powi(2)).sqrt();
             if m.rapid {
@@ -264,23 +263,35 @@ impl Out<'_> {
     pub fn feed(&mut self, p: [f64; 3]) {
         self.moves.push(Move { to: p, rapid: false });
     }
-    /// Retract to safe_z, travel in XY at safe_z, then plunge to target.
+    /// Retract to safe_z, travel in XY at safe_z, then come down just over the material and plunge
+    /// to the target. The first move of a toolpath comes from wherever the machine is: at home
+    /// height at the start of the job, at safe_z after another toolpath, so it only ever runs at
+    /// safe_z or above.
     pub fn go_to(&mut self, p: [f64; 3]) {
-        let c = self.cur();
         let safe = self.job.safe_z;
+        let Some(c) = self.moves.last().map(|m| m.to) else {
+            self.rapid([p[0], p[1], safe]);
+            return self.come_down_and_plunge(p);
+        };
         if (c[0] - p[0]).abs() > 1e-6 || (c[1] - p[1]).abs() > 1e-6 {
             if c[2] < safe {
                 self.rapid([c[0], c[1], safe]);
             }
             self.rapid([p[0], p[1], c[2].max(safe)]);
         }
+        self.come_down_and_plunge(p)
+    }
+
+    fn come_down_and_plunge(&mut self, p: [f64; 3]) {
+        let safe = self.job.safe_z;
         if (self.cur()[2] - 0.5_f64.min(safe)).abs() > 1e-6 {
             self.rapid([p[0], p[1], 0.5_f64.min(safe)]);
         }
         self.feed(p);
     }
+    /// Lift straight up to safe_z where the cutter is (nothing, if it has not moved yet).
     pub fn retract(&mut self) {
-        let c = self.cur();
+        let Some(c) = self.moves.last().map(|m| m.to) else { return };
         if c[2] < self.job.safe_z {
             self.rapid([c[0], c[1], self.job.safe_z]);
         }

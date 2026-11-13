@@ -26,6 +26,7 @@ mod theme;
 mod toolgroups;
 mod toolpath;
 mod tools;
+mod transform;
 mod view3d;
 mod viewdeco;
 mod zipfile;

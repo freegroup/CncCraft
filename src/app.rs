@@ -6,6 +6,7 @@ mod cursor;
 mod distance;
 mod fields;
 mod gcode_highlight;
+mod gcode_overlay;
 mod input;
 mod icons;
 mod layers_ui;
@@ -267,6 +268,8 @@ pub struct App {
     recent_files: Vec<PathBuf>,
     thumb_pending: u8,
     thumb_restore_mode: Option<ViewMode>,
+    /// The moves of the G-code shown over the 3D view (see `gcode_overlay`).
+    gcode_overlay: Option<gcode_overlay::GcodeOverlay>,
     status: String,
     mouse_mm: Option<Pt>,
     offset_dist: f64,
@@ -438,6 +441,7 @@ impl App {
                 .unwrap_or_default(),
             thumb_pending: 0,
             thumb_restore_mode: None,
+            gcode_overlay: None,
             status: "Bereit".into(),
             mouse_mm: None,
             offset_dist: 5.0,
@@ -608,6 +612,10 @@ impl App {
             // and the finished carving in 3D, to review the preview
             if std::env::var("CNCCRAFT_SHOW_3D").is_ok() {
                 app.start_preview(false);
+            }
+            // with the G-code overlay: the machine's moves as the post-processor writes them
+            if std::env::var("CNCCRAFT_SHOW_GCODE").is_ok() {
+                app.paths_in_3d = true;
             }
         }
         app.mark_clean();
@@ -988,7 +996,7 @@ impl App {
         else {
             return;
         };
-        let text = gcode::write(&self.job, &paths, &pp);
+        let text = crate::transform::to_gcode::write(&self.job, &paths, &pp);
         match std::fs::write(&file, text) {
             Ok(()) => {}
             Err(e) => self.status = format!("Fehler: {e}"),
@@ -2213,18 +2221,21 @@ impl App {
             self.step_animation();
             ui.ctx().request_repaint();
         }
-        let paths: Vec<(&Toolpath, Color32)> = if !self.paths_in_3d || self.sim.as_ref().is_some_and(|s| s.anim.is_some()) {
-            vec![]
-        } else {
-            self.toolpaths.iter().filter(|t| t.visible).map(|t| (t, tp_color(&t.strategy).gamma_multiply(0.55))).collect()
-        };
+        // the G-code overlay: the machine's moves as the post-processor writes them (not while the
+        // cutter is animated, which shows the cutting itself)
+        let overlay = self.paths_in_3d && !self.sim.as_ref().is_some_and(|s| s.anim.is_some());
+        if overlay {
+            self.refresh_gcode_overlay();
+        }
         if let Some(sim) = &self.sim {
             let proj = sim::Projection::new(rect, &self.job, &self.cam);
             // the mesh is in centred job coordinates: only the job's size changes its layout
             let layout = self.job.width.to_bits() ^ self.job.height.to_bits().rotate_left(21) ^ self.job.thickness.to_bits().rotate_left(42);
             self.gl3d.update(&sim.hm, &proj, layout);
             painter.add(self.gl3d.callback(rect, &proj));
-            sim::paint_paths(&painter, &proj, &paths);
+            if overlay {
+                self.paint_gcode_overlay(&painter, &proj);
+            }
         }
         painter.text(rect.left_bottom() + Vec2::new(12.0, -12.0), Align2::LEFT_BOTTOM, "Ziehen: drehen · Rechtsklick ziehen: verschieben · Scrollen: zoomen · Würfel: Ansicht wählen", FontId::proportional(12.0), MUTED);
         // the decorations of the 3D view (the view cube: turn the view, pick a side, home, perspective)

@@ -672,7 +672,8 @@ impl App {
                 });
             });
         });
-        ui.checkbox(&mut self.paths_in_3d, "Werkzeugpfade im 3D einblenden");
+        ui.checkbox(&mut self.paths_in_3d, "G-Code-Fahrt im 3D einblenden")
+            .on_hover_text("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb.");
     }
 
     fn save_tab(&mut self, ui: &mut egui::Ui) {

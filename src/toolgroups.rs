@@ -2,9 +2,10 @@
 //! write one file for each stretch of toolpaths that uses the same tool (a tool change starts a
 //! new stretch). Everything here is plain logic without a window, so it can be tested.
 
-use crate::gcode::{self, PostProcessor};
+use crate::gcode::PostProcessor;
 use crate::toolpath::{Job, Toolpath};
 use crate::tools::Tool;
+use crate::transform::to_gcode;
 
 /// Whether two toolpaths are cut with the same tool, so no tool change is needed between them.
 pub fn same_tool(a: &Tool, b: &Tool) -> bool {
@@ -65,7 +66,7 @@ pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str) -> 
         .map(|(n, group)| {
             let part: Vec<&Toolpath> = group.iter().map(|&i| paths[i]).collect();
             let name = format!("{stem}_{:0width$}_{}.{}", n + 1, file_part(&paths[group[0]].tool.name), pp.ext);
-            (name, gcode::write(job, &part, pp))
+            (name, to_gcode::write(job, &part, pp))
         })
         .collect()
 }
