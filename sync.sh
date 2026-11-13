@@ -25,9 +25,11 @@ ITEMS=(
   tools
   Cargo.lock
   Cargo.toml
-  README.md
   Makefile
 )
+
+# Hinweis: README.md wird bewusst NICHT synchronisiert — sie ist CncCraft-eigen
+# (GitHub-Projektseite) und existiert im Original nicht.
 
 # --- Farben für Ausgabe -----------------------------------------------------
 if [[ -t 1 ]]; then
