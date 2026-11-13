@@ -21,10 +21,12 @@ ITEMS=(
   crates
   data
   docs
+  locales
   src
   tools
   Cargo.lock
   Cargo.toml
+  build.rs
   Makefile
 )
 
@@ -62,6 +64,10 @@ fi
 
 info "Git-Stand ist sauber (alles committed)."
 
+# Die Version gehört semantic-release (der Release-Workflow bumpt und checkt Cargo.toml/Cargo.lock
+# ein). Das Original trägt eine eigene, alte Version – die darf sie nicht überschreiben.
+KEEP_VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
+
 # --- 2. Ziel-Ordner/-Dateien löschen ---------------------------------------
 info "Lösche vorhandene Ziele..."
 for item in "${ITEMS[@]}"; do
@@ -90,6 +96,14 @@ for item in "${ITEMS[@]}"; do
     rsync -a "$source" "$DST/$item"
   fi
 done
+
+# --- 4. Version des Repos beibehalten ---------------------------------------
+# gleiche Muster wie in .releaserc.json (Paket-Version in Cargo.toml und Cargo.lock)
+if [[ -n "$KEEP_VERSION" ]]; then
+  sed -i '' -e 's/^version *= *".*"/version = "'"$KEEP_VERSION"'"/' "$DST/Cargo.toml"
+  sed -i '' -e '/^name = "cnccraft"$/{n;s/^version = ".*"/version = "'"$KEEP_VERSION"'"/;}' "$DST/Cargo.lock"
+  info "Version $KEEP_VERSION beibehalten (nicht die des Originals)."
+fi
 
 # --- Abschluss --------------------------------------------------------------
 echo
