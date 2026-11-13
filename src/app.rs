@@ -144,7 +144,6 @@ impl Clip {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum PreviewScope {
     All,
-    Selected,
     Visible,
 }
 
@@ -298,6 +297,8 @@ pub struct App {
     thumb_restore_mode: Option<ViewMode>,
     /// The moves of the G-code shown over the 3D view (see `gcode_overlay`).
     gcode_overlay: Option<gcode_overlay::GcodeOverlay>,
+    /// The selection the toolpath list last scrolled for (it scrolls to the toolpaths of a new selection).
+    tp_scrolled_for: Vec<u64>,
     /// The file of an import that could not be found when it was to be read again (shows a notice).
     import_missing: Option<String>,
     /// The shape the canvas' right-click menu was opened on (only shapes with something to offer).
@@ -456,8 +457,8 @@ impl App {
             mode: ViewMode::TwoD,
             cam: Camera::default(),
             sim: None,
-            sim_speed: 40,
-            sim_quality: sim::SIMULATION_QUALITY,
+            sim_speed: cc.storage.and_then(|s| s.get_string("cnccraft_sim_speed")).and_then(|v| v.parse().ok()).unwrap_or(40),
+            sim_quality: cc.storage.and_then(|s| s.get_string("cnccraft_sim_quality")).and_then(|v| v.parse().ok()).unwrap_or(sim::SIMULATION_QUALITY),
             start_page: true,
             job_dialog: None,
             postprocs: gcode::builtins(),
@@ -475,6 +476,7 @@ impl App {
             thumb_pending: 0,
             thumb_restore_mode: None,
             gcode_overlay: None,
+            tp_scrolled_for: Vec::new(),
             import_missing: None,
             shape_menu: None,
             status: "Bereit".into(),
@@ -490,28 +492,34 @@ impl App {
             dirty_checked: 0.0,
             rebase: false,
             export_ask: None,
-            tools_open: true,
-            snap_geometry: true,
-            snap_grid: false,
-            snap_job: true,
-            grid_spacing: GRID_SPACING,
+            tools_open: cc.storage.and_then(|s| s.get_string("cnccraft_tools_open")).map_or(true, |v| v != "false"),
+            snap_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_geometry")).map_or(true, |v| v != "false"),
+            snap_grid: cc.storage.and_then(|s| s.get_string("cnccraft_snap_grid")).is_some_and(|v| v == "true"),
+            snap_job: cc.storage.and_then(|s| s.get_string("cnccraft_snap_job")).map_or(true, |v| v != "false"),
+            grid_spacing: cc.storage.and_then(|s| s.get_string("cnccraft_grid_spacing")).and_then(|v| v.parse().ok()).unwrap_or(GRID_SPACING),
             snap_mark: None,
-            snap_radius_px: SNAP_RADIUS_PX,
+            snap_radius_px: cc.storage.and_then(|s| s.get_string("cnccraft_snap_radius")).and_then(|v| v.parse().ok()).unwrap_or(SNAP_RADIUS_PX),
             dims: None,
             angle_text: "0".into(),
             selftest: selftest.then(selftest::SelfTest::new),
             selftest_pair: None,
             selftest_rect: None,
             gl3d: Default::default(),
-            paths_in_3d: false,
+            paths_in_3d: cc.storage.and_then(|s| s.get_string("cnccraft_gcode_in_3d")).is_some_and(|v| v == "true"),
             clipboard: Clip::default(),
             paste_log: vec![],
             tool_form: None,
             tool_choice: [0; layout::GROUP_COUNT],
             tp_drag: None,
             tp_selected: None,
-            preview_scope: PreviewScope::Visible,
-            output_scope: OutputScope::Visible,
+            preview_scope: cc.storage.and_then(|s| s.get_string("cnccraft_preview_scope")).map_or(PreviewScope::Visible, |v| match v.as_str() {
+                "All" => PreviewScope::All,
+                _ => PreviewScope::Visible,
+            }),
+            output_scope: cc.storage.and_then(|s| s.get_string("cnccraft_output_scope")).map_or(OutputScope::Visible, |v| match v.as_str() {
+                "All" => OutputScope::All,
+                _ => OutputScope::Visible,
+            }),
             tp_grips: Vec::new(),
             flyout: None,
             vars: shape_edit::Variables::default(),
@@ -523,7 +531,7 @@ impl App {
             vars_committed: Vec::new(),
             new_var: None,
             view_decos: crate::viewdeco::ViewDecorations::default(),
-            show_dims: false,
+            show_dims: cc.storage.and_then(|s| s.get_string("cnccraft_show_dims")).is_some_and(|v| v == "true"),
             dim_mode: None,
             distances: Vec::new(),
             aligns: Vec::new(),
@@ -540,7 +548,7 @@ impl App {
             dim_labels: Vec::new(),
             vars_job: [0.0; 3],
             toolpath_tab: ToolpathTab::Create,
-            paths_open: true,
+            paths_open: cc.storage.and_then(|s| s.get_string("cnccraft_paths_open")).map_or(true, |v| v != "false"),
             canvas_rect: Rect::NOTHING,
             swallow_press: false,
             sheet: sheet::Decorations::default(),
@@ -552,6 +560,9 @@ impl App {
             layer_open: false,
         };
         app.post_idx = app.post_idx.min(app.postprocs.len().saturating_sub(1));
+        if cc.storage.and_then(|s| s.get_string("cnccraft_cam_perspective")).is_some_and(|v| v == "true") {
+            app.cam.perspective = true;
+        }
         if app.shot.is_some() || app.selftest.is_some() {
             app.load_example();
             // for the review screenshot: show the job dialog if asked, so its look is visible
@@ -1465,7 +1476,7 @@ impl App {
             }
             tp.compute(&self.job, &self.shapes);
             let st = tp.stats();
-            self.status = format!("„{}“ berechnet: {} Bewegungen, ca. {}", tp.name, tp.moves.len(), fmt_time(st.minutes));
+            self.status = format!("{} berechnet: {} Bewegungen, ca. {}", tp.name, tp.moves.len(), fmt_time(st.minutes));
             match ed.index {
                 Some(i) if i < self.toolpaths.len() => self.toolpaths[i] = tp,
                 _ => self.toolpaths.push(tp),
@@ -1503,7 +1514,6 @@ impl App {
     fn preview_indices(&self) -> Vec<usize> {
         match self.preview_scope {
             PreviewScope::All => (0..self.toolpaths.len()).collect(),
-            PreviewScope::Selected => self.tp_selected.filter(|&i| i < self.toolpaths.len()).into_iter().collect(),
             PreviewScope::Visible => (0..self.toolpaths.len()).filter(|&i| self.toolpaths[i].visible).collect(),
         }
     }
@@ -1545,7 +1555,7 @@ impl App {
             ui.vertical_centered(|ui| {
                 ui.add_space(30.0);
                 ui.label(egui::RichText::new("Willkommen bei CncCraft").size(28.0).strong().color(ink()));
-                ui.label(egui::RichText::new("Entwerfen, Werkzeugwege berechnen und für deine CNC-Fräse ausgeben").color(muted()));
+                ui.label(egui::RichText::new("Das komplette Werkzeugset für CNC-Einsteiger").color(muted()));
                 ui.add_space(30.0);
             });
             ui.horizontal(|ui| {
@@ -2078,12 +2088,12 @@ impl App {
     }
 
     /// The worksheet as its decorations see it.
-    fn sheet_view(&self, canvas: Rect) -> sheet::SheetView<'_> {
+    fn sheet_view(&self, canvas: Rect) -> sheet::SheetView {
         let datum = match self.job.datum {
             Datum::LowerLeft => [0.0, 0.0],
             Datum::Center => [self.job.width / 2.0, self.job.height / 2.0],
         };
-        sheet::SheetView { canvas, zoom: self.zoom, origin: self.origin, width: self.job.width, height: self.job.height, datum, pointer: self.mouse_mm, prompt: &self.status }
+        sheet::SheetView { canvas, zoom: self.zoom, origin: self.origin, width: self.job.width, height: self.job.height, datum, pointer: self.mouse_mm }
     }
 
     /// The shape a drawing tool makes from a drag between `a` and `b`.
@@ -2705,10 +2715,24 @@ impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("cnccraft_theme", self.theme_choice.key().to_string());
         storage.set_string("cnccraft_post_idx", self.post_idx.to_string());
+        storage.set_string("cnccraft_gcode_in_3d", self.paths_in_3d.to_string());
         let paths: Vec<String> = self.recent_files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         if let Ok(json) = serde_json::to_string(&paths) {
             storage.set_string("cnccraft_recent", json);
         }
+        storage.set_string("cnccraft_tools_open", self.tools_open.to_string());
+        storage.set_string("cnccraft_snap_geometry", self.snap_geometry.to_string());
+        storage.set_string("cnccraft_snap_grid", self.snap_grid.to_string());
+        storage.set_string("cnccraft_snap_job", self.snap_job.to_string());
+        storage.set_string("cnccraft_grid_spacing", self.grid_spacing.to_string());
+        storage.set_string("cnccraft_snap_radius", self.snap_radius_px.to_string());
+        storage.set_string("cnccraft_show_dims", self.show_dims.to_string());
+        storage.set_string("cnccraft_paths_open", self.paths_open.to_string());
+        storage.set_string("cnccraft_sim_speed", self.sim_speed.to_string());
+        storage.set_string("cnccraft_sim_quality", self.sim_quality.to_string());
+        storage.set_string("cnccraft_preview_scope", format!("{:?}", self.preview_scope));
+        storage.set_string("cnccraft_output_scope", format!("{:?}", self.output_scope));
+        storage.set_string("cnccraft_cam_perspective", self.cam.perspective.to_string());
         storage.set_string("cnccraft_tools", self.lib.to_json());
     }
 
@@ -2754,10 +2778,12 @@ impl eframe::App for App {
         // rotating shapes is not possible for now: it comes back later as an angle constraint
         self.edit.rotate_mode = false;
         // the arrangement of the original: see the layout module
-        self.title_bar(ctx);
-        self.layer_window(ctx);
-        self.status_bar(ctx);
         if !self.start_page {
+            self.title_bar(ctx);
+        }
+        self.layer_window(ctx);
+        if !self.start_page {
+            self.status_bar(ctx);
             self.tool_column(ctx);
             self.tool_form_panel(ctx);
             self.toolpath_panel(ctx);

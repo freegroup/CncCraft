@@ -1,6 +1,4 @@
-//! The hints at the bottom right of the drawing, as the original's "Eingabeaufforderungen" and
-//! documentation buttons: the prompt for what to do next (switchable), the switch itself, and
-//! a button asking for help on the tool in use.
+//! The hint at the bottom right of the drawing: a button asking for help on the tool in use.
 
 use super::{Decoration, Layer, SheetAction, SheetView};
 use crate::theme::{hairline, ink};
@@ -18,20 +16,11 @@ const TEXT_SIZE: f32 = 14.0;
 const PAD_Y: f32 = 10.0;
 const BAR_HEIGHT: f32 = 44.0;
 const PAD_X: f32 = 18.0;
-/// Space between two bars, and the widest a prompt line gets before it wraps (estimated).
+/// Space between two bars.
 const GAP: f32 = 6.0;
-const PROMPT_WIDTH: f32 = 420.0;
 
-pub struct Hints {
-    /// Show the prompt line.
-    pub prompts_on: bool,
-}
-
-impl Default for Hints {
-    fn default() -> Self {
-        Hints { prompts_on: true }
-    }
-}
+#[derive(Default)]
+pub struct Hints;
 
 /// A rounded white bar floating over the drawing, as tall as the original's: one row of the
 /// usual control height, with the rest of the bar height split above and below it (at least
@@ -76,25 +65,6 @@ impl Decoration for Hints {
                 action = Some(SheetAction::ShowToolHelp);
             }
         });
-        let mut toggle = false;
-        let on = self.prompts_on;
-        bar("toggle", &mut |ui| {
-            let eye = if on { "👁" } else { "◌" };
-            let label = egui::Label::new(text(format!("{eye}  Eingabeaufforderungen"))).sense(Sense::click());
-            toggle = ui.add(label).on_hover_text("Hinweise zum nächsten Schritt ein- oder ausblenden").clicked();
-        });
-        if on && !view.prompt.is_empty() {
-            bar("prompt", &mut |ui| {
-                ui.set_max_width(PROMPT_WIDTH);
-                ui.label(text(view.prompt));
-            });
-        }
-        if toggle {
-            self.prompts_on = !self.prompts_on;
-        }
-        if action.is_some() {
-            self.prompts_on = true;
-        }
         action
     }
 }

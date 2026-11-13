@@ -35,7 +35,7 @@ pub enum Layer {
 /// What a decoration may know about the worksheet: where it is on screen and how millimetres
 /// map to it. Y points up in millimetres and down on screen.
 #[derive(Clone, Copy, Debug)]
-pub struct SheetView<'a> {
+pub struct SheetView {
     /// The drawing area on screen.
     pub canvas: Rect,
     /// Screen pixels per millimetre.
@@ -49,11 +49,9 @@ pub struct SheetView<'a> {
     pub datum: [f64; 2],
     /// The pointer in mm, when it is over the drawing.
     pub pointer: Option<[f64; 2]>,
-    /// What the person should do next (the prompt line).
-    pub prompt: &'a str,
 }
 
-impl SheetView<'_> {
+impl SheetView {
     pub fn to_screen(&self, p: [f64; 2]) -> Pos2 {
         Pos2::new(self.origin.x + p[0] as f32 * self.zoom, self.origin.y - p[1] as f32 * self.zoom)
     }
@@ -154,8 +152,8 @@ mod tests {
         }
     }
 
-    fn view() -> SheetView<'static> {
-        SheetView { canvas: Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0)), zoom: 2.0, origin: Pos2::new(100.0, 500.0), width: 300.0, height: 200.0, datum: [0.0, 0.0], pointer: None, prompt: "" }
+    fn view() -> SheetView {
+        SheetView { canvas: Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0)), zoom: 2.0, origin: Pos2::new(100.0, 500.0), width: 300.0, height: 200.0, datum: [0.0, 0.0], pointer: None }
     }
 
     #[test]

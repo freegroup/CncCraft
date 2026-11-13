@@ -96,7 +96,29 @@ const STAGES: &[Stage] = &[
     stage("Gruppe auflösen: die Formen sind wieder einzeln, Gruppieren ist wieder möglich", dxf_ungroup),
     stage("Nach dem Auflösen: ein Klick auf den Kreis wählt nur den Kreis", dxf_click_one_after_ungroup),
     stage("DXF mit nur einer Form: eine Gruppe aus einem Mitglied, Auflösen ist möglich", dxf_single_shape),
+    stage("Form gewählt: genau die Werkzeugwege, die sie fräsen, leuchten in der Liste", toolpaths_of_selected_shape),
 ];
+
+/// Selecting a shape lights up the toolpaths that cut it in the list, and only those; with nothing
+/// selected nothing lights up.
+fn toolpaths_of_selected_shape(app: &mut App) -> (Vec<Event>, Check) {
+    let (k, id) = app.toolpaths.iter().enumerate().find_map(|(k, t)| t.shape_ids.first().map(|id| (k, *id))).expect("the example has toolpaths");
+    app.edit.selection = vec![id];
+    let lit = app.toolpaths_of_selection();
+    app.edit.selection.clear();
+    let none = app.toolpaths_of_selection();
+    let check: Check = Box::new(move |app| {
+        let all_cut_it = lit.iter().all(|&i| app.toolpaths[i].shape_ids.contains(&id));
+        let others_do_not = (0..app.toolpaths.len()).filter(|i| !lit.contains(i)).all(|i| !app.toolpaths[i].shape_ids.contains(&id));
+        let msg = format!("Form {id}: Werkzeugwege {lit:?} leuchten (erwartet auch {k}), alle fräsen sie: {all_cut_it}, die anderen nicht: {others_do_not}, ohne Auswahl {none:?}");
+        if lit.contains(&k) && all_cut_it && others_do_not && none.is_empty() {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
 
 /// A DXF line entity.
 fn dxf_line(a: Pt, b: Pt) -> String {
@@ -1506,13 +1528,12 @@ fn move_unselected_by_centre(app: &mut App) -> (Vec<Event>, Check) {
 }
 
 /// The preview type and the export choice pick the toolpaths as the original's forms do: the
-/// selected one (clicked in the list), the visible ones, or all of them.
+/// visible ones or all of them.
 fn scopes(app: &mut App) -> (Vec<Event>, Check) {
     use super::{OutputScope, PreviewScope};
     app.tp_selected = Some(1);
-    app.preview_scope = PreviewScope::Selected;
     app.output_scope = OutputScope::All;
-    let selected = (app.preview_indices(), app.output_indices());
+    let export_all = app.output_indices();
     // hide the first toolpath: "visible" leaves it out, "all" keeps it
     if let Some(t) = app.toolpaths.first_mut() {
         t.visible = false;
@@ -1530,8 +1551,8 @@ fn scopes(app: &mut App) -> (Vec<Event>, Check) {
     app.output_scope = OutputScope::Visible;
     app.tp_selected = None;
     let check: Check = Box::new(move |_| {
-        let msg = format!("preview-ausgewählt {:?}, export-alle {:?}, sichtbar {:?}/{:?}, alle {:?}", selected.0, selected.1, visible.0, visible.1, all);
-        if selected.0 == vec![1] && selected.1.len() == n && !visible.0.contains(&0) && !visible.1.contains(&0) && visible.0.len() + 1 == n && all.len() == n {
+        let msg = format!("export-alle {:?}, sichtbar {:?}/{:?}, alle {:?}", export_all, visible.0, visible.1, all);
+        if export_all.len() == n && !visible.0.contains(&0) && !visible.1.contains(&0) && visible.0.len() + 1 == n && all.len() == n {
             Ok(msg)
         } else {
             Err(msg)
@@ -1630,12 +1651,8 @@ fn tool_changes(app: &mut App) -> (Vec<Event>, Check) {
     let groups = app.tool_groups(&indices).len();
     app.export_gcode();
     let asked = app.export_ask.take();
-    app.tp_selected = Some(0);
-    app.output_scope = OutputScope::All;
     // one toolpath is one tool: no question (and no save window, which would block the test)
-    let asked_for_one = app.tool_groups(&app.output_indices()).len() > 1;
-    app.output_scope = OutputScope::Visible;
-    app.tp_selected = None;
+    let asked_for_one = app.tool_groups(&indices[..1]).len() > 1;
     let per_tool = {
         let paths: Vec<&crate::toolpath::Toolpath> = indices.iter().map(|&i| &app.toolpaths[i]).collect();
         crate::toolgroups::files(&app.job, &paths, app.pp(), "schild")

@@ -375,6 +375,10 @@ impl App {
                 // (the job is set up from the tool column only, as in the original: job_setup is
                 // the last entry of its tool list, 0x10011d034)
                 toolbar_group(ui, "Dekoration", |ui| {
+                    let shown = self.origin_shown();
+                    if icon_button(ui, Icon::Origin, shown, "Nullpunkt anzeigen / ausblenden (Achsenkreuz im Blatt und in der 3D-Ansicht)").clicked() {
+                        self.set_origin_shown(!shown);
+                    }
                     if icon_button(ui, Icon::Grid, self.snap_grid, "Am Raster einrasten").clicked() {
                         self.snap_grid = !self.snap_grid;
                     }
@@ -399,10 +403,6 @@ impl App {
                     }
                     if icon_button(ui, Icon::ZoomFit, false, "Ganze Ansicht").clicked() {
                         self.run(Action::FitView);
-                    }
-                    let shown = self.origin_shown();
-                    if icon_button(ui, Icon::Origin, shown, "Nullpunkt anzeigen / ausblenden (Achsenkreuz im Blatt und in der 3D-Ansicht)").clicked() {
-                        self.set_origin_shown(!shown);
                     }
                     let (label, next, hint) = match self.mode {
                         ViewMode::TwoD => ("2D", ViewMode::ThreeD, "Zur 3D-Ansicht wechseln"),
@@ -503,56 +503,56 @@ impl App {
             return;
         }
         egui::SidePanel::right("toolpaths").exact_width(320.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(10.0, 8.0)).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Werkzeugpfade").size(14.5).strong().color(ink()));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // the bottom container is laid out first, so it keeps its place; the top container
+            // takes the room that is left
+            if self.toolpath_tab == ToolpathTab::Create {
+                self.toolpath_tab = ToolpathTab::Preview;
+            }
+            egui::TopBottomPanel::bottom("toolpath_bottom").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 8.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
+                group_container().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    group_title(ui, "Simulation & Export", |_| {});
+                    ui.horizontal(|ui| {
+                        for (tab, icon, hint) in [(ToolpathTab::Preview, Icon::Preview, "Werkzeugpfade-Vorschau"), (ToolpathTab::Save, Icon::Save, "Werkzeugpfade speichern")] {
+                            ui.add_space(22.0);
+                            if icon_button(ui, icon, self.toolpath_tab == tab, hint).clicked() {
+                                self.toolpath_tab = tab;
+                                if tab == ToolpathTab::Preview {
+                                    self.mode = ViewMode::ThreeD;
+                                    self.start_page = false;
+                                }
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
+                    match self.toolpath_tab {
+                        ToolpathTab::Preview | ToolpathTab::Create => self.preview_tab(ui),
+                        ToolpathTab::Save => self.save_tab(ui),
+                    }
+                });
+            });
+            group_container().show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.set_min_height(ui.available_height().max(60.0));
+                group_title(ui, "Werkzeugpfade", |ui| {
                     if ui.button("›").on_hover_text("Werkzeugpfade einklappen").clicked() {
                         self.paths_open = false;
                     }
                 });
-            });
-            ui.add_space(4.0);
-            // 1. the workpiece first: it is what everything else depends on
-            self.setup_row(ui);
-            ui.add_space(6.0);
-            // 2. the operations that can be added
-            self.operation_buttons(ui);
-            ui.add_space(6.0);
-            // 4. preview and saving stay fixed at the bottom of the panel; the list takes the room
-            //    between (the bottom parts are laid out first, so they keep their place)
-            if self.toolpath_tab == ToolpathTab::Create {
-                self.toolpath_tab = ToolpathTab::Preview;
-            }
-            egui::TopBottomPanel::bottom("toolpath_bottom").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 0.0 })).show_separator_line(true).show_inside(ui, |ui| {
-                // the second group of the panel, named like the first one at the top
-                ui.label(egui::RichText::new("Simulation & Export").size(14.5).strong().color(ink()));
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    for (tab, icon, hint) in [(ToolpathTab::Preview, Icon::Preview, "Werkzeugpfade-Vorschau"), (ToolpathTab::Save, Icon::Save, "Werkzeugpfade speichern")] {
-                        ui.add_space(22.0);
-                        if icon_button(ui, icon, self.toolpath_tab == tab, hint).clicked() {
-                            self.toolpath_tab = tab;
-                            if tab == ToolpathTab::Preview {
-                                self.mode = ViewMode::ThreeD;
-                                self.start_page = false;
-                            }
-                        }
-                    }
-                });
-                ui.add_space(4.0);
-                match self.toolpath_tab {
-                    ToolpathTab::Preview | ToolpathTab::Create => self.preview_tab(ui),
-                    ToolpathTab::Save => self.save_tab(ui),
-                }
-                ui.add_space(4.0);
-            });
-            // 3a. the paths made so far: they fill what is left and scroll when there are many
-            egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(4.0).inner_margin(4.0).show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.set_min_height((ui.available_height() - 8.0).max(60.0));
-                egui::ScrollArea::vertical().id_salt("toolpath_list").auto_shrink([false, false]).show(ui, |ui| {
-                    self.toolpath_list(ui);
-                    self.time_note(ui);
+                // the workpiece first: it is what everything else depends on
+                self.setup_row(ui);
+                ui.add_space(6.0);
+                // the operations that can be added
+                self.operation_buttons(ui);
+                ui.add_space(6.0);
+                // the paths made so far: they fill what is left and scroll when there are many
+                egui::Frame::none().fill(crate::theme::panel()).stroke(Stroke::new(1.0_f32, hairline())).rounding(4.0).inner_margin(4.0).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.set_min_height(ui.available_height().max(60.0));
+                    egui::ScrollArea::vertical().id_salt("toolpath_list").auto_shrink([false, false]).show(ui, |ui| {
+                        self.toolpath_list(ui);
+                        self.time_note(ui);
+                    });
                 });
             });
         });
@@ -626,7 +626,7 @@ impl App {
     fn preview_tab(&mut self, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Vorschau").size(15.0).color(ink()));
         ui.horizontal(|ui| {
-            if ui.button("▶ Abspielen").clicked() {
+            if ui.button("▶ Simulieren").clicked() {
                 self.start_preview(true);
             }
             if ui.button("⏭ Sofort").clicked() {
@@ -639,7 +639,7 @@ impl App {
         // "Preview Type" of the original: which toolpaths are simulated
         ui.horizontal_wrapped(|ui| {
             use super::PreviewScope;
-            for (scope, name) in [(PreviewScope::All, "Alle"), (PreviewScope::Selected, "Ausgewählter"), (PreviewScope::Visible, "Sichtbare")] {
+            for (scope, name) in [(PreviewScope::All, "Alle"), (PreviewScope::Visible, "Sichtbare")] {
                 ui.radio_value(&mut self.preview_scope, scope, name);
             }
         })
@@ -1142,6 +1142,14 @@ impl App {
         });
     }
 
+    /// The rows of the toolpaths that cut at least one of the selected shapes.
+    pub(super) fn toolpaths_of_selection(&self) -> Vec<usize> {
+        if self.edit.selection.is_empty() {
+            return Vec::new();
+        }
+        (0..self.toolpaths.len()).filter(|&i| self.toolpaths[i].shape_ids.iter().any(|id| self.edit.selection.contains(id))).collect()
+    }
+
     fn toolpath_list(&mut self, ui: &mut egui::Ui) {
         let all_hidden = self.toolpaths.iter().all(|t| !t.visible);
         let label = if all_hidden { "Alle einblenden" } else { "Alle ausblenden" };
@@ -1163,16 +1171,20 @@ impl App {
             ui.label(egui::RichText::new("Noch keine Werkzeugpfade.").color(muted()));
             return;
         }
-        let (mut remove, mut edit, mut swap) = (None, None, None);
+        let (mut remove, mut edit) = (None, None);
         let mut select_shapes: Option<Vec<u64>> = None;
         let mut pick_row: Option<usize> = None;
-        let n = self.toolpaths.len();
         let mut rows: Vec<Rect> = Vec::new();
         let mut grips: Vec<Rect> = Vec::new();
         let mut drag_started = None;
         let dragging = self.tp_drag;
         // a small entry above the first toolpath and wherever the tool changes: from here on this tool cuts
         let tool_entries = crate::toolgroups::headers(&self.toolpaths.iter().map(|t| &t.tool).collect::<Vec<_>>());
+        // the toolpaths that cut the selected shapes light up, as the operations of a selected body
+        // do in Fusion 360; the list scrolls to the first of them when the selection changed
+        let related_rows = self.toolpaths_of_selection();
+        let selection_changed = self.tp_scrolled_for != self.edit.selection;
+        let mut scrolled = false;
         for (i, tp) in self.toolpaths.iter_mut().enumerate() {
             if tool_entries[i] {
                 ui.horizontal(|ui| {
@@ -1182,12 +1194,29 @@ impl App {
                 });
             }
             let active = self.editor.as_ref().is_some_and(|e| e.index == Some(i));
-            let frame = egui::Frame::none().fill(if active || self.tp_selected == Some(i) { crate::theme::row_active() } else { crate::theme::row() }).rounding(4.0).inner_margin(egui::Margin::symmetric(6.0, 3.0));
+            let related = related_rows.contains(&i);
+            // every row has the same frame, so the one that lights up does not change the layout
+            let frame = egui::Frame::none()
+                .fill(if active || self.tp_selected == Some(i) { crate::theme::row_active() } else { crate::theme::row() })
+                .stroke(Stroke::new(1.5_f32, if related { ACCENT } else { Color32::TRANSPARENT }))
+                .rounding(4.0)
+                .inner_margin(egui::Margin::symmetric(4.5, 1.5));
             let row = frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // the grip: drag it to put this toolpath somewhere else in the list
+                    // the grip: drag it to put this toolpath somewhere else in the list; it lights up
+                    // when the toolpath cuts a selected shape
                     let (grip, grip_resp) = ui.allocate_exact_size(Vec2::new(10.0, 18.0), Sense::drag());
-                    let tone = if grip_resp.hovered() || dragging == Some(i) { ink() } else { crate::theme::grip() };
+                    if related {
+                        ui.painter().rect_filled(grip.expand(4.0), 7.0, ACCENT.gamma_multiply(0.22));
+                        ui.painter().rect_filled(grip, 4.0, ACCENT);
+                    }
+                    let tone = if related {
+                        crate::theme::INK
+                    } else if grip_resp.hovered() || dragging == Some(i) {
+                        ink()
+                    } else {
+                        crate::theme::grip()
+                    };
                     for dx in [-2.0, 2.0] {
                         for dy in [-5.0, 0.0, 5.0] {
                             ui.painter().circle_filled(grip.center() + Vec2::new(dx, dy), 1.2, tone);
@@ -1226,15 +1255,21 @@ impl App {
                             if ui.small_button("🗑").on_hover_text("Löschen").clicked() {
                                 remove = Some(i);
                             }
-                            if ui.small_button("✎").on_hover_text("Bearbeiten").clicked() {
+                            let edit_btn = ui.add(egui::Button::new("").small().min_size(Vec2::new(18.0, 18.0)));
+                            if edit_btn.clicked() {
                                 edit = Some(i);
                             }
-                            if i + 1 < n && ui.small_button("⏷").on_hover_text("Nach unten").clicked() {
-                                swap = Some(i);
+                            {
+                                let r = edit_btn.rect.shrink(3.0);
+                                let c = if edit_btn.hovered() { ink() } else { muted() };
+                                let tip = r.left_bottom() + Vec2::new(1.0, -1.0);
+                                let top = r.right_top() + Vec2::new(-1.0, 1.0);
+                                let p = ui.painter();
+                                p.line_segment([tip, top], Stroke::new(1.5_f32, c));
+                                p.line_segment([tip + Vec2::new(3.0, 1.0), top + Vec2::new(1.0, -3.0)], Stroke::new(1.0_f32, c));
+                                p.line_segment([tip + Vec2::new(-1.0, 3.0), top + Vec2::new(-3.0, 1.0)], Stroke::new(1.0_f32, c));
                             }
-                            if i > 0 && ui.small_button("⏶").on_hover_text("Nach oben").clicked() {
-                                swap = Some(i - 1);
-                            }
+                            edit_btn.on_hover_text("Bearbeiten");
                         }
                         ui.label(egui::RichText::new(fmt_time(tp.stats().minutes)).small().color(muted()));
                     });
@@ -1244,7 +1279,12 @@ impl App {
                 }
             });
             rows.push(row.response.rect);
+            if related && selection_changed && !scrolled && !ui.is_rect_visible(row.response.rect) {
+                ui.scroll_to_rect(row.response.rect, Some(egui::Align::Center));
+                scrolled = true;
+            }
         }
+        self.tp_scrolled_for = self.edit.selection.clone();
         self.tp_grips = grips;
         if drag_started.is_some() {
             self.tp_drag = drag_started;
@@ -1297,11 +1337,6 @@ impl App {
             self.editor = None;
             self.sim = None;
         }
-        if let Some(i) = swap {
-            self.tp_selected = None;
-            self.toolpaths.swap(i, i + 1);
-            self.sim = None;
-        }
         if let Some(i) = edit {
             let tp = self.toolpaths[i].clone();
             let kind = match tp.strategy {
@@ -1330,6 +1365,24 @@ pub(super) fn eye(ui: &mut egui::Ui, open: bool, label: &str) -> egui::Response 
 }
 
 /// One group of toolbar buttons in a thin rounded box with its name centred under the buttons.
+/// The box round what belongs together in the toolpath panel.
+fn group_container() -> egui::Frame {
+    egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(6.0).inner_margin(egui::Margin::same(8.0))
+}
+
+/// The title of a group box, a line under it, and room at the right end for a control.
+fn group_title(ui: &mut egui::Ui, title: &str, right: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(title).size(14.5).strong().color(ink()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
+    });
+    ui.add_space(2.0);
+    let y = ui.cursor().top();
+    let (l, r) = (ui.min_rect().left(), ui.min_rect().right());
+    ui.painter().line_segment([Pos2::new(l, y), Pos2::new(r, y)], Stroke::new(1.0_f32, hairline()));
+    ui.add_space(8.0);
+}
+
 fn toolbar_group(ui: &mut egui::Ui, name: &str, add: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::none().stroke(Stroke::new(1.0_f32, crate::theme::separator())).rounding(5.0).fill(crate::theme::surface()).inner_margin(egui::Margin { left: 7.0, right: 7.0, top: 3.0, bottom: 2.0 }).show(ui, |ui| {
         ui.vertical(|ui| {
