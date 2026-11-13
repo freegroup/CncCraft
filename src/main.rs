@@ -3,11 +3,22 @@
 // in a Windows release there is no console window behind the program
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+// every text the person sees goes through `t!`: the German original is the key, the other
+// languages are in locales/<code>.json (see lang.rs); a text without a translation shows as is
+rust_i18n::i18n!("locales", fallback = "de");
+
+macro_rules! t {
+    ($($args:tt)*) => {
+        ::rust_i18n::t!($($args)*).into_owned()
+    };
+}
+
 mod app;
 mod appicon;
 mod gcode;
 mod layers;
 mod geom;
+mod lang;
 mod props;
 mod sheet;
 mod sim;
