@@ -1,68 +1,66 @@
 #!/usr/bin/env bash
-# CncCraft: die macOS-Pakete lokal bauen und an eine GitHub-Release hängen.
+# CncCraft: die macOS-Pakete lokal bauen und an die passende GitHub-Release hängen.
 #
-# Hintergrund: Die GitHub-Action (.github/workflows/release.yml) baut Windows und Linux.
+# Hintergrund: Die GitHub-Action (.github/workflows/release.yml) baut Windows und Linux und
+# lässt semantic-release die Version in Cargo.toml/Cargo.lock bumpen, einchecken und taggen.
 # Für macOS gibt es keinen passenden GitHub-Runner, also werden die Apple-Pakete hier auf
-# einem Mac gebaut und mit diesem Skript an die gewünschte Release gehängt.
+# einem Mac gebaut und an dieselbe Release gehängt.
 #
 #   ./build_and_release.sh
+#
+# Die Version wird NICHT ausgewählt: Cargo.toml gibt sie vor. Das Skript holt zuerst den
+# aktuellen main-Stand (git pull), damit der von semantic-release gebumpte Versionsstand
+# lokal vorliegt, baut genau diese Version und hängt die Pakete an die Release "v<version>".
 #
 # Läuft nur auf einem Mac und braucht die GitHub-CLI (`gh`, am freegroup-Konto angemeldet).
 set -euo pipefail
 cd "$(dirname "$0")"
 
 NAME="CncCraft"
-VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
 DIST="dist"
 
 say() { printf '\n==> %s\n' "$*"; }
+die() { echo "FEHLER: $*" >&2; exit 1; }
 
 # -------------------------------------------------- Voraussetzungen
-[ "$(uname -s)" = "Darwin" ] || { echo "Dieses Skript baut macOS-Pakete und läuft nur auf einem Mac."; exit 1; }
-command -v gh >/dev/null 2>&1 || { echo "GitHub-CLI 'gh' nicht gefunden (brew install gh)."; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "Bitte zuerst mit 'gh auth login' anmelden."; exit 1; }
+[ "$(uname -s)" = "Darwin" ] || die "Dieses Skript baut macOS-Pakete und läuft nur auf einem Mac."
+command -v gh >/dev/null 2>&1 || die "GitHub-CLI 'gh' nicht gefunden (brew install gh)."
+gh auth status >/dev/null 2>&1 || die "Bitte zuerst mit 'gh auth login' anmelden."
 
+# -------------------------------------------------- 1) Aktuellen Stand holen (Cargo.toml gibt die Version vor)
+branch="$(git rev-parse --abbrev-ref HEAD)"
+[ "$branch" = "main" ] || die "Bitte auf dem Branch 'main' bauen (aktuell: '$branch')."
+[ -z "$(git status --porcelain)" ] || die "Arbeitsverzeichnis nicht sauber – bitte erst committen/stashen, dann erneut ausführen."
+
+say "Aktuellen main-Stand holen (git pull)"
+git pull --ff-only
+
+VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)"
+[ -n "$VERSION" ] || die "Konnte die Version nicht aus Cargo.toml lesen."
+TAG="v$VERSION"
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "freegroup/$NAME")"
 
-# -------------------------------------------------- 1) macOS bauen
+# Die Release muss schon existieren (semantic-release legt sie beim Push auf main an).
+gh release view "$TAG" >/dev/null 2>&1 \
+  || die "Release '$TAG' existiert nicht. Läuft der Release-Workflow für diese Version noch? (Cargo.toml = $VERSION)"
+
+say "Version $VERSION → Release $TAG"
+
+# -------------------------------------------------- 2) alte macOS-Pakete entfernen und neu bauen
+shopt -s nullglob
+rm -f "$DIST"/*apple-silicon.dmg "$DIST"/*apple-silicon.zip "$DIST"/*intel-mac.dmg "$DIST"/*intel-mac.zip
+shopt -u nullglob
+
 say "macOS (Apple Silicon) bauen"
 ./build.sh mac
 say "macOS (Intel) bauen"
 ./build.sh mac-intel || echo "Intel-Build übersprungen (läuft nur mit Rosetta)."
 
-# macOS-Pakete einsammeln, die gerade entstanden sind
+# genau die frisch gebauten macOS-Pakete einsammeln (dist wurde vorher geleert)
 shopt -s nullglob
 MAC_ASSETS=( "$DIST"/*apple-silicon.dmg "$DIST"/*apple-silicon.zip "$DIST"/*intel-mac.dmg "$DIST"/*intel-mac.zip )
 shopt -u nullglob
-[ "${#MAC_ASSETS[@]}" -gt 0 ] || { echo "Keine macOS-Pakete in $DIST/ gefunden – Build fehlgeschlagen?"; exit 1; }
-
-# -------------------------------------------------- 2) Release-Version wählen (die letzten 5, latest vorselektiert)
-TAGS=()
-while IFS= read -r line; do [ -n "$line" ] && TAGS+=("$line"); done \
-  < <(gh release list --limit 5 --json tagName -q '.[].tagName' 2>/dev/null || true)
-
-if [ "${#TAGS[@]}" -eq 0 ]; then
-  # noch keine Releases: Tag eingeben und anlegen
-  DEFAULT_TAG="v$VERSION"
-  printf 'Keine Releases gefunden. Welchen Tag anlegen? [%s] ' "$DEFAULT_TAG"
-  read -r TAG
-  TAG="${TAG:-$DEFAULT_TAG}"
-  gh release create "$TAG" --title "$TAG" --notes "CncCraft $TAG"
-else
-  echo
-  echo "Welche Release? (die letzten ${#TAGS[@]} von GitHub)"
-  i=1
-  for t in "${TAGS[@]}"; do
-    if [ "$i" -eq 1 ]; then printf '  %d) %s  (latest)\n' "$i" "$t"; else printf '  %d) %s\n' "$i" "$t"; fi
-    i=$((i + 1))
-  done
-  printf 'Auswahl [1] '
-  read -r sel
-  sel="${sel:-1}"
-  case "$sel" in ''|*[!0-9]*) echo "Ungültige Auswahl."; exit 1 ;; esac
-  { [ "$sel" -ge 1 ] && [ "$sel" -le "${#TAGS[@]}" ]; } || { echo "Auswahl außerhalb des Bereichs."; exit 1; }
-  TAG="${TAGS[$((sel - 1))]}"
-fi
+[ "${#MAC_ASSETS[@]}" -gt 0 ] || die "Keine macOS-Pakete in $DIST/ gefunden – Build fehlgeschlagen?"
 
 # -------------------------------------------------- 3) Artefakte anhängen
 say "Diese macOS-Pakete an Release '$TAG' hängen:"
