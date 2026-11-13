@@ -11,8 +11,8 @@ pub struct VCarveTool {
 }
 
 impl ToolpathKind for VCarveTool {
-    fn label(&self) -> &'static str {
-        "V-Carving"
+    fn label(&self) -> String {
+        t!("V-Carving")
     }
 
     fn cut(&self, out: &mut Out, cx: &CutContext) -> Option<String> {

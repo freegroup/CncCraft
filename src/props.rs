@@ -14,10 +14,10 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 }
 
 fn center(ui: &mut egui::Ui, c: &mut Pt) {
-    row(ui, "Mitte X", |ui| {
+    row(ui, &t!("Mitte X"), |ui| {
         ui.add(mm(&mut c[0]));
     });
-    row(ui, "Mitte Y", |ui| {
+    row(ui, &t!("Mitte Y"), |ui| {
         ui.add(mm(&mut c[1]));
     });
 }
@@ -34,34 +34,34 @@ fn doubled(ui: &mut egui::Ui, label: &str, half: &mut f64) {
 
 fn rect(ui: &mut egui::Ui, r: &mut Rect) {
     center(ui, &mut r.center);
-    row(ui, "Breite", |ui| {
+    row(ui, &t!("Breite"), |ui| {
         ui.add(mm(&mut r.width).range(0.1..=10000.0));
     });
-    row(ui, "Höhe", |ui| {
+    row(ui, &t!("Höhe"), |ui| {
         ui.add(mm(&mut r.height).range(0.1..=10000.0));
     });
-    row(ui, "Eckradius", |ui| {
+    row(ui, &t!("Eckradius"), |ui| {
         ui.add(mm(&mut r.corner_radius).range(0.0..=1000.0));
     });
 }
 
 fn circle(ui: &mut egui::Ui, c: &mut Circle) {
     center(ui, &mut c.center);
-    doubled(ui, "Durchmesser", &mut c.radius);
+    doubled(ui, &t!("Durchmesser"), &mut c.radius);
 }
 
 fn ellipse(ui: &mut egui::Ui, e: &mut Ellipse) {
     center(ui, &mut e.center);
-    doubled(ui, "Breite", &mut e.rx);
-    doubled(ui, "Höhe", &mut e.ry);
+    doubled(ui, &t!("Breite"), &mut e.rx);
+    doubled(ui, &t!("Höhe"), &mut e.ry);
 }
 
 fn polygon(ui: &mut egui::Ui, p: &mut Polygon) {
     center(ui, &mut p.center);
-    row(ui, "Radius", |ui| {
+    row(ui, &t!("Radius"), |ui| {
         ui.add(mm(&mut p.radius).range(0.1..=10000.0));
     });
-    row(ui, "Ecken", |ui| {
+    row(ui, &t!("Ecken"), |ui| {
         // at least 3 sides (0x10084a4cc checks the 'S' field against 3.0)
         ui.add(egui::DragValue::new(&mut p.sides).range(3..=1000));
     });
@@ -69,28 +69,28 @@ fn polygon(ui: &mut egui::Ui, p: &mut Polygon) {
 
 fn text(ui: &mut egui::Ui, t: &mut Text) {
     center(ui, &mut t.center);
-    row(ui, "Text", |ui| {
+    row(ui, &t!("Text"), |ui| {
         ui.add(egui::TextEdit::multiline(&mut t.text).desired_rows(2).desired_width(150.0));
     });
-    row(ui, "Höhe", |ui| {
+    row(ui, &t!("Höhe"), |ui| {
         ui.add(mm(&mut t.height).range(1.0..=2000.0));
     });
 }
 
 fn path(ui: &mut egui::Ui, p: &mut Path) {
-    row(ui, "Punkte", |ui| {
+    row(ui, &t!("Punkte"), |ui| {
         ui.label(p.points.len().to_string());
     });
-    row(ui, "Geschlossen", |ui| {
+    row(ui, &t!("Geschlossen"), |ui| {
         ui.checkbox(&mut p.closed, "");
     });
 }
 
 fn compound(ui: &mut egui::Ui, c: &Compound) {
-    row(ui, "Konturen", |ui| {
+    row(ui, &t!("Konturen"), |ui| {
         ui.label(c.paths.len().to_string());
     });
-    row(ui, "Punkte", |ui| {
+    row(ui, &t!("Punkte"), |ui| {
         ui.label(c.paths.iter().map(|p| p.points.len()).sum::<usize>().to_string());
     });
 }
@@ -108,7 +108,7 @@ fn curves_center(ui: &mut egui::Ui, shape: &mut Shape) {
 /// Fields for `shape`. Returns whether anything changed.
 pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
     let before = shape.clone();
-    ui.label(egui::RichText::new(shape.label()).strong().color(ink()));
+    ui.label(egui::RichText::new(t!(shape.label())).strong().color(ink()));
     egui::Grid::new("props").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
         if matches!(shape, Shape::Path(_) | Shape::Compound(_)) {
             curves_center(ui, shape);
@@ -124,7 +124,7 @@ pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
         }
     });
     if let Some((lo, hi)) = shape.bounds() {
-        ui.label(egui::RichText::new(format!("Größe {:.1} × {:.1} mm", hi[0] - lo[0], hi[1] - lo[1])).small().color(muted()));
+        ui.label(egui::RichText::new(t!("Größe %{w} × %{h} mm", w = format!("{:.1}", hi[0] - lo[0]), h = format!("{:.1}", hi[1] - lo[1]))).small().color(muted()));
     }
     *shape != before
 }

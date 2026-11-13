@@ -148,9 +148,9 @@ impl ConstraintInput {
 pub(super) fn problem(text: &str, lookup: &dyn calc::Lookup, positive: bool) -> Option<String> {
     let t = text.trim().trim_end_matches('=').trim();
     match calc::eval(t, lookup) {
-        Ok(v) if positive && v <= 0.0 => Some("muss größer als 0 sein".into()),
+        Ok(v) if positive && v <= 0.0 => Some(t!("muss größer als 0 sein").into()),
         Ok(_) => None,
-        Err(e) => Some(e.message()),
+        Err(e) => Some(crate::lang::calc_message(&e)),
     }
 }
 

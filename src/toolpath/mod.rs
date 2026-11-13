@@ -88,7 +88,7 @@ pub enum Strategy {
 }
 
 impl Strategy {
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         self.kind().label()
     }
 
@@ -133,7 +133,7 @@ impl CutContext<'_> {
 /// One cutting strategy. Each tool class implements this; the big match is gone.
 pub trait ToolpathKind {
     /// Short name shown in the UI.
-    fn label(&self) -> &'static str;
+    fn label(&self) -> String;
     /// Emit the cutter moves into `out`. Returns a warning when the result is empty/invalid.
     fn cut(&self, out: &mut Out, cx: &CutContext) -> Option<String>;
 }
@@ -215,7 +215,7 @@ impl Toolpath {
         // height at the start and at safe_z between toolpaths and tools).
         let mut out = Out { moves: vec![], job };
         if contours.is_empty() {
-            self.warning = Some("Keine Vektoren gewählt".into());
+            self.warning = Some(t!("Keine Vektoren gewählt").into());
         } else {
             let cx = CutContext { tool: &self.tool, start_depth: self.start_depth, cut_depth: self.cut_depth, contours: &contours };
             if let Some(w) = self.strategy.kind().cut(&mut out, &cx) {
@@ -439,8 +439,8 @@ pub fn default_toolpath(kind: &str, lib: &ToolLibrary, job: &Job, ids: Vec<u64>)
         _ => (Strategy::Profile { side: Side::Outside, climb: true, tabs: false, tab_count: 4 }, lib.pick(&job.material, ToolKind::EndMill, 3.0, None), 3.0),
     };
     let name = match kind {
-        "cutout" => "Ausschnitt".to_string(),
-        _ => strategy.label().to_string(),
+        "cutout" => t!("Ausschnitt").to_string(),
+        _ => strategy.label(),
     };
     Toolpath { name, strategy, tool, start_depth: 0.0, cut_depth: depth, start_expr: None, cut_expr: None, shape_ids: ids, visible: true, moves: vec![], warning: None }
 }

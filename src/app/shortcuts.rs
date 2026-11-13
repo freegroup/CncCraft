@@ -56,61 +56,61 @@ pub(super) struct Shortcut {
     pub key: Key,
     pub command: bool,
     pub shift: bool,
-    pub what: &'static str,
+    pub what: crate::lang::Tr,
     /// Where the original names this key, or "geschätzt".
-    pub source: &'static str,
+    pub source: crate::lang::Tr,
 }
 
-const fn sc(action: Action, key: Key, command: bool, shift: bool, what: &'static str, source: &'static str) -> Shortcut {
+const fn sc(action: Action, key: Key, command: bool, shift: bool, what: crate::lang::Tr, source: crate::lang::Tr) -> Shortcut {
     Shortcut { action, key, command, shift, what, source }
 }
 
-const HINT: &str = "Hinweistext des Originals (UvsT)";
-const EST: &str = "geschätzt";
+const HINT: crate::lang::Tr = tr!("Hinweistext des Originals (UvsT)");
+const EST: crate::lang::Tr = tr!("geschätzt");
 
 pub(super) const SHORTCUTS: &[Shortcut] = &[
-    sc(Action::NodeEdit, Key::N, false, false, "Ausgewählten Vektor im Knotenmodus bearbeiten / zurück", HINT),
-    sc(Action::Dimension, Key::D, false, false, "Bemaßen: Abstand zwischen Punkten und Linien festlegen", "geschätzt (wie in Fusion 360)"),
-    sc(Action::Align, Key::H, false, false, "Waagrecht/Senkrecht: eine Linie waagrecht oder senkrecht festlegen", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Select, Key::S, false, false, "Auswählen (Selektionsmodus)", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Line, Key::L, false, false, "Linie zeichnen", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Rectangle, Key::R, false, false, "Rechteck zeichnen", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Circle, Key::C, false, false, "Kreis zeichnen", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Offset, Key::O, false, false, "Vektoren versetzen", "gewünscht (wie in Fusion 360)"),
-    sc(Action::Cancel, Key::Escape, false, false, "Abbrechen · Transformationsmodus verlassen", HINT),
-    sc(Action::Apply, Key::Enter, false, false, "Übernehmen · Linie beenden", HINT),
-    sc(Action::ClosePolyline, Key::Tab, false, false, "Linie schließen", HINT),
-    sc(Action::NextLine, Key::Space, false, false, "Linie beenden und neue beginnen", HINT),
-    sc(Action::Delete, Key::Delete, false, false, "Löschen", EST),
-    sc(Action::Delete, Key::Backspace, false, false, "Löschen", EST),
-    sc(Action::Undo, Key::Z, true, false, "Rückgängig", EST),
-    sc(Action::Redo, Key::Z, true, true, "Wiederholen", "Text „Ctrl+Shift+Z“ im Programm (0x1004eea4c)"),
-    sc(Action::SelectAll, Key::A, true, false, "Alles auswählen", EST),
-    sc(Action::Group, Key::G, true, false, "Gruppieren (auch Gruppen in Gruppen)", EST),
-    sc(Action::Ungroup, Key::G, true, true, "Gruppe auflösen (eine Ebene)", EST),
-    sc(Action::Duplicate, Key::D, true, false, "Duplizieren", EST),
-    sc(Action::Copy, Key::C, true, false, "Kopieren", EST),
-    sc(Action::Cut, Key::X, true, false, "Ausschneiden", EST),
-    sc(Action::Paste, Key::V, true, false, "Einfügen", EST),
-    sc(Action::New, Key::N, true, false, "Neuer Job", EST),
-    sc(Action::Open, Key::O, true, false, "Öffnen", EST),
-    sc(Action::Save, Key::S, true, false, "Speichern", EST),
-    sc(Action::SaveAs, Key::S, true, true, "Speichern unter", "Text „Ctrl+Shift+S“ im Programm (0x1004f1cb0)"),
-    sc(Action::View2D, Key::F2, false, false, "2D-Ansicht", EST),
-    sc(Action::View3D, Key::F3, false, false, "3D-Ansicht", EST),
-    sc(Action::FitView, Key::F4, false, false, "Ganze Ansicht", EST),
-    sc(Action::Shortcuts, Key::Slash, true, false, "Diese Liste", EST),
+    sc(Action::NodeEdit, Key::N, false, false, tr!("Ausgewählten Vektor im Knotenmodus bearbeiten / zurück"), HINT),
+    sc(Action::Dimension, Key::D, false, false, tr!("Bemaßen: Abstand zwischen Punkten und Linien festlegen"), tr!("geschätzt (wie in Fusion 360)")),
+    sc(Action::Align, Key::H, false, false, tr!("Waagrecht/Senkrecht: eine Linie waagrecht oder senkrecht festlegen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Select, Key::S, false, false, tr!("Auswählen (Selektionsmodus)"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Line, Key::L, false, false, tr!("Linie zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Rectangle, Key::R, false, false, tr!("Rechteck zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Circle, Key::C, false, false, tr!("Kreis zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Offset, Key::O, false, false, tr!("Vektoren versetzen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::Cancel, Key::Escape, false, false, tr!("Abbrechen · Transformationsmodus verlassen"), HINT),
+    sc(Action::Apply, Key::Enter, false, false, tr!("Übernehmen · Linie beenden"), HINT),
+    sc(Action::ClosePolyline, Key::Tab, false, false, tr!("Linie schließen"), HINT),
+    sc(Action::NextLine, Key::Space, false, false, tr!("Linie beenden und neue beginnen"), HINT),
+    sc(Action::Delete, Key::Delete, false, false, tr!("Löschen"), EST),
+    sc(Action::Delete, Key::Backspace, false, false, tr!("Löschen"), EST),
+    sc(Action::Undo, Key::Z, true, false, tr!("Rückgängig"), EST),
+    sc(Action::Redo, Key::Z, true, true, tr!("Wiederholen"), tr!("Text „Ctrl+Shift+Z“ im Programm (0x1004eea4c)")),
+    sc(Action::SelectAll, Key::A, true, false, tr!("Alles auswählen"), EST),
+    sc(Action::Group, Key::G, true, false, tr!("Gruppieren (auch Gruppen in Gruppen)"), EST),
+    sc(Action::Ungroup, Key::G, true, true, tr!("Gruppe auflösen (eine Ebene)"), EST),
+    sc(Action::Duplicate, Key::D, true, false, tr!("Duplizieren"), EST),
+    sc(Action::Copy, Key::C, true, false, tr!("Kopieren"), EST),
+    sc(Action::Cut, Key::X, true, false, tr!("Ausschneiden"), EST),
+    sc(Action::Paste, Key::V, true, false, tr!("Einfügen"), EST),
+    sc(Action::New, Key::N, true, false, tr!("Neuer Job"), EST),
+    sc(Action::Open, Key::O, true, false, tr!("Öffnen"), EST),
+    sc(Action::Save, Key::S, true, false, tr!("Speichern"), EST),
+    sc(Action::SaveAs, Key::S, true, true, tr!("Speichern unter"), tr!("Text „Ctrl+Shift+S“ im Programm (0x1004f1cb0)")),
+    sc(Action::View2D, Key::F2, false, false, tr!("2D-Ansicht"), EST),
+    sc(Action::View3D, Key::F3, false, false, tr!("3D-Ansicht"), EST),
+    sc(Action::FitView, Key::F4, false, false, tr!("Ganze Ansicht"), EST),
+    sc(Action::Shortcuts, Key::Slash, true, false, tr!("Diese Liste"), EST),
 ];
 
 /// What the mouse does with keys held, as the original's hint texts describe it.
-pub(super) const WITH_MOUSE: &[(&str, &str)] = &[
-    ("⇧ + Klick", "Mehrere Objekte aus- und abwählen"),
-    ("⇧ beim Ziehen", "Einrasten aus"),
-    ("⌥ oder ⌃ beim Verschieben", "Kopie erstellen"),
-    ("⌘⇧ + Pfeiltasten", "Auswahl um den festen Abstand verschieben"),
-    ("Pfeiltasten", "Auswahl oder Knoten verschieben (⇧: zehnfach)"),
-    ("↑ ↓ in Maßfeldern", "Zwischen den Feldern wechseln"),
-    ("Formel und „=“", "Wert ausrechnen"),
+pub(super) const WITH_MOUSE: &[(crate::lang::Tr, crate::lang::Tr)] = &[
+    (tr!("⇧ + Klick"), tr!("Mehrere Objekte aus- und abwählen")),
+    (tr!("⇧ beim Ziehen"), tr!("Einrasten aus")),
+    (tr!("⌥ oder ⌃ beim Verschieben"), tr!("Kopie erstellen")),
+    (tr!("⌘⇧ + Pfeiltasten"), tr!("Auswahl um den festen Abstand verschieben")),
+    (tr!("Pfeiltasten"), tr!("Auswahl oder Knoten verschieben (⇧: zehnfach)")),
+    (tr!("↑ ↓ in Maßfeldern"), tr!("Zwischen den Feldern wechseln")),
+    (tr!("Formel und „=“"), tr!("Wert ausrechnen")),
 ];
 
 impl Shortcut {
@@ -130,10 +130,10 @@ impl Shortcut {
         let mut s = String::new();
         if !mac {
             if self.command {
-                s.push_str("Strg+");
+                s.push_str(&t!("Strg+"));
             }
             if self.shift {
-                s.push_str("Umschalt+");
+                s.push_str(&t!("Umschalt+"));
             }
         } else {
             if self.shift {
@@ -143,15 +143,15 @@ impl Shortcut {
                 s.push('⌘');
             }
         }
-        s.push_str(match self.key {
-            Key::Escape => "Esc",
-            Key::Enter => "↩",
-            Key::Tab => "⇥",
-            Key::Space => "Leertaste",
-            Key::Delete => "Entf",
-            Key::Backspace => "⌫",
-            Key::Slash => "/",
-            k => k.name(),
+        s.push_str(&match self.key {
+            Key::Escape => t!("Esc"),
+            Key::Enter => "↩".to_string(),
+            Key::Tab => "⇥".to_string(),
+            Key::Space => t!("Leertaste"),
+            Key::Delete => t!("Entf"),
+            Key::Backspace => "⌫".to_string(),
+            Key::Slash => "/".to_string(),
+            k => k.name().to_string(),
         });
         s
     }
@@ -181,7 +181,7 @@ pub(super) fn keys_for(action: Action) -> String {
 
 /// The "Tastenkürzel" window: every key in the table, then what keys do with the mouse.
 pub(super) fn window(ctx: &egui::Context, open: &mut bool) {
-    egui::Window::new("Tastenkürzel").open(open).collapsible(false).resizable(false).default_width(420.0).show(ctx, |ui| {
+    egui::Window::new(t!("Tastenkürzel")).id(egui::Id::new("Tastenkürzel")).open(open).collapsible(false).resizable(false).default_width(420.0).show(ctx, |ui| {
         egui::Grid::new("shortcut-keys").num_columns(2).spacing([18.0, 4.0]).striped(true).show(ui, |ui| {
             let mut seen = vec![];
             for s in SHORTCUTS {
@@ -191,16 +191,16 @@ pub(super) fn window(ctx: &egui::Context, open: &mut bool) {
                 seen.push(s.action);
                 let keys: Vec<String> = SHORTCUTS.iter().filter(|o| o.action == s.action).map(Shortcut::keys).collect();
                 ui.label(egui::RichText::new(keys.join("  ")).monospace().strong());
-                ui.label(s.what).on_hover_text(s.source);
+                ui.label(s.what.get()).on_hover_text(s.source.get());
                 ui.end_row();
             }
         });
         ui.add_space(8.0);
-        ui.label(egui::RichText::new("Mit der Maus").strong());
+        ui.label(egui::RichText::new(t!("Mit der Maus")).strong());
         egui::Grid::new("shortcut-mouse").num_columns(2).spacing([18.0, 4.0]).show(ui, |ui| {
             for (keys, what) in WITH_MOUSE {
-                ui.label(egui::RichText::new(*keys).monospace());
-                ui.label(*what);
+                ui.label(egui::RichText::new(keys.get()).monospace());
+                ui.label(what.get());
                 ui.end_row();
             }
         });
@@ -222,6 +222,7 @@ mod tests {
 
     #[test]
     fn written_like_a_mac_menu() {
+        rust_i18n::set_locale("de");
         let find = |a: Action| SHORTCUTS.iter().find(|s| s.action == a).unwrap();
         assert_eq!(find(Action::Redo).keys_as(true), "⇧⌘Z");
         assert_eq!(find(Action::Redo).keys_as(false), "Strg+Umschalt+Z");

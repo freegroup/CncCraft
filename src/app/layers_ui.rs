@@ -61,9 +61,9 @@ impl App {
         let active = self.layers.active;
         let mut name = self.layers.name(active).to_string();
         if !self.layers.is_visible(active) {
-            name.push_str("  (ausgeblendet)");
+            name.push_str(&t!("  (ausgeblendet)"));
         } else if self.layers.is_locked(active) {
-            name.push_str("  (gesperrt)");
+            name.push_str(&t!("  (gesperrt)"));
         }
         let p = ui.painter();
         if resp.hovered() || self.layer_open {
@@ -74,7 +74,7 @@ impl App {
         // the chevron
         let c = rect.right_center() - Vec2::new(16.0, 0.0);
         p.add(egui::Shape::line(vec![c + Vec2::new(-4.5, -2.0), c + Vec2::new(0.0, 2.5), c + Vec2::new(4.5, -2.0)], Stroke::new(1.6_f32, ink())));
-        if resp.on_hover_text("Ebenen").clicked() {
+        if resp.on_hover_text(t!("Ebenen")).clicked() {
             self.layer_open = !self.layer_open;
         }
         if self.layer_open {
@@ -103,21 +103,21 @@ impl App {
                 ui.horizontal(|ui| {
                     egui::Frame::none().fill(crate::theme::hover()).rounding(6.0).inner_margin(egui::Margin::symmetric(2.0, 0.0)).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
-                        if ui.add(egui::Button::new(egui::RichText::new("+").strong().size(15.0)).frame(false).min_size(Vec2::new(26.0, 22.0))).on_hover_text("Neue Ebene").clicked() {
-                            self.layer_dialog = Some(LayerDialog::New { text: self.layers.free_name("Ebene", None), fresh: true });
+                        if ui.add(egui::Button::new(egui::RichText::new("+").strong().size(15.0)).frame(false).min_size(Vec2::new(26.0, 22.0))).on_hover_text(t!("Neue Ebene")).clicked() {
+                            self.layer_dialog = Some(LayerDialog::New { text: self.layers.free_name(&t!("Ebene"), None), fresh: true });
                             close = true;
                         }
                         let (sep, _) = ui.allocate_exact_size(Vec2::new(1.0, 14.0), Sense::hover());
                         ui.painter().rect_filled(sep, 0.0, crate::theme::outline());
                         let can_delete = self.layers.can_delete(self.layers.active);
                         // the original refuses the same way: "Cannot delete last layer" (0x100bc44b0)
-                        if ui.add_enabled(can_delete, egui::Button::new(egui::RichText::new("−").strong().size(15.0)).frame(false).min_size(Vec2::new(26.0, 22.0))).on_hover_text("Aktive Ebene löschen").on_disabled_hover_text("Die letzte Ebene kann nicht gelöscht werden").clicked() {
+                        if ui.add_enabled(can_delete, egui::Button::new(egui::RichText::new("−").strong().size(15.0)).frame(false).min_size(Vec2::new(26.0, 22.0))).on_hover_text(t!("Aktive Ebene löschen")).on_disabled_hover_text(t!("Die letzte Ebene kann nicht gelöscht werden")).clicked() {
                             self.layer_dialog = Some(LayerDialog::Delete { id: self.layers.active });
                             close = true;
                         }
                     });
                     let can_move = !self.edit.selection.is_empty();
-                    if ui.add_enabled(can_move, egui::Button::new("Auswahl hierher").small()).on_hover_text("Die gewählten Formen auf die aktive Ebene verschieben").on_disabled_hover_text("Erst Formen auswählen").clicked() {
+                    if ui.add_enabled(can_move, egui::Button::new(t!("Auswahl hierher")).small()).on_hover_text(t!("Die gewählten Formen auf die aktive Ebene verschieben")).on_disabled_hover_text(t!("Erst Formen auswählen")).clicked() {
                         self.move_selection_to_active_layer();
                     }
                 });
@@ -156,16 +156,16 @@ impl App {
         p.text(Pos2::new(row.left() + 100.0, row.center().y), Align2::LEFT_CENTER, name, FontId::proportional(14.0), text_tone);
         p.circle_filled(dot_rect.center(), 7.5, layer_colour);
         p.circle_stroke(dot_rect.center(), 7.5, Stroke::new(1.0_f32, if active { Color32::WHITE } else { crate::theme::outline() }));
-        if eye.on_hover_text(if visible { "Sichtbar (klicken zum Ausblenden: Formen werden dann nicht gezeigt, nicht gefräst und nicht exportiert)" } else { "Ausgeblendet (klicken zum Einblenden)" }).clicked() {
+        if eye.on_hover_text(if visible { t!("Sichtbar (klicken zum Ausblenden: Formen werden dann nicht gezeigt, nicht gefräst und nicht exportiert)") } else { t!("Ausgeblendet (klicken zum Einblenden)") }).clicked() {
             self.layers.set_visible(id, !visible);
-        } else if lock.on_hover_text(if locked { "Gesperrt (klicken zum Entsperren)" } else { "Entsperrt (klicken zum Sperren: bleibt sichtbar, aber nichts darauf lässt sich anklicken oder ändern)" }).clicked() {
+        } else if lock.on_hover_text(if locked { t!("Gesperrt (klicken zum Entsperren)") } else { t!("Entsperrt (klicken zum Sperren: bleibt sichtbar, aber nichts darauf lässt sich anklicken oder ändern)") }).clicked() {
             self.layers.set_locked(id, !locked);
-        } else if dot.on_hover_text("Ebenenfarbe wechseln").clicked() {
+        } else if dot.on_hover_text(t!("Ebenenfarbe wechseln")).clicked() {
             self.layers.cycle_colour(id);
         } else if resp.double_clicked() {
             self.layer_dialog = Some(LayerDialog::Rename { id, text: name.to_string(), fresh: true });
             self.layer_open = false;
-        } else if resp.on_hover_text("Auf dieser Ebene zeichnen (Doppelklick: umbenennen)").clicked() {
+        } else if resp.on_hover_text(t!("Auf dieser Ebene zeichnen (Doppelklick: umbenennen)")).clicked() {
             self.layers.activate(id);
         }
     }
@@ -200,7 +200,7 @@ impl App {
         let mut next = None;
         match dialog {
             LayerDialog::New { mut text, fresh } => {
-                let (ok, cancel) = name_window(ctx, "Neue Ebene", &mut text, fresh);
+                let (ok, cancel) = name_window(ctx, &t!("Neue Ebene"), &mut text, fresh);
                 if ok {
                     let id = self.layers.add(&text);
                     self.status = format!("Ebene „{}“ angelegt", self.layers.name(id));
@@ -213,7 +213,7 @@ impl App {
                 }
             }
             LayerDialog::Rename { id, mut text, fresh } => {
-                let (ok, cancel) = name_window(ctx, "Ebene umbenennen", &mut text, fresh);
+                let (ok, cancel) = name_window(ctx, &t!("Ebene umbenennen"), &mut text, fresh);
                 if ok {
                     self.layers.rename(id, &text);
                     keep = false;
@@ -228,17 +228,17 @@ impl App {
                 let count = self.layers.count_on(id, &self.shapes);
                 let name = self.layers.name(id).to_string();
                 let mut choice = None;
-                egui::Window::new("Ebene löschen").collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-                    ui.label(format!("Ebene „{name}“ enthält {count} Form(en)."));
+                egui::Window::new(t!("Ebene löschen")).id(egui::Id::new("Ebene löschen")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+                    ui.label(t!("Ebene „%{name}“ enthält %{count} Form(en).", name = name, count = count));
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Formen auf andere Ebene verschieben").clicked() {
+                        if ui.button(t!("Formen auf andere Ebene verschieben")).clicked() {
                             choice = Some(Some(Leftovers::MoveAway));
                         }
-                        if ui.button("Formen mit löschen").clicked() {
+                        if ui.button(t!("Formen mit löschen")).clicked() {
                             choice = Some(Some(Leftovers::Delete));
                         }
-                        if ui.button("Abbrechen").clicked() {
+                        if ui.button(t!("Abbrechen")).clicked() {
                             choice = Some(None);
                         }
                     });
@@ -257,7 +257,7 @@ impl App {
 /// A window with one name field; returns (confirmed, cancelled).
 fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool) -> (bool, bool) {
     let (mut ok, mut cancel) = (false, false);
-    egui::Window::new(title).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+    egui::Window::new(title).id(egui::Id::new("name_window")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
         let resp = ui.add(egui::TextEdit::singleline(text).id(egui::Id::new("layer_name")).desired_width(240.0));
         if fresh {
             resp.request_focus();
@@ -272,8 +272,8 @@ fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool)
         }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            ok |= ui.button("OK").clicked();
-            cancel |= ui.button("Abbrechen").clicked();
+            ok |= ui.button(t!("OK")).clicked();
+            cancel |= ui.button(t!("Abbrechen")).clicked();
         });
     });
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

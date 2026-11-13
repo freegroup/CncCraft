@@ -49,13 +49,13 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
     let f = |v: f64| format!("{:.3}", v * k);
     let mut sections = Vec::with_capacity(paths.len());
     let mut s = String::new();
-    s.push_str(&format!("( CncCraft – {} Werkzeugweg(e) )\n", paths.len()));
-    s.push_str(&format!(
-        "( Material: {:.1} x {:.1} x {:.1} mm, Z-Null: {} )\n",
-        job.width,
-        job.height,
-        job.thickness,
-        if dz == 0.0 { "Materialoberfläche" } else { "Maschinentisch" }
+    s.push_str(&t!("( CncCraft – %{n} Werkzeugweg(e) )\n", n = paths.len()));
+    s.push_str(&t!(
+        "( Material: %{w} x %{h} x %{d} mm, Z-Null: %{zero} )\n",
+        w = format!("{:.1}", job.width),
+        h = format!("{:.1}", job.height),
+        d = format!("{:.1}", job.thickness),
+        zero = if dz == 0.0 { t!("Materialoberfläche") } else { t!("Maschinentisch") }
     ));
     s.push_str(if job.inches { "G20\n" } else { "G21\n" });
     s.push_str("G90 G17 G40 G49 G80 G94\n");
@@ -64,7 +64,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         let ctx = HookCtx { tool_number: first.tool.number, rpm: first.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_start, &ctx);
         if !block.is_empty() {
-            s.push_str("( -- Job Start -- )\n");
+            s.push_str(&t!("( -- Job Start -- )\n"));
             s.push_str(&block);
         }
     }
@@ -76,7 +76,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         if !first && pp.tool_change {
             let block = expand(&pp.on_tool_change, &ctx);
             if !block.is_empty() {
-                s.push_str("( -- Werkzeugwechsel -- )\n");
+                s.push_str(&t!("( -- Werkzeugwechsel -- )\n"));
                 s.push_str(&block);
             } else {
                 s.push_str("M5\n");
@@ -132,7 +132,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         let ctx = HookCtx { tool_number: last.tool.number, rpm: last.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_end, &ctx);
         if !block.is_empty() {
-            s.push_str("( -- Job Ende -- )\n");
+            s.push_str(&t!("( -- Job Ende -- )\n"));
             s.push_str(&block);
         }
     }

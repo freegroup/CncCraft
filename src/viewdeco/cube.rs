@@ -14,13 +14,13 @@ const CUBE: f32 = 23.0;
 const BOX: f32 = 100.0;
 /// Where each side of the cube looks from: (name, outward normal, turn, tilt). The view is
 /// turned about the vertical (yaw) and tilted from straight above (pitch 0) to the horizon.
-const SIDES: [(&str, [f32; 3], f32, f32); 6] = [
-    ("OBEN", [0.0, 0.0, 1.0], 0.0, 0.0),
-    ("VORNE", [0.0, -1.0, 0.0], 0.0, FRAC_PI_2),
-    ("LINKS", [-1.0, 0.0, 0.0], FRAC_PI_2, FRAC_PI_2),
-    ("RECHTS", [1.0, 0.0, 0.0], -FRAC_PI_2, FRAC_PI_2),
-    ("HINTEN", [0.0, 1.0, 0.0], PI, FRAC_PI_2),
-    ("UNTEN", [0.0, 0.0, -1.0], 0.0, PI),
+const SIDES: [(crate::lang::Tr, [f32; 3], f32, f32); 6] = [
+    (tr!("OBEN"), [0.0, 0.0, 1.0], 0.0, 0.0),
+    (tr!("VORNE"), [0.0, -1.0, 0.0], 0.0, FRAC_PI_2),
+    (tr!("LINKS"), [-1.0, 0.0, 0.0], FRAC_PI_2, FRAC_PI_2),
+    (tr!("RECHTS"), [1.0, 0.0, 0.0], -FRAC_PI_2, FRAC_PI_2),
+    (tr!("HINTEN"), [0.0, 1.0, 0.0], PI, FRAC_PI_2),
+    (tr!("UNTEN"), [0.0, 0.0, -1.0], 0.0, PI),
 ];
 
 /// The view cube: a decoration of the 3D view.
@@ -70,7 +70,7 @@ impl ViewCube {
 
         // the sides facing the viewer, nearest last
         struct Face {
-            name: &'static str,
+            name: String,
             poly: Vec<Pos2>,
             facing: f32,
             shade: f32,
@@ -92,7 +92,7 @@ impl ViewCube {
             let poly: Vec<Pos2> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].iter().map(|(a, b)| middle + Self::cube_point(&view.cam, corner(*a, *b)).0).collect();
             // light from above and the left: the top is brightest, the sides a little darker
             let shade = 0.78 + 0.2 * (-facing).min(1.0) + if index == 0 { 0.06 } else { 0.0 };
-            faces.push(Face { name, poly, facing, shade, index });
+            faces.push(Face { name: name.get(), poly, facing, shade, index });
         }
         faces.sort_by(|a, b| b.facing.total_cmp(&a.facing));
 
@@ -112,7 +112,7 @@ impl ViewCube {
             // the name, when the side faces the viewer well enough to read it
             if -f.facing > 0.5 {
                 let c = f.poly.iter().fold(Vec2::ZERO, |s, p| s + p.to_vec2()) / 4.0;
-                painter.text(c.to_pos2(), Align2::CENTER_CENTER, f.name, FontId::proportional(5.5 + 4.0 * (-f.facing)), INK);
+                painter.text(c.to_pos2(), Align2::CENTER_CENTER, &f.name, FontId::proportional(5.5 + 4.0 * (-f.facing)), INK);
             }
         }
 
@@ -130,7 +130,7 @@ impl ViewCube {
                 let (_, _, yaw, pitch) = SIDES[i];
                 view.cam.yaw = yaw;
                 view.cam.pitch = pitch;
-                message = Some(format!("Ansicht: {}", SIDES[i].0.to_lowercase()));
+                message = Some(t!("Ansicht: %{side}", side = SIDES[i].0.get().to_lowercase()));
             }
         }
         if resp.hovered() || resp.dragged() {
@@ -139,7 +139,7 @@ impl ViewCube {
 
         // the house: back to the starting view (the perspective choice stays)
         let home = Rect::from_center_size(boxr.left_top() + Vec2::new(4.0, 2.0), Vec2::splat(26.0));
-        let home_resp = ui.interact(home, Id::new("view_cube_home"), Sense::click()).on_hover_text("Ausgangsansicht");
+        let home_resp = ui.interact(home, Id::new("view_cube_home"), Sense::click()).on_hover_text(t!("Ausgangsansicht"));
         let tone = if home_resp.hovered() { INK } else { MUTED };
         let c = home.center();
         let stroke = Stroke::new(1.5_f32, tone);
@@ -152,7 +152,7 @@ impl ViewCube {
 
         // the arrow: orthographic or perspective
         let arrow = Rect::from_center_size(boxr.right_bottom() + Vec2::new(2.0, 4.0), Vec2::splat(26.0));
-        let arrow_resp = ui.interact(arrow, Id::new("view_cube_menu"), Sense::click()).on_hover_text("Orthogonal oder perspektivisch");
+        let arrow_resp = ui.interact(arrow, Id::new("view_cube_menu"), Sense::click()).on_hover_text(t!("Orthogonal oder perspektivisch"));
         let tone = if arrow_resp.hovered() { INK } else { MUTED };
         let c = arrow.center();
         painter.add(egui::Shape::line(vec![c + Vec2::new(-8.0, -3.0), c + Vec2::new(8.0, -3.0)], Stroke::new(1.5_f32, tone)));
@@ -163,8 +163,8 @@ impl ViewCube {
         }
         egui::popup_below_widget(ui, popup, &arrow_resp, egui::PopupCloseBehavior::CloseOnClick, |ui| {
             ui.set_min_width(170.0);
-            ui.selectable_value(&mut view.cam.perspective, false, "Orthogonal");
-            ui.selectable_value(&mut view.cam.perspective, true, "Perspektivisch");
+            ui.selectable_value(&mut view.cam.perspective, false, t!("Orthogonal"));
+            ui.selectable_value(&mut view.cam.perspective, true, t!("Perspektivisch"));
         });
         message
     }

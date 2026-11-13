@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 fn file_dialog() -> rfd::FileDialog {
     let mut dialog = rfd::FileDialog::new();
     for format in import::FORMATS {
-        dialog = dialog.add_filter(format.description, format.extensions);
+        dialog = dialog.add_filter(t!(format.description), format.extensions);
     }
     dialog
 }
@@ -174,19 +174,19 @@ impl App {
         let Some(file) = self.import_missing.clone() else { return };
         let name = Path::new(&file).file_name().map_or_else(|| file.clone(), |n| n.to_string_lossy().into_owned());
         let (mut search, mut close) = (false, false);
-        egui::Window::new("Datei nicht gefunden").collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+        egui::Window::new(t!("Datei nicht gefunden")).id(egui::Id::new("Datei nicht gefunden")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
             ui.set_width(380.0);
-            ui.label(egui::RichText::new(format!("Die Originaldatei „{name}“ wurde leider nicht gefunden.")).strong().color(ink()));
+            ui.label(egui::RichText::new(t!("Die Originaldatei „%{name}“ wurde leider nicht gefunden.", name = name)).strong().color(ink()));
             ui.add_space(4.0);
-            ui.label("Sie wurde vielleicht verschoben, umbenannt oder gelöscht. Die importierten Formen bleiben unverändert in der Zeichnung.");
+            ui.label(t!("Sie wurde vielleicht verschoben, umbenannt oder gelöscht. Die importierten Formen bleiben unverändert in der Zeichnung."));
             ui.add_space(4.0);
             ui.label(egui::RichText::new(&file).small().color(muted()));
             ui.add_space(8.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Schließen").clicked() {
+                if ui.button(t!("Schließen")).clicked() {
                     close = true;
                 }
-                if ui.button("Datei suchen…").clicked() {
+                if ui.button(t!("Datei suchen…")).clicked() {
                     search = true;
                 }
             });

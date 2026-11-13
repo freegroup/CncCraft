@@ -16,8 +16,8 @@ fn rot(p: Pt, s: f64, c: f64) -> Pt {
 }
 
 impl ToolpathKind for PocketTool {
-    fn label(&self) -> &'static str {
-        "Tasche"
+    fn label(&self) -> String {
+        t!("Tasche")
     }
 
     fn cut(&self, out: &mut Out, cx: &CutContext) -> Option<String> {
@@ -27,7 +27,7 @@ impl ToolpathKind for PocketTool {
         let inset = region.offset(-r);
         let step = cx.tool.stepover.max(0.05);
         if inset.is_empty() && !cx.contours.is_empty() {
-            warning = Some("Werkzeug zu groß für diese Tasche".into());
+            warning = Some(t!("Werkzeug zu groß für diese Tasche").into());
         }
         for &z in &cx.depths() {
             if self.raster {

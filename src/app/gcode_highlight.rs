@@ -273,7 +273,7 @@ pub fn gcode_tooltips(
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(&upper).strong().monospace());
                     ui.label("–");
-                    ui.label(desc);
+                    ui.label(t!(desc));
                 });
             });
         }

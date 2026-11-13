@@ -8,7 +8,7 @@ use super::input::{ConstraintInput, Keys};
 use super::{App, DrawTool};
 use crate::theme::{CONSTRAINT, INK, MUTED, SELECT};
 use egui::{Align2, Color32, FontId, Id, Pos2, Rect, Stroke, Vec2};
-use shape_edit::{calc, selection_bounds, vars, Dim, DimLine, Shape};
+use shape_edit::{calc, selection_bounds, vars, Constrains, ConstraintView, Dim, DimLine, Shape, SizeConstraint};
 
 /// How far a dimension line sits outside the shape, and its field beyond that (screen px).
 const LINE_GAP: f32 = 16.0;
@@ -38,13 +38,13 @@ pub(super) struct DimEdit {
     menu_open: bool,
 }
 
-fn label(d: Dim) -> &'static str {
+fn label(d: Dim) -> String {
     match d {
-        Dim::Width => "Breite",
-        Dim::Height => "Höhe",
-        Dim::Diameter => "Durchmesser",
-        Dim::Radius => "Radius",
-        Dim::TextHeight => "Schrifthöhe",
+        Dim::Width => t!("Breite"),
+        Dim::Height => t!("Höhe"),
+        Dim::Diameter => t!("Durchmesser"),
+        Dim::Radius => t!("Radius"),
+        Dim::TextHeight => t!("Schrifthöhe"),
     }
 }
 
@@ -99,7 +99,7 @@ fn insert_name(text: &str, name: &str) -> String {
 pub(super) fn value_label(painter: &egui::Painter, at: Pos2, text: String, tone: Color32) -> Rect {
     let galley = painter.layout_no_wrap(text, FontId::monospace(12.0), tone);
     let r = egui::Rect::from_center_size(at, galley.size() + Vec2::new(10.0, 4.0));
-    painter.rect(r, 4.0, crate::theme::surface(), Stroke::new(1.0_f32, if tone == INK { crate::theme::outline() } else { tone }));
+    painter.rect(r, 4.0, crate::theme::SHEET_LABEL, Stroke::new(1.0_f32, if tone == INK { crate::theme::SHEET_LABEL_EDGE } else { tone }));
     painter.galley(r.center() - galley.size() / 2.0, galley, tone);
     r
 }
@@ -173,8 +173,8 @@ impl App {
     /// blue with their formula, since they are constraints.
     pub(super) fn draw_dimensions(&mut self, painter: &egui::Painter) {
         self.dim_labels.clear();
-        // with "Maße anzeigen" off, the constraints (sizes that were set) of the chosen shapes still
-        // show with their dimension; the free sizes only show when the switch is on
+        // the constraints (sizes that were set) decide by themselves how much shows (see
+        // `Constrains::view`); the free sizes only show for a chosen shape with the switch on
         let all = self.show_dims;
         if !all && self.edit.selection.is_empty() {
             return;
@@ -182,6 +182,7 @@ impl App {
         let mut labels = Vec::new();
         for it in &self.shapes {
             let selected = self.edit.selection.contains(&it.id);
+            let view = SizeConstraint { shape: it.id }.view(all, &self.edit.selection);
             // the open size fields draw this shape's lines themselves
             if (!selected && it.bound.is_empty()) || (!all && !selected) || self.dims.as_ref().is_some_and(|d| d.id == it.id) {
                 continue;
@@ -197,6 +198,11 @@ impl App {
                 }
                 let value = format!("{} {}", fmt(it.shape.dimension_value(&line)), line.dim.unit());
                 match bound {
+                    Some(_) if view == ConstraintView::Slim => {
+                        // the faint view: just the line, no value
+                        self.draw_dim_line(painter, &line, CONSTRAINT.gamma_multiply(0.5));
+                    }
+                    Some(_) if view == ConstraintView::Hidden => {}
                     Some(expr) => {
                         // a chosen constraint is drawn in the selection colour
                         let chosen = matches!(self.selected_constraint, Some(super::distance::LabelTarget::ShapeDim(id, dim)) if id == it.id && dim == line.dim);
@@ -291,9 +297,9 @@ impl App {
     /// broken formula, or a size that must be above zero.
     fn field_value(&self, _dim: Dim, text: &str) -> Result<f64, String> {
         let text = text.trim().trim_end_matches('=');
-        let v = calc::eval(text, &self.vars_resolved).map_err(|e| e.message())?;
+        let v = calc::eval(text, &self.vars_resolved).map_err(|e| crate::lang::calc_message(&e))?;
         if v <= 0.0 {
-            return Err("muss größer als 0 sein".into());
+            return Err(t!("muss größer als 0 sein").into());
         }
         Ok(v)
     }
@@ -407,7 +413,7 @@ impl App {
             if resp
                 .context_menu(|ui| {
                     if names.is_empty() {
-                        ui.add_enabled(false, egui::Button::new("Keine Variablen"));
+                        ui.add_enabled(false, egui::Button::new(t!("Keine Variablen")));
                     }
                     for n in &names {
                         if ui.button(n).clicked() {
@@ -418,7 +424,7 @@ impl App {
                         }
                     }
                     ui.separator();
-                    if ui.button("Neue Variable einfügen…").clicked() {
+                    if ui.button(t!("Neue Variable einfügen…")).clicked() {
                         open_variables = true;
                         ui.close_menu();
                     }

@@ -6,8 +6,8 @@ use super::{CutContext, Out, ToolpathKind, RETRACT_GAP};
 pub struct DrillTool;
 
 impl ToolpathKind for DrillTool {
-    fn label(&self) -> &'static str {
-        "Bohren"
+    fn label(&self) -> String {
+        t!("Bohren")
     }
 
     fn cut(&self, out: &mut Out, cx: &CutContext) -> Option<String> {

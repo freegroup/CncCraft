@@ -12,6 +12,10 @@ pub const ACCENT_DEEP: Color32 = Color32::from_rgb(0xf8, 0xb0, 0x02);
 pub const INK: Color32 = Color32::from_rgb(0x1f, 0x29, 0x37);
 pub const MUTED: Color32 = Color32::from_rgb(0x6b, 0x72, 0x80);
 pub const SELECT: Color32 = Color32::from_rgb(0xe0, 0x20, 0xa0);
+/// The sheet is white in both themes, so what is written on it (the values of the dimensions and
+/// the constraint symbols) sits on white with a light grey edge whichever theme is on.
+pub const SHEET_LABEL: Color32 = Color32::WHITE;
+pub const SHEET_LABEL_EDGE: Color32 = Color32::from_rgb(0xb4, 0xb8, 0xc0);
 /// Sizes tied to a variable or formula (constraints): sides, handles and dimension lines.
 pub const CONSTRAINT: Color32 = Color32::from_rgb(0x1e, 0x6f, 0xd9);
 pub const PRIMARY: Color32 = Color32::from_rgb(0x2a, 0x6c, 0xf0);

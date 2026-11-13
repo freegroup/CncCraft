@@ -25,6 +25,58 @@ pub fn plate_item(width: f64, height: f64) -> Item {
     Item::new(PLATE, crate::Rect::new([width / 2.0, height / 2.0], width, height))
 }
 
+/// How much of a constraint is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConstraintView {
+    /// Nothing.
+    Hidden,
+    /// Only the line, faint, without the value.
+    Slim,
+    /// The whole constraint with its value.
+    Full,
+}
+
+/// What every kind of constraint tells: the shapes it hangs on. From that, and from whether the
+/// switch for showing all constraints is on, the constraint decides by itself how much of it is
+/// drawn: on a selected shape always everything; on the others nothing with the switch off and
+/// the faint line with it on.
+pub trait Constrains {
+    fn shapes(&self) -> Vec<u64>;
+
+    fn view(&self, show_all: bool, selection: &[u64]) -> ConstraintView {
+        if self.shapes().iter().any(|s| selection.contains(s)) {
+            ConstraintView::Full
+        } else if show_all {
+            ConstraintView::Slim
+        } else {
+            ConstraintView::Hidden
+        }
+    }
+}
+
+impl Constrains for Distance {
+    fn shapes(&self) -> Vec<u64> {
+        vec![self.from.shape(), self.to.shape()]
+    }
+}
+
+impl Constrains for Align {
+    fn shapes(&self) -> Vec<u64> {
+        vec![self.a.shape(), self.b.shape()]
+    }
+}
+
+/// A size of one shape that was set to a number or a formula (a dimension tied to a variable).
+pub struct SizeConstraint {
+    pub shape: u64,
+}
+
+impl Constrains for SizeConstraint {
+    fn shapes(&self) -> Vec<u64> {
+        vec![self.shape]
+    }
+}
+
 /// How a point-to-point distance is measured.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Axis {
@@ -822,6 +874,17 @@ mod tests {
 
     fn item(id: u64, cx: f64, cy: f64, w: f64, h: f64) -> Item {
         Item::new(id, Rect::new([cx, cy], w, h))
+    }
+
+    #[test]
+    fn a_constraint_decides_how_much_of_it_shows() {
+        let c = d(Anchor::Point(1, 0), Anchor::Point(2, 0), Axis::Horizontal);
+        assert_eq!(c.view(false, &[]), ConstraintView::Hidden);
+        assert_eq!(c.view(true, &[]), ConstraintView::Slim);
+        assert_eq!(c.view(true, &[3]), ConstraintView::Slim);
+        assert_eq!(c.view(false, &[2]), ConstraintView::Full);
+        assert_eq!(c.view(true, &[1]), ConstraintView::Full);
+        assert_eq!(SizeConstraint { shape: 5 }.view(false, &[5]), ConstraintView::Full);
     }
 
     fn d(from: Anchor, to: Anchor, axis: Axis) -> Distance {

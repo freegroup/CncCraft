@@ -35,7 +35,7 @@ pub struct Layers {
 
 impl Default for Layers {
     fn default() -> Self {
-        Layers { list: vec![Layer { id: 1, name: "Ebene 1".into(), visible: true, locked: false, colour: 0 }], active: 1, next_id: 2 }
+        Layers { list: vec![Layer { id: 1, name: t!("Ebene 1").into(), visible: true, locked: false, colour: 0 }], active: 1, next_id: 2 }
     }
 }
 
@@ -83,7 +83,7 @@ impl Layers {
         }
         // "Ebene 1" taken: continue the numbering ("Ebene 2"), not "Ebene 1 2"
         let stem = wanted.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end();
-        let base = if stem.is_empty() { "Ebene" } else { stem };
+        let base = if stem.is_empty() { t!("Ebene") } else { stem.to_string() };
         (self.list.len() + 1..).map(|k| format!("{base} {k}")).find(|n| !taken(n)).unwrap_or_default()
     }
 
@@ -91,7 +91,7 @@ impl Layers {
     pub fn add(&mut self, name: &str) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
-        let name = self.free_name(if name.trim().is_empty() { "Ebene" } else { name }, None);
+        let name = self.free_name(&if name.trim().is_empty() { t!("Ebene") } else { name.to_string() }, None);
         let colour = self.list.len() % PALETTE.len();
         self.list.push(Layer { id, name, visible: true, locked: false, colour });
         self.active = id;

@@ -105,7 +105,7 @@ fn version_name(code: &str) -> String {
 /// Read a DXF file.
 pub fn read(bytes: &[u8]) -> Result<Import, String> {
     if bytes.starts_with(b"AutoCAD Binary DXF") {
-        return Err("Binäre DXF-Dateien werden nicht gelesen. Bitte als ASCII-DXF (R12 oder R14 und neuer) speichern.".into());
+        return Err(t!("Binäre DXF-Dateien werden nicht gelesen. Bitte als ASCII-DXF (R12 oder R14 und neuer) speichern."));
     }
     let text = String::from_utf8_lossy(bytes);
     let mut recs: Vec<Rec> = Vec::new();
@@ -166,7 +166,7 @@ pub fn read(bytes: &[u8]) -> Result<Import, String> {
         }
     }
     if !saw_entities {
-        return Err("Das ist keine gültige DXF-Datei (kein ENTITIES-Abschnitt gefunden).".into());
+        return Err(t!("Das ist keine gültige DXF-Datei (kein ENTITIES-Abschnitt gefunden)."));
     }
 
     let mut cx = Ctx { blocks: &blocks, skipped: BTreeMap::new() };

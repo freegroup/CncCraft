@@ -51,16 +51,16 @@ pub enum DrawTool {
 }
 
 impl DrawTool {
-    fn tip(&self) -> &'static str {
+    fn tip(&self) -> String {
         match self {
-            DrawTool::Select => "Auswählen und verschieben",
-            DrawTool::NodeEdit => "Knoten bearbeiten (Punkte ziehen, Doppelklick fügt ein, Entf löscht)",
-            DrawTool::Polyline => "Linie / Polylinie zeichnen (Doppelklick oder Enter beendet)",
-            DrawTool::Rect => "Rechteck zeichnen",
-            DrawTool::Circle => "Kreis zeichnen",
-            DrawTool::Ellipse => "Ellipse zeichnen",
-            DrawTool::Polygon => "Polygon zeichnen",
-            DrawTool::Text => "Text einfügen",
+            DrawTool::Select => t!("Auswählen und verschieben"),
+            DrawTool::NodeEdit => t!("Knoten bearbeiten (Punkte ziehen, Doppelklick fügt ein, Entf löscht)"),
+            DrawTool::Polyline => t!("Linie / Polylinie zeichnen (Doppelklick oder Enter beendet)"),
+            DrawTool::Rect => t!("Rechteck zeichnen"),
+            DrawTool::Circle => t!("Kreis zeichnen"),
+            DrawTool::Ellipse => t!("Ellipse zeichnen"),
+            DrawTool::Polygon => t!("Polygon zeichnen"),
+            DrawTool::Text => t!("Text einfügen"),
         }
     }
 }
@@ -426,6 +426,7 @@ pub struct App {
     dark: bool,
     /// What the person chose: follow the system, light or dark (as in the original).
     theme_choice: crate::theme::Choice,
+    lang: crate::lang::Lang,
 }
 
 impl App {
@@ -436,6 +437,17 @@ impl App {
         } else {
             cc.storage.and_then(|s| s.get_string("cnccraft_theme").or_else(|| s.get_string("funke_theme"))).map_or(crate::theme::Choice::System, |v| crate::theme::Choice::from_key(&v))
         };
+        // the review runs read German unless CNCCRAFT_LANG says otherwise; else the remembered
+        // language, else the system's
+        let lang = if shot.is_some() || selftest {
+            std::env::var("CNCCRAFT_LANG").ok().and_then(|c| crate::lang::Lang::from_code(&c)).unwrap_or(crate::lang::Lang::De)
+        } else {
+            cc.storage.and_then(|s| s.get_string("cnccraft_lang")).and_then(|c| crate::lang::Lang::from_code(&c)).unwrap_or_else(crate::lang::Lang::system)
+        };
+        lang.apply();
+        if shot.is_none() && !selftest {
+            crate::quit::install(&cc.egui_ctx);
+        }
         let dark = theme_choice.dark(cc.egui_ctx.system_theme());
         crate::theme::set_dark(dark);
         crate::theme::apply(&cc.egui_ctx);
@@ -555,6 +567,7 @@ impl App {
             shortcuts_open: false,
             dark,
             theme_choice,
+            lang,
             layers: crate::layers::Layers::default(),
             layer_dialog: None,
             layer_open: false,
@@ -718,9 +731,9 @@ impl App {
         let h3 = self.add_shape(Circle::new([245.0, 100.0], 3.0));
         let job = self.job.clone();
         let mut v = default_toolpath("vcarve", &self.lib, &job, vec![text, hexagon]);
-        v.name = "V-Carving Schrift".into();
+        v.name = t!("V-Carving Schrift").into();
         let mut p = default_toolpath("pocket", &self.lib, &job, vec![pocket]);
-        p.name = "Tasche Ellipse".into();
+        p.name = t!("Tasche Ellipse").into();
         let mut d = default_toolpath("drill", &self.lib, &job, vec![h1, h2, h3]);
         d.tool = self.lib.pick(&job.material, ToolKind::Drill, 3.0, None);
         d.cut_depth = 8.0;
@@ -843,37 +856,37 @@ impl App {
     fn unsaved_ui(&mut self, ctx: &egui::Context) {
         let Some(what) = self.unsaved else { return };
         let mut answer: Option<u8> = None;
-        egui::Window::new("Änderungen speichern?")
+        egui::Window::new(t!("Änderungen speichern?")).id(egui::Id::new("Änderungen speichern?"))
             .collapsible(false)
             .resizable(false)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
-                let name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| "Neu".to_string(), |s| s.to_string_lossy().into_owned());
+                let name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
                 // the wording of the original's standard question (wxstd catalogue: "Do you want to save
                 // changes to %s [before closing it]?")
                 let ask = match what {
-                    Pending::Close => format!("Möchten Sie die Änderungen vor dem Schließen nach „{name}“ speichern?"),
-                    _ => format!("Möchten Sie die Änderungen nach „{name}“ speichern?"),
+                    Pending::Close => t!("Möchten Sie die Änderungen vor dem Schließen nach „%{name}“ speichern?", name = name),
+                    _ => t!("Möchten Sie die Änderungen nach „%{name}“ speichern?", name = name),
                 };
                 let then = match what {
-                    Pending::Close => "Wenn Sie nicht speichern, gehen die Änderungen verloren.",
-                    Pending::NewJob => "Ein neuer Job ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren.",
-                    Pending::Open => "Die andere Datei ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren.",
-                    Pending::Example => "Das Beispiel ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren.",
+                    Pending::Close => t!("Wenn Sie nicht speichern, gehen die Änderungen verloren."),
+                    Pending::NewJob => t!("Ein neuer Job ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
+                    Pending::Open => t!("Die andere Datei ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
+                    Pending::Example => t!("Das Beispiel ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
                 };
                 ui.label(egui::RichText::new(ask).strong().color(ink()));
                 ui.label(egui::RichText::new(then).color(muted()));
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new("Speichern").strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                         answer = Some(0);
                     }
-                    if ui.add(egui::Button::new("Nicht speichern").min_size(Vec2::new(120.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(t!("Nicht speichern")).min_size(Vec2::new(120.0, 30.0)).rounding(4.0)).clicked() {
                         answer = Some(1);
                     }
-                    if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
                         answer = Some(2);
                     }
                 });
@@ -906,7 +919,7 @@ impl App {
             return;
         }
         let path = if ask || self.path.is_none() {
-            rfd::FileDialog::new().add_filter("CncCraft-Projekt", &["cnccraft"]).set_file_name("projekt.cnccraft").save_file()
+            rfd::FileDialog::new().add_filter(t!("CncCraft-Projekt"), &["cnccraft"]).set_file_name("projekt.cnccraft").save_file()
         } else {
             self.path.clone()
         };
@@ -928,7 +941,7 @@ impl App {
         if self.selftest.is_some() {
             return;
         }
-        let Some(path) = rfd::FileDialog::new().add_filter("CncCraft-Projekt", &["cnccraft", "funke"]).pick_file() else { return };
+        let Some(path) = rfd::FileDialog::new().add_filter(t!("CncCraft-Projekt"), &["cnccraft", "funke"]).pick_file() else { return };
         self.open_path(path);
     }
 
@@ -1019,7 +1032,7 @@ impl App {
         let paths: Vec<&Toolpath> = indices.iter().map(|&i| &self.toolpaths[i]).collect();
         if per_tool {
             let Some(file) = rfd::FileDialog::new()
-                .add_filter("ZIP-Archiv", &["zip"])
+                .add_filter(t!("ZIP-Archiv"), &["zip"])
                 .set_file_name(format!("{}.zip", self.export_stem()))
                 .save_file()
             else {
@@ -1054,39 +1067,39 @@ impl App {
         let Some(indices) = self.export_ask.clone() else { return };
         let groups = self.tool_groups(&indices);
         let mut choice: Option<Option<bool>> = None;
-        egui::Window::new("Mehrere Werkzeuge")
+        egui::Window::new(t!("Mehrere Werkzeuge")).id(egui::Id::new("Mehrere Werkzeuge"))
             .collapsible(false)
             .resizable(false)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
             .show(ctx, |ui| {
                 ui.set_width(380.0);
-                ui.label(egui::RichText::new(format!("Die Werkzeugwege brauchen {} Werkzeuge nacheinander:", groups.len())).color(ink()));
+                ui.label(egui::RichText::new(t!("Die Werkzeugwege brauchen %{n} Werkzeuge nacheinander:", n = groups.len())).color(ink()));
                 ui.add_space(4.0);
                 for (n, group) in groups.iter().enumerate() {
                     let tool = &self.toolpaths[indices[group[0]]].tool;
-                    let what = if group.len() == 1 { "1 Werkzeugweg".to_string() } else { format!("{} Werkzeugwege", group.len()) };
-                    ui.label(egui::RichText::new(format!("{}.  {} – {what}", n + 1, tool.name)).color(muted()));
+                    let what = if group.len() == 1 { t!("1 Werkzeugweg") } else { t!("%{n} Werkzeugwege", n = group.len()) };
+                    ui.label(egui::RichText::new(format!("{}.  {} – {what}", n + 1, crate::tools::shown_name(&tool.name))).color(muted()));
                 }
                 ui.add_space(8.0);
                 if self.pp().tool_change {
-                    ui.label(egui::RichText::new("Alles in eine Datei oder für jedes Werkzeug eine eigene Datei (zusammen in einer ZIP-Datei)?").color(ink()));
+                    ui.label(egui::RichText::new(t!("Alles in eine Datei oder für jedes Werkzeug eine eigene Datei (zusammen in einer ZIP-Datei)?")).color(ink()));
                 } else {
-                    ui.label(egui::RichText::new("Die sichtbaren Werkzeugwege verwenden unterschiedliche Werkzeuge und die gewählte Ausgabe unterstützt keinen Werkzeugwechsel. Bitte für jedes Werkzeug eine eigene Datei speichern (zusammen in einer ZIP-Datei).").color(ink()));
+                    ui.label(egui::RichText::new(t!("Die sichtbaren Werkzeugwege verwenden unterschiedliche Werkzeuge und die gewählte Ausgabe unterstützt keinen Werkzeugwechsel. Bitte für jedes Werkzeug eine eigene Datei speichern (zusammen in einer ZIP-Datei).")).color(ink()));
                 }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new("Je Werkzeug eine Datei").strong().color(INK)).fill(ACCENT).min_size(Vec2::new(150.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new(t!("Je Werkzeug eine Datei")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(150.0, 30.0)).rounding(4.0)).clicked() {
                         choice = Some(Some(true));
                     }
                     // the original's rule: several tools in one file only with a post-processor that can change tools
                     let one_file = ui
-                        .add_enabled(self.pp().tool_change, egui::Button::new("Alles in eine Datei").min_size(Vec2::new(130.0, 30.0)).rounding(4.0))
-                        .on_disabled_hover_text("Die gewählte Ausgabe (GRBL) unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.");
+                        .add_enabled(self.pp().tool_change, egui::Button::new(t!("Alles in eine Datei")).min_size(Vec2::new(130.0, 30.0)).rounding(4.0))
+                        .on_disabled_hover_text(t!("Die gewählte Ausgabe (GRBL) unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern."));
                     if one_file.clicked() {
                         choice = Some(Some(false));
                     }
-                    if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(80.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(80.0, 30.0)).rounding(4.0)).clicked() {
                         choice = Some(None);
                     }
                 });
@@ -1282,12 +1295,12 @@ impl App {
     fn properties(&mut self, ui: &mut egui::Ui) {
         match self.edit.selection.len() {
             0 => {
-                ui.label(egui::RichText::new("Nichts ausgewählt. Klicke eine Form an oder ziehe einen Rahmen.").color(muted()));
+                ui.label(egui::RichText::new(t!("Nichts ausgewählt. Klicke eine Form an oder ziehe einen Rahmen.")).color(muted()));
                 return;
             }
             1 => {}
             n => {
-                ui.label(format!("{n} Formen ausgewählt"));
+                ui.label(t!("%{n} Formen ausgewählt", n = n));
                 return;
             }
         }
@@ -1324,8 +1337,8 @@ impl App {
         let names = self.var_names();
         let resolved = self.vars_resolved.clone();
         let Some(ed) = &mut self.editor else { return };
-        let title = if ed.index.is_some() { "Werkzeugweg bearbeiten" } else { "Neuer Werkzeugweg" };
-        section(ui, title, |ui| {
+        let title = if ed.index.is_some() { t!("Werkzeugweg bearbeiten") } else { t!("Neuer Werkzeugweg") };
+        section(ui, &title, |ui| {
             let tp = &mut ed.tp;
             let (depth_text, depth_input) = (&mut ed.depth_text, &mut ed.depth_input);
             // a click on a suggestion of last frame's list goes into its field
@@ -1333,10 +1346,10 @@ impl App {
                 depth_text[field] = shape_edit::vars::apply_completion(&depth_text[field], &name);
             }
             egui::Grid::new("tp_form").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                ui.label("Name");
+                ui.label(t!("Name"));
                 ui.add(egui::TextEdit::singleline(&mut tp.name).desired_width(160.0));
                 ui.end_row();
-                ui.label("Werkzeug");
+                ui.label(t!("Werkzeug"));
                 let allowed: Vec<&Tool> = tools
                     .iter()
                     .filter(|t| match tp.strategy {
@@ -1345,10 +1358,10 @@ impl App {
                         _ => t.kind != ToolKind::Drill,
                     })
                     .collect();
-                let tool_label = tp.tool.name.clone();
+                let tool_label = crate::tools::shown_name(&tp.tool.name);
                 if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, |ui| {
                     for t in &allowed {
-                        if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, &t.name).clicked() {
+                        if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, crate::tools::shown_name(&t.name)).clicked() {
                             let n = tp.tool.number;
                             tp.tool = (*t).clone();
                             tp.tool.number = n;
@@ -1363,14 +1376,14 @@ impl App {
                 }
                 // the depths take a number, a formula or variables ("platte_d/2"): a formula is
                 // kept on the toolpath and follows the variables
-                let cut_label = if matches!(tp.strategy, Strategy::VCarve { .. }) { "Max. Tiefe" } else { "Schnitttiefe" };
-                depth_row(ui, "Starttiefe", 0, &mut tp.start_depth, &mut tp.start_expr, thickness, depth_text, depth_input, &names, &resolved);
-                depth_row(ui, cut_label, 1, &mut tp.cut_depth, &mut tp.cut_expr, thickness + 5.0, depth_text, depth_input, &names, &resolved);
-                ui.label("Zustellung");
+                let cut_label = if matches!(tp.strategy, Strategy::VCarve { .. }) { t!("Max. Tiefe") } else { t!("Schnitttiefe") };
+                depth_row(ui, &t!("Starttiefe"), 0, &mut tp.start_depth, &mut tp.start_expr, thickness, depth_text, depth_input, &names, &resolved);
+                depth_row(ui, &cut_label, 1, &mut tp.cut_depth, &mut tp.cut_expr, thickness + 5.0, depth_text, depth_input, &names, &resolved);
+                ui.label(t!("Zustellung"));
                 ui.add(mm(&mut tp.tool.stepdown, 50.0));
                 ui.end_row();
                 if !matches!(tp.strategy, Strategy::Drill) {
-                    ui.label("Querzustellung");
+                    ui.label(t!("Querzustellung"));
                     let pct = if tp.tool.diameter > 0.0 { tp.tool.stepover / tp.tool.diameter * 100.0 } else { 0.0 };
                     ui.horizontal(|ui| {
                         ui.add(mm(&mut tp.tool.stepover, 50.0));
@@ -1378,78 +1391,78 @@ impl App {
                     });
                     ui.end_row();
                 }
-                ui.label("Drehzahl");
-                ui.add(egui::DragValue::new(&mut tp.tool.rpm).speed(100).range(0..=60000).suffix(" U/min"));
+                ui.label(t!("Drehzahl"));
+                ui.add(egui::DragValue::new(&mut tp.tool.rpm).speed(100).range(0..=60000).suffix(t!(" U/min")));
                 ui.end_row();
-                ui.label("Vorschub");
+                ui.label(t!("Vorschub"));
                 ui.add(egui::DragValue::new(&mut tp.tool.feed).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
                 ui.end_row();
-                ui.label("Eintauchen");
+                ui.label(t!("Eintauchen"));
                 ui.add(egui::DragValue::new(&mut tp.tool.plunge).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
                 ui.end_row();
-                ui.label("Werkzeug-Nr.");
+                ui.label(t!("Werkzeug-Nr."));
                 ui.add(egui::DragValue::new(&mut tp.tool.number).range(1..=99));
                 ui.end_row();
             });
             ui.separator();
             match &mut tp.strategy {
                 Strategy::Profile { side, climb, tabs, tab_count } => {
-                    ui.label(egui::RichText::new("Fräsen").strong());
+                    ui.label(egui::RichText::new(t!("Fräsen")).strong());
                     ui.horizontal(|ui| {
-                        ui.radio_value(side, Side::Outside, "Außen");
-                        ui.radio_value(side, Side::Inside, "Innen");
-                        ui.radio_value(side, Side::On, "Auf der Linie");
+                        ui.radio_value(side, Side::Outside, t!("Außen"));
+                        ui.radio_value(side, Side::Inside, t!("Innen"));
+                        ui.radio_value(side, Side::On, t!("Auf der Linie"));
                     });
                     ui.horizontal(|ui| {
-                        ui.radio_value(climb, true, "Gleichlauf");
-                        ui.radio_value(climb, false, "Gegenlauf");
+                        ui.radio_value(climb, true, t!("Gleichlauf"));
+                        ui.radio_value(climb, false, t!("Gegenlauf"));
                     });
                     ui.horizontal(|ui| {
-                        ui.checkbox(tabs, "Haltestege");
-                        ui.add_enabled(*tabs, egui::DragValue::new(tab_count).range(1..=12).suffix(" Stück"));
+                        ui.checkbox(tabs, t!("Haltestege"));
+                        ui.add_enabled(*tabs, egui::DragValue::new(tab_count).range(1..=12).suffix(t!(" Stück")));
                     });
                 }
                 Strategy::Pocket { raster, climb, raster_angle } => {
-                    ui.label(egui::RichText::new("Ausräumstrategie").strong());
+                    ui.label(egui::RichText::new(t!("Ausräumstrategie")).strong());
                     ui.horizontal(|ui| {
-                        ui.radio_value(raster, false, "Versatz");
-                        ui.radio_value(raster, true, "Raster");
+                        ui.radio_value(raster, false, t!("Versatz"));
+                        ui.radio_value(raster, true, t!("Raster"));
                     });
                     if *raster {
                         ui.horizontal(|ui| {
-                            ui.label("Rasterwinkel");
+                            ui.label(t!("Rasterwinkel"));
                             ui.add(egui::DragValue::new(raster_angle).speed(1.0).range(0.0..=180.0).suffix(" °"));
                         });
                     }
                     ui.horizontal(|ui| {
-                        ui.radio_value(climb, true, "Gleichlauf");
-                        ui.radio_value(climb, false, "Gegenlauf");
+                        ui.radio_value(climb, true, t!("Gleichlauf"));
+                        ui.radio_value(climb, false, t!("Gegenlauf"));
                     });
                 }
                 Strategy::Drill => {
-                    ui.label(egui::RichText::new("Bohrt in der Mitte jeder gewählten Kontur, Zustellung = Peck-Tiefe.").small().color(muted()));
+                    ui.label(egui::RichText::new(t!("Bohrt in der Mitte jeder gewählten Kontur, Zustellung = Peck-Tiefe.")).small().color(muted()));
                 }
                 Strategy::VCarve { max_depth } => {
                     ui.horizontal(|ui| {
-                        ui.label("Tiefenbegrenzung");
+                        ui.label(t!("Tiefenbegrenzung"));
                         ui.add(egui::DragValue::new(max_depth).speed(0.1).range(0.0..=100.0).suffix(" mm"));
                     });
-                    ui.label(egui::RichText::new("0 = nur durch den Fräserdurchmesser begrenzt").small().color(muted()));
+                    ui.label(egui::RichText::new(t!("0 = nur durch den Fräserdurchmesser begrenzt")).small().color(muted()));
                 }
             }
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label(format!("Vektoren: {}", tp.shape_ids.len()));
-                if ui.button(format!("Auswahl übernehmen ({sel_count})")).clicked() {
+                ui.label(t!("Vektoren: %{n}", n = tp.shape_ids.len()));
+                if ui.button(t!("Auswahl übernehmen (%{n})", n = sel_count)).clicked() {
                     apply = true;
                 }
             });
             ui.horizontal(|ui| {
-                let b = egui::Button::new(egui::RichText::new("Berechnen").color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
+                let b = egui::Button::new(egui::RichText::new(t!("Berechnen")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
                 if ui.add(b).clicked() {
                     close = true;
                 }
-                if ui.add(egui::Button::new("Schließen").min_size(Vec2::new(90.0, 28.0))).clicked() {
+                if ui.add(egui::Button::new(t!("Schließen")).min_size(Vec2::new(90.0, 28.0))).clicked() {
                     ed.index = None;
                     ed.tp.shape_ids.clear();
                     ed.tp.name.clear();
@@ -1554,17 +1567,17 @@ impl App {
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect.shrink(40.0)), |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(30.0);
-                ui.label(egui::RichText::new("Willkommen bei CncCraft").size(28.0).strong().color(ink()));
-                ui.label(egui::RichText::new("Das komplette Werkzeugset für CNC-Einsteiger").color(muted()));
+                ui.label(egui::RichText::new(t!("Willkommen bei CncCraft")).size(28.0).strong().color(ink()));
+                ui.label(egui::RichText::new(t!("Das komplette Werkzeugset für CNC-Einsteiger")).color(muted()));
                 ui.add_space(30.0);
             });
             ui.horizontal(|ui| {
                 let total = 3.0 * 220.0 + 2.0 * 20.0;
                 ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
                 for (title, sub, which) in [
-                    ("Neue Datei erstellen", "Materialgröße und Dicke festlegen", 0),
-                    ("Datei öffnen", "Ein gespeichertes Projekt laden", 1),
-                    ("Beispiel öffnen", "Schild mit Schrift, Tasche und Bohrungen", 2),
+                    (t!("Neue Datei erstellen"), t!("Materialgröße und Dicke festlegen"), 0),
+                    (t!("Datei öffnen"), t!("Ein gespeichertes Projekt laden"), 1),
+                    (t!("Beispiel öffnen"), t!("Schild mit Schrift, Tasche und Bohrungen"), 2),
                 ] {
                     let (r, resp) = ui.allocate_exact_size(Vec2::new(220.0, 170.0), Sense::click());
                     let hover = resp.hovered();
@@ -1607,7 +1620,7 @@ impl App {
             if !self.recent_files.is_empty() {
                 ui.add_space(30.0);
                 ui.vertical_centered(|ui| {
-                    ui.label(egui::RichText::new("Zuletzt verwendet").size(16.0).strong().color(ink()));
+                    ui.label(egui::RichText::new(t!("Zuletzt verwendet")).size(16.0).strong().color(ink()));
                 });
                 ui.add_space(8.0);
                 let list_width = 500.0_f32.min(ui.available_width() - 40.0);
@@ -1686,7 +1699,8 @@ impl App {
         let Some((job, is_new)) = &mut self.job_dialog else { return };
         let mut ok = false;
         let mut cancel = false;
-        egui::Window::new(if *is_new { "Job erstellen" } else { "Job einrichten" })
+        egui::Window::new(if *is_new { t!("Job erstellen") } else { t!("Job einrichten") })
+            .id(egui::Id::new("job_dialog_win"))
             .collapsible(false)
             .resizable(false)
             .title_bar(true)
@@ -1697,12 +1711,12 @@ impl App {
                 let f = if job.inches { 1.0 / 25.4 } else { 1.0 };
                 let unit = if job.inches { "in" } else { "mm" };
 
-                dialog_group(ui, "Auftragsgröße", |ui| {
+                dialog_group(ui, &t!("Auftragsgröße"), |ui| {
                     // size fields on the left, a 3D block sketch on the right
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
-                            for (label, v, max) in [("Breite (X)", &mut job.width, 5000.0), ("Länge (Y)", &mut job.height, 5000.0), ("Dicke (Z)", &mut job.thickness, 500.0)] {
-                                dim_row(ui, label, v, f, unit, max);
+                            for (label, v, max) in [(t!("Breite (X)"), &mut job.width, 5000.0), (t!("Länge (Y)"), &mut job.height, 5000.0), (t!("Dicke (Z)"), &mut job.thickness, 500.0)] {
+                                dim_row(ui, &label, v, f, unit, max);
                             }
                         });
                         ui.add_space(10.0);
@@ -1710,12 +1724,12 @@ impl App {
                     });
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new("Einheiten").color(ink())));
-                        segmented(ui, &mut job.inches, [(true, "Zoll"), (false, "mm")]);
+                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Einheiten")).color(ink())));
+                        segmented(ui, &mut job.inches, [(true, t!("Zoll")), (false, "mm".to_string())]);
                     });
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new("Material").color(ink())));
+                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Material")).color(ink())));
                         egui::ComboBox::from_id_salt("mat").width(150.0).selected_text(material_label(&job.material)).show_ui(ui, |ui| {
                             for m in MATERIALS {
                                 ui.selectable_value(&mut job.material, m.to_string(), material_label(m));
@@ -1724,28 +1738,28 @@ impl App {
                     });
                 });
 
-                dialog_group(ui, "Nullpunkt", |ui| {
+                dialog_group(ui, &t!("Nullpunkt"), |ui| {
                     ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new("Z-Null").color(ink())));
+                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Z-Null")).color(ink())));
                         let mut surf = job.z_zero == ZZero::MaterialSurface;
-                        if segmented(ui, &mut surf, [(true, "Oberfläche"), (false, "Tisch")]) {
+                        if segmented(ui, &mut surf, [(true, t!("Oberfläche")), (false, t!("Tisch"))]) {
                             job.z_zero = if surf { ZZero::MaterialSurface } else { ZZero::MachineBed };
                         }
                     });
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new("XY-Null").color(ink())));
+                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("XY-Null")).color(ink())));
                         let mut ll = job.datum == Datum::LowerLeft;
-                        if segmented(ui, &mut ll, [(true, "Ecke"), (false, "Mitte")]) {
+                        if segmented(ui, &mut ll, [(true, t!("Ecke")), (false, t!("Mitte"))]) {
                             job.datum = if ll { Datum::LowerLeft } else { Datum::Center };
                         }
                     });
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new("Sicher Z").color(ink())));
+                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Sicher Z")).color(ink())));
                         ui.add(egui::DragValue::new(&mut job.safe_z).speed(0.1).range(0.5..=100.0).suffix(" mm"));
                         ui.add_space(10.0);
-                        ui.label(egui::RichText::new("Start Z").color(ink()));
+                        ui.label(egui::RichText::new(t!("Start Z")).color(ink()));
                         ui.add(egui::DragValue::new(&mut job.home_z).speed(0.1).range(0.5..=200.0).suffix(" mm"));
                     });
                 });
@@ -1753,12 +1767,12 @@ impl App {
                 ui.add_space(6.0);
                 // buttons at the bottom right, primary highlighted
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let primary = if *is_new { "Erstellen" } else { "Übernehmen" };
+                    let primary = if *is_new { t!("Erstellen") } else { t!("Übernehmen") };
                     if ui.add(egui::Button::new(egui::RichText::new(primary).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                         ok = true;
                     }
                     ui.add_space(4.0);
-                    if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                         cancel = true;
                     }
                 });
@@ -1826,8 +1840,8 @@ impl App {
             resp.context_menu(|ui| {
                 if let Some(source) = &menu.source {
                     let name = std::path::Path::new(&source.file).file_name().map_or_else(|| source.file.clone(), |n| n.to_string_lossy().into_owned());
-                    ui.label(egui::RichText::new(format!("{}-Import: {name}", source.format)).small().color(muted()));
-                    if ui.button("Neu von Platte laden").on_hover_text("Liest die Datei noch einmal ein und ersetzt die importierten Formen").clicked() {
+                    ui.label(egui::RichText::new(t!("%{format}-Import: %{name}", format = source.format, name = name)).small().color(muted()));
+                    if ui.button(t!("Neu von Platte laden")).on_hover_text(t!("Liest die Datei noch einmal ein und ersetzt die importierten Formen")).clicked() {
                         reload = true;
                         ui.close_menu();
                     }
@@ -1835,7 +1849,7 @@ impl App {
                 if menu.source.is_some() && menu.grouped {
                     ui.separator();
                 }
-                if menu.grouped && ui.button("Gruppe auflösen").on_hover_text("Löst die äußerste Gruppe auf; eine Gruppe darin bleibt").clicked() {
+                if menu.grouped && ui.button(t!("Gruppe auflösen")).on_hover_text(t!("Löst die äußerste Gruppe auf; eine Gruppe darin bleibt")).clicked() {
                     ungroup = true;
                     ui.close_menu();
                 }
@@ -2036,11 +2050,11 @@ impl App {
                 }
             }
             let label = match kind {
-                SnapKind::Node => "Knoten",
-                SnapKind::Centre => "Mitte",
-                SnapKind::MidPoint => "Halbe Strecke",
-                SnapKind::Job => "Job-Punkt",
-                SnapKind::Grid => "Raster",
+                SnapKind::Node => t!("Knoten"),
+                SnapKind::Centre => t!("Mitte"),
+                SnapKind::MidPoint => t!("Halbe Strecke"),
+                SnapKind::Job => t!("Job-Punkt"),
+                SnapKind::Grid => t!("Raster"),
             };
             painter.text(c + Vec2::new(9.0, -9.0), Align2::LEFT_BOTTOM, label, FontId::proportional(11.0), col);
         }
@@ -2234,7 +2248,7 @@ impl App {
                 if resp.clicked() {
                     if let Some(m) = mouse {
                         self.push_undo();
-                        let id = self.add_shape(Text::new(m, "Text", 20.0));
+                        let id = self.add_shape(Text::new(m, t!("Text"), 20.0));
                         self.edit.selection = vec![id];
                         self.tool = DrawTool::Select;
                         self.status = "Text eingefügt – Inhalt unter „Eigenschaften“ ändern".into();
@@ -2335,7 +2349,7 @@ impl App {
                 self.paint_gcode_overlay(&painter, &proj);
             }
         }
-        painter.text(rect.left_bottom() + Vec2::new(12.0, -12.0), Align2::LEFT_BOTTOM, "Ziehen: drehen · Rechtsklick ziehen: verschieben · Scrollen: zoomen · Würfel: Ansicht wählen", FontId::proportional(12.0), MUTED);
+        painter.text(rect.left_bottom() + Vec2::new(12.0, -12.0), Align2::LEFT_BOTTOM, t!("Ziehen: drehen · Rechtsklick ziehen: verschieben · Scrollen: zoomen · Würfel: Ansicht wählen"), FontId::proportional(12.0), MUTED);
         // the decorations of the 3D view (the view cube: turn the view, pick a side, home, perspective)
         let proj = sim::Projection::new(rect, &self.job, &self.cam);
         let mut view = crate::viewdeco::View3dContext { area: rect, cam: &mut self.cam, proj: &proj, zero: crate::viewdeco::zero_point(&self.job), arrow_length: crate::viewdeco::arrow_length(&self.job) };
@@ -2343,7 +2357,7 @@ impl App {
             self.status = message;
         }
         if let Some((k, _)) = self.sim.as_ref().and_then(|s| s.anim) {
-            painter.text(rect.left_top() + Vec2::new(12.0, 12.0), Align2::LEFT_TOP, format!("Fräse Werkzeugweg {} …", k + 1), FontId::proportional(14.0), INK);
+            painter.text(rect.left_top() + Vec2::new(12.0, 12.0), Align2::LEFT_TOP, t!("Fräse Werkzeugweg %{n} …", n = k + 1), FontId::proportional(14.0), INK);
         }
     }
 
@@ -2536,7 +2550,7 @@ impl App {
             if ids.is_empty() {
                 continue;
             }
-            let mut copy = Toolpath { shape_ids: ids, name: format!("{} (Kopie)", tp.name), ..tp.clone() };
+            let mut copy = Toolpath { shape_ids: ids, name: t!("%{name} (Kopie)", name = tp.name), ..tp.clone() };
             copy.compute(&self.job, &self.shapes);
             self.toolpaths.push(copy);
         }
@@ -2714,6 +2728,7 @@ impl App {
 impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("cnccraft_theme", self.theme_choice.key().to_string());
+        storage.set_string("cnccraft_lang", self.lang.code().to_string());
         storage.set_string("cnccraft_post_idx", self.post_idx.to_string());
         storage.set_string("cnccraft_gcode_in_3d", self.paths_in_3d.to_string());
         let paths: Vec<String> = self.recent_files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
@@ -2763,6 +2778,15 @@ impl eframe::App for App {
             self.dirty_checked = now;
             self.dirty_shown = self.is_dirty();
         }
+        crate::quit::set_dirty(self.dirty_shown);
+        // "Quit" from the Dock (or ⌘Q) was held back by the system because of unsaved changes
+        if crate::quit::take_request() && self.shot.is_none() && self.selftest.is_none() {
+            if self.is_dirty() {
+                self.unsaved = Some(Pending::Close);
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
         self.keys(ctx);
         // a window that wants an answer first: nothing is left half typed above it
@@ -2778,9 +2802,7 @@ impl eframe::App for App {
         // rotating shapes is not possible for now: it comes back later as an angle constraint
         self.edit.rotate_mode = false;
         // the arrangement of the original: see the layout module
-        if !self.start_page {
-            self.title_bar(ctx);
-        }
+        self.title_bar(ctx);
         self.layer_window(ctx);
         if !self.start_page {
             self.status_bar(ctx);
@@ -2810,10 +2832,10 @@ impl eframe::App for App {
         self.export_ask_ui(ctx);
         self.unsaved_ui(ctx);
         if self.about {
-            egui::Window::new("Über CncCraft").collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-                ui.label("CncCraft – Entwurf und Werkzeugwege für CNC-Fräsen.");
-                ui.label("Werkzeugdaten und Voreinstellungen nach dem Vorbild von Vectric Spark.");
-                if ui.button("Schließen").clicked() {
+            egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+                ui.label(t!("CncCraft – Entwurf und Werkzeugwege für CNC-Fräsen."));
+                ui.label(t!("Werkzeugdaten und Voreinstellungen nach dem Vorbild von Vectric Spark."));
+                if ui.button(t!("Schließen")).clicked() {
                     self.about = false;
                 }
             });
@@ -2895,10 +2917,10 @@ fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr
                 if expr.is_some() {
                     ui.label(egui::RichText::new(format!("= {} mm", fields::fmt(*value))).monospace().color(muted()));
                 } else {
-                    ui.label(egui::RichText::new("mm").color(muted()));
+                    ui.label(egui::RichText::new(t!("mm")).color(muted()));
                 }
             }
-            Err(e) => error = Some(e.message()),
+            Err(e) => error = Some(crate::lang::calc_message(&e)),
         }
       });
       // what is wrong, under the field (a long text would run out of the panel beside it)
@@ -2929,7 +2951,7 @@ fn dim_row(ui: &mut egui::Ui, label: &str, v: &mut f64, f: f64, unit: &str, max:
 }
 
 /// A two-option segmented toggle (like the in/mm switch), primary side filled.
-fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: [(T, &str); 2]) -> bool {
+fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: [(T, String); 2]) -> bool {
     let mut changed = false;
     egui::Frame::none().fill(separator()).rounding(4.0).inner_margin(2.0).show(ui, |ui| {
         ui.horizontal(|ui| {
@@ -2996,13 +3018,20 @@ fn fmt_time(min: f64) -> String {
 
 impl App {
     /// Pick the theme: follow the system, light or dark.
+    /// Switch the interface language; it takes effect with the next frame.
+    pub(super) fn set_lang(&mut self, ctx: &egui::Context, lang: crate::lang::Lang) {
+        self.lang = lang;
+        lang.apply();
+        ctx.request_repaint();
+    }
+
     pub(super) fn set_theme_choice(&mut self, ctx: &egui::Context, choice: crate::theme::Choice) {
         self.theme_choice = choice;
         self.sync_theme(ctx);
         self.status = match choice {
-            crate::theme::Choice::System => "Design folgt dem System",
-            crate::theme::Choice::Light => "Helles Design",
-            crate::theme::Choice::Dark => "Dunkles Design",
+            crate::theme::Choice::System => t!("Design folgt dem System"),
+            crate::theme::Choice::Light => t!("Helles Design"),
+            crate::theme::Choice::Dark => t!("Dunkles Design"),
         }
         .into();
     }

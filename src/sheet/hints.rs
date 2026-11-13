@@ -60,7 +60,7 @@ impl Decoration for Hints {
         };
         let mut action = None;
         bar("help", &mut |ui| {
-            let label = egui::Label::new(text("Hilfe zum ausgewählten Werkzeug anzeigen  ?")).sense(Sense::click());
+            let label = egui::Label::new(text(t!("Hilfe zum ausgewählten Werkzeug anzeigen  ?"))).sense(Sense::click());
             if ui.add(label).clicked() {
                 action = Some(SheetAction::ShowToolHelp);
             }

@@ -13,6 +13,13 @@ macro_rules! t {
     };
 }
 
+// a text kept in a table or a struct: translated when it is shown (see `lang::Tr`)
+macro_rules! tr {
+    ($key:literal) => {
+        $crate::lang::Tr::new($key)
+    };
+}
+
 mod app;
 mod appicon;
 mod gcode;
@@ -21,6 +28,7 @@ mod geom;
 mod import;
 mod lang;
 mod props;
+mod quit;
 mod sheet;
 mod sim;
 mod theme;

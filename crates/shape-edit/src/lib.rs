@@ -34,7 +34,7 @@ pub mod region;
 pub mod snap;
 pub mod vars;
 
-pub use constraints::{Align, Anchor, Axis, Distance, Orient};
+pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, Orient, SizeConstraint};
 pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
 pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, Shape, Text};
 pub use geometry::Contour;

@@ -16,7 +16,7 @@ use super::{App, DrawTool};
 use crate::theme::{CONSTRAINT, MUTED, SELECT};
 use egui::{Color32, Id, Pos2, Rect, Stroke, Vec2};
 use shape_edit::constraints::{self, axis_for_placement, Anchor, Axis, Distance, Measured};
-use shape_edit::{calc, vars, Item, Pt};
+use shape_edit::{calc, vars, Constrains, ConstraintView, Item, Pt};
 
 /// The dimension mode: the picks so far, and the tool to go back to when another is chosen.
 pub(super) struct DimMode {
@@ -293,9 +293,9 @@ impl App {
     fn take_distance(&mut self) -> Result<(), String> {
         let Some(e) = &self.distance_edit else { return Ok(()) };
         let text = e.text.trim().trim_end_matches('=').trim().to_string();
-        let v = calc::eval(&text, &self.vars_resolved).map_err(|er| er.message())?;
+        let v = calc::eval(&text, &self.vars_resolved).map_err(|er| crate::lang::calc_message(&er))?;
         if v <= 0.0 {
-            return Err("muss größer als 0 sein".into());
+            return Err(t!("muss größer als 0 sein").into());
         }
         let e = self.distance_edit.take().expect("checked above");
         let mut c = e.draft;
@@ -509,7 +509,7 @@ impl App {
 
     /// One distance drawn: extension lines from its two ends to the dimension line, the line with
     /// end ticks, and the value in a label on it. Returns the label's place.
-    fn draw_distance(&self, items: &[Item], painter: &egui::Painter, c: &Distance, text: String, tone: Color32) -> Option<Rect> {
+    fn draw_distance(&self, items: &[Item], painter: &egui::Painter, c: &Distance, text: Option<String>, tone: Color32) -> Option<Rect> {
         let m: Measured = c.measure(items)?;
         let n = [-m.dir[1], m.dir[0]];
         let place = c.place_world(&m);
@@ -542,25 +542,25 @@ impl App {
             painter.line_segment([p - across * 5.0, p + across * 5.0], line);
         }
         let mid = ta + (tb - ta) / 2.0;
-        Some(value_label(painter, mid, text, tone))
+        // without a value (the faint view) there is no label to click either
+        text.map(|text| value_label(painter, mid, text, tone))
     }
 
-    /// The constraints with their values (while "Maße anzeigen" is on or the mode is active), the
-    /// pick marks of the mode and the preview of the dimension being placed.
+    /// The constraints (each decides by itself how much of it shows, see `Constrains::view`; while
+    /// the mode is active all of them show in full), the pick marks of the mode and the preview of
+    /// the dimension being placed.
     pub(super) fn draw_distances(&mut self, painter: &egui::Painter, mouse: Option<Pos2>) {
         self.distance_labels.clear();
         let mode_on = self.dim_mode.is_some();
-        // with "Maße anzeigen" off, the distances that hang on a chosen shape still show
-        let all = self.show_dims || mode_on;
-        let chosen_shape = |c: &Distance| self.edit.selection.contains(&c.from.shape()) || self.edit.selection.contains(&c.to.shape());
-        if (!all && !self.distances.iter().any(chosen_shape)) || (self.distances.is_empty() && !mode_on) {
+        if self.distances.is_empty() && !mode_on {
             return;
         }
         let items = self.with_plate();
-        if all || !self.edit.selection.is_empty() {
+        {
             let mut labels = Vec::new();
             for (i, c) in self.distances.iter().enumerate() {
-                if !all && !chosen_shape(c) {
+                let view = if mode_on { ConstraintView::Full } else { c.view(self.show_dims, &self.edit.selection) };
+                if view == ConstraintView::Hidden {
                     continue;
                 }
                 // while its value is being typed the field stands in for the label
@@ -572,6 +572,7 @@ impl App {
                     continue;
                 }
                 let Some(m) = c.measure(&items) else { continue };
+                let slim = view == ConstraintView::Slim;
                 let v = fmt(m.d.abs());
                 // a distance the others prevent is red, with the wanted and the real value
                 let wanted = calc::eval(&c.expr, &self.vars_resolved).ok();
@@ -583,7 +584,8 @@ impl App {
                 };
                 let chosen = matches!(self.selected_constraint, Some(LabelTarget::Distance(j)) if j == i);
                 let tone = if chosen { SELECT } else if off { Color32::from_rgb(0xc0, 0x30, 0x30) } else { CONSTRAINT };
-                if let Some(r) = self.draw_distance(&items, painter, c, text, tone) {
+                let tone = if slim { tone.gamma_multiply(0.5) } else { tone };
+                if let Some(r) = self.draw_distance(&items, painter, c, (!slim).then_some(text), tone) {
                     labels.push((i, r));
                 }
             }
@@ -627,7 +629,7 @@ impl App {
         if let (Some(f @ Anchor::Edge(..)), None, None, Some(p)) = (mode.first, mode.second, mode.hover, mouse) {
             if let Some(draft) = constraints::length_of(&items, f, self.to_mm(p)) {
                 if let Some(m) = draft.measure(&items) {
-                    self.draw_distance(&items, painter, &draft, format!("{} mm", fmt(m.d.abs())), CONSTRAINT.gamma_multiply(0.8));
+                    self.draw_distance(&items, painter, &draft, Some(format!("{} mm", fmt(m.d.abs()))), CONSTRAINT.gamma_multiply(0.8));
                 }
             }
         }
@@ -635,7 +637,7 @@ impl App {
         if let (Some(f), Some(t), Some(p)) = (mode.first, mode.second, mouse) {
             let draft = self.draft_at(&items, f, t, self.to_mm(p));
             if let Some(m) = draft.measure(&items) {
-                self.draw_distance(&items, painter, &draft, format!("{} mm", fmt(m.d.abs())), CONSTRAINT.gamma_multiply(0.8));
+                self.draw_distance(&items, painter, &draft, Some(format!("{} mm", fmt(m.d.abs()))), CONSTRAINT.gamma_multiply(0.8));
             }
         }
     }
@@ -658,9 +660,9 @@ impl App {
         let measured = e.draft.measure(&items);
         if let Some(m) = measured {
             let preview = Distance { expr: e.text.clone(), ..e.draft.clone() };
-            if let Some(r) = self.draw_distance(&items, painter, &preview, String::new(), CONSTRAINT) {
+            if let Some(r) = self.draw_distance(&items, painter, &preview, Some(String::new()), CONSTRAINT) {
                 // the label is replaced by the field: wipe it with the sheet's colour
-                painter.rect_filled(r.expand(1.0), 4.0, crate::theme::surface());
+                painter.rect_filled(r.expand(1.0), 4.0, crate::theme::SHEET_LABEL);
             }
             let _ = m;
         }

@@ -8,7 +8,7 @@ use super::{App, DrawTool};
 use crate::theme::{CONSTRAINT, SELECT};
 use egui::{Color32, Rect, Stroke, Vec2};
 use shape_edit::constraints::{self, Anchor};
-use shape_edit::{Align, Orient};
+use shape_edit::{Align, Constrains, ConstraintView, Orient};
 
 /// The mode: the first point picked so far, the tool to go back to when another is chosen.
 pub(super) struct AlignMode {
@@ -130,9 +130,6 @@ impl App {
     pub(super) fn draw_aligns(&mut self, painter: &egui::Painter) {
         self.align_labels.clear();
         let mode_on = self.align_mode.is_some();
-        // with "Maße anzeigen" off, those on a chosen shape still show
-        let all = self.show_dims || mode_on;
-        let chosen_shape = |al: &Align| self.edit.selection.contains(&al.a.shape()) || self.edit.selection.contains(&al.b.shape());
         if self.aligns.is_empty() && !mode_on {
             return;
         }
@@ -140,13 +137,17 @@ impl App {
         items.push(constraints::plate_item(self.job.width, self.job.height));
         let mut labels = Vec::new();
         for (i, al) in self.aligns.iter().enumerate() {
-            if !all && !chosen_shape(al) {
+            // each constraint decides how much of it shows; while the mode is active all in full
+            let view = if mode_on { ConstraintView::Full } else { al.view(self.show_dims, &self.edit.selection) };
+            if view == ConstraintView::Hidden {
                 continue;
             }
+            let slim = view == ConstraintView::Slim;
             let Some((pa, pb)) = al.ends(&items) else { continue };
             let off = al.error(&items).is_some_and(|e| e > 1e-6);
             let chosen = matches!(self.selected_constraint, Some(super::distance::LabelTarget::Align(j)) if j == i);
             let tone = if chosen { SELECT } else if off { Color32::from_rgb(0xc0, 0x30, 0x30) } else { CONSTRAINT };
+            let tone = if slim { tone.gamma_multiply(0.5) } else { tone };
             let (sa, sb) = (self.to_screen(pa), self.to_screen(pb));
             let mid = sa + (sb - sa) / 2.0;
             // the symbol sits to the side of the line, away from the shape's middle when it can tell
@@ -161,7 +162,7 @@ impl App {
             let at = mid + normal * LEAD;
             painter.line_segment([mid + normal * 2.0, at - normal * (SYMBOL / 2.0)], Stroke::new(1.0_f32, tone.gamma_multiply(0.8)));
             let rect = Rect::from_center_size(at, Vec2::splat(SYMBOL));
-            painter.rect(rect, 4.0, crate::theme::surface(), Stroke::new(if chosen { 1.8_f32 } else { 1.2_f32 }, tone));
+            painter.rect(rect, 4.0, if slim { Color32::TRANSPARENT } else { crate::theme::SHEET_LABEL }, Stroke::new(if chosen { 1.8_f32 } else { 1.2_f32 }, tone));
             let (c, k) = (rect.center(), SYMBOL * 0.28);
             let stroke = Stroke::new(1.6_f32, tone);
             match al.orient {
@@ -177,7 +178,9 @@ impl App {
                     painter.line_segment([c + Vec2::new(-2.5, k), c + Vec2::new(2.5, k)], stroke);
                 }
             }
-            labels.push((i, rect));
+            if !slim {
+                labels.push((i, rect));
+            }
         }
         self.align_labels = labels;
         // the point already picked and the one under the pointer

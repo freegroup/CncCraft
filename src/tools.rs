@@ -21,12 +21,20 @@ impl ToolKind {
             _ => None,
         }
     }
-    pub fn group(&self) -> &'static str {
+    fn german_group(&self) -> &'static str {
         match self {
             ToolKind::EndMill => "Schaftfräser",
             ToolKind::BallNose => "Kugelfräser",
             ToolKind::VBit => "V-Fräser",
             ToolKind::Drill => "Bohrer",
+        }
+    }
+    pub fn group(&self) -> String {
+        match self {
+            ToolKind::EndMill => t!("Schaftfräser"),
+            ToolKind::BallNose => t!("Kugelfräser"),
+            ToolKind::VBit => t!("V-Fräser"),
+            ToolKind::Drill => t!("Bohrer"),
         }
     }
     pub fn all() -> &'static [ToolKind] {
@@ -76,13 +84,27 @@ pub struct ToolEntry {
 
 pub const MATERIALS: [&str; 4] = ["Softwood", "Hardwood", "MDF", "Acrylic"];
 
-pub fn material_label(m: &str) -> &'static str {
+/// A tool's name as shown: the standard names start with the cutter's kind ("Schaftfräser (6 mm)"),
+/// and that kind is translated; a name the person typed stays as it is.
+pub fn shown_name(name: &str) -> String {
+    for kind in ToolKind::all() {
+        let german = kind.german_group();
+        if let Some(rest) = name.strip_prefix(german) {
+            if rest.is_empty() || rest.starts_with(' ') {
+                return format!("{}{rest}", kind.group());
+            }
+        }
+    }
+    name.to_string()
+}
+
+pub fn material_label(m: &str) -> String {
     match m {
-        "Softwood" => "Weichholz",
-        "Hardwood" => "Hartholz",
-        "MDF" => "MDF",
-        "Acrylic" => "Acryl",
-        _ => "Material",
+        "Softwood" => t!("Weichholz"),
+        "Hardwood" => t!("Hartholz"),
+        "MDF" => "MDF".to_string(),
+        "Acrylic" => t!("Acryl"),
+        _ => t!("Material"),
     }
 }
 

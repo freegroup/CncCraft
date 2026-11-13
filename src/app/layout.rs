@@ -56,53 +56,59 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
 pub(super) const GROUP_COUNT: usize = 9;
 
 /// What each group is, for the folded column's tooltips.
-const GROUP_NAMES: [&str; GROUP_COUNT] = ["Modus", "Linien zeichnen", "Formen zeichnen", "Text", "Objekte bearbeiten", "Ausrichten und Spiegeln", "Versatz", "Boolesche Operationen", "Gruppieren"];
+const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Boolesche Operationen"), tr!("Gruppieren")];
 
 /// Icons per row in the expanded column, and the size of one icon cell.
 const ROW: usize = 5;
 const CELL: f32 = 38.0;
 const GAP: f32 = 4.0;
 
-fn tip(icon: Icon) -> &'static str {
+fn tip(icon: Icon) -> String {
     match icon {
         Icon::Draw(t) => t.tip(),
-        Icon::Transform => "Objekte transformieren (Lage und Größe eingeben)",
-        Icon::Offset => "Vektoren versetzen",
-        Icon::MirrorH => "Waagrecht spiegeln",
-        Icon::MirrorV => "Senkrecht spiegeln",
-        Icon::Center => "Auf dem Material zentrieren",
-        Icon::Curves => "In Kurven umwandeln",
-        Icon::Delete => "Löschen",
-        Icon::Union => "Vereinen (mindestens zwei Formen)",
-        Icon::Subtract => "Abziehen: die zuerst gewählte Form minus die anderen",
-        Icon::Intersect => "Schnittmenge (mindestens zwei Formen)",
-        Icon::Job => "Job einrichten (Größe, Material, Nullpunkt)",
-        Icon::Group => "Gruppieren (⌘G): die Auswahl wird eine Gruppe; auch Gruppen lassen sich gruppieren",
-        Icon::Ungroup => "Gruppe auflösen (⌘⇧G): löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick",
-        Icon::ImportDxf => "DXF-Zeichnung importieren (R12, R14 und neuer); Rechtsklick auf eine importierte Form: neu von Platte laden",
-        Icon::Variables => "Variablen (f(x): benannte Werte für die Maße)",
-        _ => "",
+        Icon::Transform => t!("Objekte transformieren (Lage und Größe eingeben)"),
+        Icon::Offset => t!("Vektoren versetzen"),
+        Icon::MirrorH => t!("Waagrecht spiegeln"),
+        Icon::MirrorV => t!("Senkrecht spiegeln"),
+        Icon::Center => t!("Auf dem Material zentrieren"),
+        Icon::Curves => t!("In Kurven umwandeln"),
+        Icon::Delete => t!("Löschen"),
+        Icon::Union => t!("Vereinen (mindestens zwei Formen)"),
+        Icon::Subtract => t!("Abziehen: die zuerst gewählte Form minus die anderen"),
+        Icon::Intersect => t!("Schnittmenge (mindestens zwei Formen)"),
+        Icon::Job => t!("Job einrichten (Größe, Material, Nullpunkt)"),
+        Icon::Group => t!("Gruppieren (⌘G): die Auswahl wird eine Gruppe; auch Gruppen lassen sich gruppieren"),
+        Icon::Ungroup => t!("Gruppe auflösen (⌘⇧G): löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick"),
+        Icon::ImportDxf => t!("DXF-Zeichnung importieren (R12, R14 und neuer); Rechtsklick auf eine importierte Form: neu von Platte laden"),
+        Icon::Variables => t!("Variablen (f(x): benannte Werte für die Maße)"),
+        _ => String::new(),
     }
 }
+
+/// Space between the theme switch and the language switch's centre.
+const LANG_SLOT: f32 = 38.0;
 
 impl App {
     /// The menu bar on the left, the layer in the middle, the document's name on the right.
     pub(super) fn title_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("title").exact_height(34.0).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(egui::Margin::symmetric(10.0, 4.0)).stroke(Stroke::new(1.0_f32, hairline()))).show(ctx, |ui| {
             let full = ui.max_rect();
-            // the usual menu bar, every menu at the top level
-            ui.horizontal_centered(|ui| {
-                ui.label(egui::RichText::new("⚡").color(ACCENT).size(16.0));
-                egui::menu::bar(ui, |ui| self.menus(ui));
-            });
-            // the document's name at the right end
-            let mut name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| "Neu".to_string(), |s| s.to_string_lossy().into_owned());
-            if self.dirty_shown {
-                name.push_str(" ●");
-            }
-            let label = ui.painter().text(full.right_center() - Vec2::new(38.0, 0.0), Align2::RIGHT_CENTER, name, FontId::proportional(14.0), muted());
-            if self.dirty_shown {
-                ui.interact(label, egui::Id::new("dirty_mark"), Sense::hover()).on_hover_text("Ungespeicherte Änderungen");
+            // the start page has no menus: only the switches at the right end
+            if !self.start_page {
+                // the usual menu bar, every menu at the top level
+                ui.horizontal_centered(|ui| {
+                    ui.label(egui::RichText::new("⚡").color(ACCENT).size(16.0));
+                    egui::menu::bar(ui, |ui| self.menus(ui));
+                });
+                // the document's name at the right end
+                let mut name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
+                if self.dirty_shown {
+                    name.push_str(" ●");
+                }
+                let label = ui.painter().text(full.right_center() - Vec2::new(38.0 + LANG_SLOT, 0.0), Align2::RIGHT_CENTER, name, FontId::proportional(14.0), muted());
+                if self.dirty_shown {
+                    ui.interact(label, egui::Id::new("dirty_mark"), Sense::hover()).on_hover_text(t!("Ungespeicherte Änderungen"));
+                }
             }
             // the switch for the dark theme, at the right end: a sun in the dark, a moon in the light
             let slot = Rect::from_center_size(full.right_center() - Vec2::new(14.0, 0.0), Vec2::splat(26.0));
@@ -123,12 +129,38 @@ impl App {
                 ui.painter().circle_filled(c, 7.0, tone);
                 ui.painter().circle_filled(c + Vec2::new(3.5, -3.0), 6.0, crate::theme::surface());
             }
-            if resp.on_hover_text(if self.dark { "Zum hellen Design wechseln" } else { "Zum dunklen Design wechseln" }).clicked() {
+            if resp.on_hover_text(if self.dark { t!("Zum hellen Design wechseln") } else { t!("Zum dunklen Design wechseln") }).clicked() {
                 let choice = if self.dark { crate::theme::Choice::Light } else { crate::theme::Choice::Dark };
                 self.set_theme_choice(ctx, choice);
             }
+            // the language switch, left of the theme switch: the code of the language in use, and
+            // a list of the languages under it
+            let lang_slot = Rect::from_center_size(slot.center() - Vec2::new(LANG_SLOT, 0.0), Vec2::new(34.0, 26.0));
+            let lang_resp = ui.interact(lang_slot, egui::Id::new("lang_switch"), Sense::click());
+            if lang_resp.hovered() {
+                ui.painter().rect_filled(lang_slot, 5.0, crate::theme::hover());
+            }
+            ui.painter().text(lang_slot.center(), Align2::CENTER_CENTER, self.lang.code().to_uppercase(), FontId::proportional(13.0), crate::theme::icon_line());
+            let popup_id = egui::Id::new("lang_popup");
+            if lang_resp.clone().on_hover_text(t!("Sprache wählen")).clicked() {
+                ui.memory_mut(|m| m.toggle_popup(popup_id));
+            }
+            let mut picked = None;
+            egui::popup::popup_below_widget(ui, popup_id, &lang_resp, egui::popup::PopupCloseBehavior::CloseOnClick, |ui| {
+                ui.set_min_width(110.0);
+                for lang in crate::lang::Lang::ALL {
+                    if ui.selectable_label(self.lang == lang, lang.native_name()).clicked() {
+                        picked = Some(lang);
+                    }
+                }
+            });
+            if let Some(lang) = picked {
+                self.set_lang(ctx, lang);
+            }
             // the layer, centred over the window as in the original (one layer for now)
-            ui.allocate_new_ui(egui::UiBuilder::new().max_rect(Rect::from_center_size(full.center(), Vec2::new(230.0, 26.0))), |ui| self.layer_selector(ui));
+            if !self.start_page {
+                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(Rect::from_center_size(full.center(), Vec2::new(230.0, 26.0))), |ui| self.layer_selector(ui));
+            }
         });
     }
 
@@ -146,7 +178,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::splat(GAP);
                 let chevron = if self.tools_open { "‹" } else { "›" };
-                let hint = if self.tools_open { "Werkzeugleiste verkleinern" } else { "Werkzeugleiste erweitern" };
+                let hint = if self.tools_open { t!("Werkzeugleiste verkleinern") } else { t!("Werkzeugleiste erweitern") };
                 if ui.add(egui::Button::new(egui::RichText::new(chevron).size(16.0).color(ink())).min_size(Vec2::new(26.0, 22.0)).rounding(4.0)).on_hover_text(hint).clicked() {
                     self.tools_open = !self.tools_open;
                     self.flyout = None;
@@ -193,7 +225,7 @@ impl App {
                                 *at = resp.rect.right_top() + Vec2::new(6.0, 0.0);
                             }
                         }
-                        let resp = resp.on_hover_text(GROUP_NAMES[g]);
+                        let resp = resp.on_hover_text(GROUP_NAMES[g].get());
                         if resp.clicked() {
                             if group.len() == 1 {
                                 clicked = Some(shown);
@@ -242,7 +274,7 @@ impl App {
         let mut picked = None;
         let area = egui::Area::new(egui::Id::new("tool_flyout")).order(egui::Order::Foreground).fixed_pos(at).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(crate::theme::surface()).rounding(5.0).show(ui, |ui| {
-                ui.label(egui::RichText::new(GROUP_NAMES[g]).small().color(muted()));
+                ui.label(egui::RichText::new(GROUP_NAMES[g].get()).small().color(muted()));
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = GAP;
                     for (k, &icon) in GROUPS[g].iter().enumerate() {
@@ -286,7 +318,7 @@ impl App {
 
     fn column_icon(&self, ui: &mut egui::Ui, icon: Icon) -> egui::Response {
         let (selected, enabled) = self.icon_state(icon);
-        ui.add_enabled_ui(enabled, |ui| icon_button(ui, icon, selected, tip(icon))).inner
+        ui.add_enabled_ui(enabled, |ui| icon_button(ui, icon, selected, &tip(icon))).inner
     }
 
     pub(super) fn column_click(&mut self, icon: Icon) {
@@ -326,12 +358,12 @@ impl App {
         egui::SidePanel::left("tool_form").exact_width(250.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(10.0).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let title = match form {
-                    ToolForm::Transform => "Objekte transformieren",
-                    ToolForm::Offset => "Versatz",
+                    ToolForm::Transform => t!("Objekte transformieren"),
+                    ToolForm::Offset => t!("Versatz"),
                 };
                 ui.label(egui::RichText::new(title).size(15.0).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("✕").on_hover_text("Schließen").clicked() {
+                    if ui.small_button("✕").on_hover_text(t!("Schließen")).clicked() {
                         self.tool_form = None;
                     }
                 });
@@ -341,20 +373,20 @@ impl App {
                 ToolForm::Transform => self.properties(ui),
                 ToolForm::Offset => {
                     ui.horizontal(|ui| {
-                        ui.label("Abstand");
+                        ui.label(t!("Abstand"));
                         ui.add(egui::DragValue::new(&mut self.offset_dist).range(0.1..=500.0).speed(0.1).suffix(" mm"));
                     });
                     ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.offset_outside, true, "Außen");
-                        ui.radio_value(&mut self.offset_outside, false, "Innen");
+                        ui.radio_value(&mut self.offset_outside, true, t!("Außen"));
+                        ui.radio_value(&mut self.offset_outside, false, t!("Innen"));
                     });
                     ui.add_space(6.0);
                     let any = !self.edit.selection.is_empty();
-                    if ui.add_enabled(any, egui::Button::new("Versetzen").min_size(Vec2::new(100.0, 24.0))).clicked() {
+                    if ui.add_enabled(any, egui::Button::new(t!("Versetzen")).min_size(Vec2::new(100.0, 24.0))).clicked() {
                         self.offset_selection();
                     }
                     if !any {
-                        ui.label(egui::RichText::new("Erst die Vektoren auswählen.").color(muted()));
+                        ui.label(egui::RichText::new(t!("Erst die Vektoren auswählen.")).color(muted()));
                     }
                 }
             }
@@ -374,39 +406,39 @@ impl App {
                 // ribbon of Fusion 360): what is drawn on the sheet, and the constraints
                 // (the job is set up from the tool column only, as in the original: job_setup is
                 // the last entry of its tool list, 0x10011d034)
-                toolbar_group(ui, "Dekoration", |ui| {
+                toolbar_group(ui, &t!("Dekoration"), |ui| {
                     let shown = self.origin_shown();
-                    if icon_button(ui, Icon::Origin, shown, "Nullpunkt anzeigen / ausblenden (Achsenkreuz im Blatt und in der 3D-Ansicht)").clicked() {
+                    if icon_button(ui, Icon::Origin, shown, &t!("Nullpunkt anzeigen / ausblenden (Achsenkreuz im Blatt und in der 3D-Ansicht)")).clicked() {
                         self.set_origin_shown(!shown);
                     }
-                    if icon_button(ui, Icon::Grid, self.snap_grid, "Am Raster einrasten").clicked() {
+                    if icon_button(ui, Icon::Grid, self.snap_grid, &t!("Am Raster einrasten")).clicked() {
                         self.snap_grid = !self.snap_grid;
                     }
-                    if icon_button(ui, Icon::Snap, self.snap_geometry, "An Geometrie einrasten").clicked() {
+                    if icon_button(ui, Icon::Snap, self.snap_geometry, &t!("An Geometrie einrasten")).clicked() {
                         self.snap_geometry = !self.snap_geometry;
                     }
-                    if icon_button(ui, Icon::Dimensions, self.show_dims, "Maße anzeigen / ausblenden (Maße blau = Constraint; Linien sind immer blau = frei, schwarz = Länge festgelegt)").clicked() {
+                    if icon_button(ui, Icon::Dimensions, self.show_dims, &t!("Maße anzeigen / ausblenden (Maße blau = Constraint; Linien sind immer blau = frei, schwarz = Länge festgelegt)")).clicked() {
                         self.show_dims = !self.show_dims;
                     }
                 });
-                toolbar_group(ui, "Constraints", |ui| {
-                    if icon_button(ui, Icon::Distance, self.dim_mode.is_some(), "Abstand bemaßen (D): zwei Punkte oder Punkt und Linie wählen, dann den Abstand eingeben").clicked() {
+                toolbar_group(ui, &t!("Constraints"), |ui| {
+                    if icon_button(ui, Icon::Distance, self.dim_mode.is_some(), &t!("Abstand bemaßen (D): zwei Punkte oder Punkt und Linie wählen, dann den Abstand eingeben")).clicked() {
                         self.toggle_dim_mode();
                     }
-                    if icon_button(ui, Icon::Align, self.align_mode.is_some(), "Waagrecht/Senkrecht (H): eine Linie oder zwei Punkte wählen, CncCraft legt sie waagrecht oder senkrecht fest").clicked() {
+                    if icon_button(ui, Icon::Align, self.align_mode.is_some(), &t!("Waagrecht/Senkrecht (H): eine Linie oder zwei Punkte wählen, CncCraft legt sie waagrecht oder senkrecht fest")).clicked() {
                         self.toggle_align_mode();
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if icon_button(ui, Icon::ZoomSelection, false, "Auf die Auswahl zoomen").clicked() {
+                    if icon_button(ui, Icon::ZoomSelection, false, &t!("Auf die Auswahl zoomen")).clicked() {
                         self.zoom_to_selection();
                     }
-                    if icon_button(ui, Icon::ZoomFit, false, "Ganze Ansicht").clicked() {
+                    if icon_button(ui, Icon::ZoomFit, false, &t!("Ganze Ansicht")).clicked() {
                         self.run(Action::FitView);
                     }
                     let (label, next, hint) = match self.mode {
-                        ViewMode::TwoD => ("2D", ViewMode::ThreeD, "Zur 3D-Ansicht wechseln"),
-                        ViewMode::ThreeD => ("3D", ViewMode::TwoD, "Zur 2D-Ansicht wechseln"),
+                        ViewMode::TwoD => ("2D", ViewMode::ThreeD, t!("Zur 3D-Ansicht wechseln")),
+                        ViewMode::ThreeD => ("3D", ViewMode::TwoD, t!("Zur 2D-Ansicht wechseln")),
                     };
                     let b = egui::Button::new(egui::RichText::new(label).strong().size(15.0).color(ink())).min_size(Vec2::new(38.0, 30.0)).stroke(Stroke::new(1.5_f32, ink())).rounding(4.0);
                     if ui.add(b).on_hover_text(hint).clicked() {
@@ -496,7 +528,7 @@ impl App {
     pub(super) fn toolpath_panel(&mut self, ctx: &egui::Context) {
         if !self.paths_open {
             egui::SidePanel::right("toolpaths_folded").exact_width(30.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(4.0).stroke(Stroke::new(1.0_f32, hairline()))).show(ctx, |ui| {
-                if ui.button("‹").on_hover_text("Werkzeugpfade zeigen").clicked() {
+                if ui.button("‹").on_hover_text(t!("Werkzeugpfade zeigen")).clicked() {
                     self.paths_open = true;
                 }
             });
@@ -511,11 +543,11 @@ impl App {
             egui::TopBottomPanel::bottom("toolpath_bottom").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 8.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                 group_container().show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    group_title(ui, "Simulation & Export", |_| {});
+                    group_title(ui, &t!("Simulation & Export"), |_| {});
                     ui.horizontal(|ui| {
-                        for (tab, icon, hint) in [(ToolpathTab::Preview, Icon::Preview, "Werkzeugpfade-Vorschau"), (ToolpathTab::Save, Icon::Save, "Werkzeugpfade speichern")] {
+                        for (tab, icon, hint) in [(ToolpathTab::Preview, Icon::Preview, t!("Werkzeugpfade-Vorschau")), (ToolpathTab::Save, Icon::Save, t!("Werkzeugpfade speichern"))] {
                             ui.add_space(22.0);
-                            if icon_button(ui, icon, self.toolpath_tab == tab, hint).clicked() {
+                            if icon_button(ui, icon, self.toolpath_tab == tab, &hint).clicked() {
                                 self.toolpath_tab = tab;
                                 if tab == ToolpathTab::Preview {
                                     self.mode = ViewMode::ThreeD;
@@ -534,8 +566,8 @@ impl App {
             group_container().show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.set_min_height(ui.available_height().max(60.0));
-                group_title(ui, "Werkzeugpfade", |ui| {
-                    if ui.button("›").on_hover_text("Werkzeugpfade einklappen").clicked() {
+                group_title(ui, &t!("Werkzeugpfade"), |ui| {
+                    if ui.button("›").on_hover_text(t!("Werkzeugpfade einklappen")).clicked() {
                         self.paths_open = false;
                     }
                 });
@@ -566,7 +598,7 @@ impl App {
             return;
         }
         let screen = ctx.screen_rect();
-        egui::Window::new("Werkzeugweg")
+        egui::Window::new(t!("Werkzeugweg"))
             .id(egui::Id::new("toolpath_editor_window"))
             .title_bar(false)
             .collapsible(false)
@@ -585,9 +617,9 @@ impl App {
             ui.horizontal(|ui| {
                 // only a problem is marked: a tick on every good board said nothing
                 if !valid {
-                    ui.label(egui::RichText::new("⚠").color(Color32::from_rgb(0xc0, 0x50, 0x00))).on_hover_text("Die Platte hat keine gültige Größe: bitte einrichten");
+                    ui.label(egui::RichText::new("⚠").color(Color32::from_rgb(0xc0, 0x50, 0x00))).on_hover_text(t!("Die Platte hat keine gültige Größe: bitte einrichten"));
                 }
-                ui.label(egui::RichText::new("Platten-Setup").color(ink()));
+                ui.label(egui::RichText::new(t!("Platten-Setup")).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(format!("{:.0} × {:.0} × {:.1} mm", self.job.width, self.job.height, self.job.thickness)).color(muted()));
                 });
@@ -598,7 +630,7 @@ impl App {
             ui.painter().rect_stroke(resp.response.rect, 4.0, Stroke::new(1.0_f32, crate::theme::icon_line()));
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
-        if click.on_hover_text("Werkstück einrichten: Größe, Material, Nullpunkt").clicked() {
+        if click.on_hover_text(t!("Werkstück einrichten: Größe, Material, Nullpunkt")).clicked() {
             self.job_dialog = Some((self.job.clone(), false));
         }
     }
@@ -609,14 +641,14 @@ impl App {
             ui.spacing_mut().item_spacing = Vec2::splat(GAP);
             // in the original's order (0x10052b5f4): cutout, profile, pocket, drilling, V-carve
             for (icon, kind, hint) in [
-                (Icon::Cutout, "cutout", "Ausschnitt (Teil heraustrennen)"),
-                (Icon::Profile, "profile", "Profil-Werkzeugweg"),
-                (Icon::Pocket, "pocket", "Taschen-Werkzeugweg"),
-                (Icon::Drill, "drill", "Bohr-Werkzeugweg"),
-                (Icon::VCarve, "vcarve", "V-Carving-Werkzeugweg"),
+                (Icon::Cutout, "cutout", t!("Ausschnitt (Teil heraustrennen)")),
+                (Icon::Profile, "profile", t!("Profil-Werkzeugweg")),
+                (Icon::Pocket, "pocket", t!("Taschen-Werkzeugweg")),
+                (Icon::Drill, "drill", t!("Bohr-Werkzeugweg")),
+                (Icon::VCarve, "vcarve", t!("V-Carving-Werkzeugweg")),
             ] {
                 let on = self.editor.as_ref().is_some_and(|e| e.kind == kind && e.index.is_none());
-                if icon_button(ui, icon, on, hint).clicked() {
+                if icon_button(ui, icon, on, &hint).clicked() {
                     self.open_editor(kind);
                 }
             }
@@ -624,33 +656,33 @@ impl App {
     }
 
     fn preview_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Vorschau").size(15.0).color(ink()));
+        ui.label(egui::RichText::new(t!("Vorschau")).size(15.0).color(ink()));
         ui.horizontal(|ui| {
-            if ui.button("▶ Simulieren").clicked() {
+            if ui.button(t!("▶ Simulieren")).clicked() {
                 self.start_preview(true);
             }
-            if ui.button("⏭ Sofort").clicked() {
+            if ui.button(t!("⏭ Sofort")).clicked() {
                 self.start_preview(false);
             }
-            if ui.button("↺").on_hover_text("Material zurücksetzen").clicked() {
+            if ui.button("↺").on_hover_text(t!("Material zurücksetzen")).clicked() {
                 self.sim = None;
             }
         });
         // "Preview Type" of the original: which toolpaths are simulated
         ui.horizontal_wrapped(|ui| {
             use super::PreviewScope;
-            for (scope, name) in [(PreviewScope::All, "Alle"), (PreviewScope::Visible, "Sichtbare")] {
+            for (scope, name) in [(PreviewScope::All, t!("Alle")), (PreviewScope::Visible, t!("Sichtbare"))] {
                 ui.radio_value(&mut self.preview_scope, scope, name);
             }
         })
         .response
-        .on_hover_text("Welche Werkzeugwege die Vorschau zeigt (der ausgewählte ist der in der Liste angeklickte)");
+        .on_hover_text(t!("Welche Werkzeugwege die Vorschau zeigt (der ausgewählte ist der in der Liste angeklickte)"));
         // the sliders take all the width that is left beside their labels
         const LABEL: f32 = 84.0;
         ui.horizontal(|ui| {
             ui.allocate_ui_with_layout(Vec2::new(LABEL, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.set_min_width(LABEL);
-                ui.label("Tempo")
+                ui.label(t!("Tempo"))
             });
             ui.spacing_mut().slider_width = ui.available_width().max(60.0);
             // both sliders run from 0 to 100, as the original's (wxSlider 0..100 at 0x1000fc110 and
@@ -667,12 +699,12 @@ impl App {
         ui.horizontal(|ui| {
             ui.allocate_ui_with_layout(Vec2::new(LABEL, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.set_min_width(LABEL);
-                ui.label("Darstellung")
+                ui.label(t!("Darstellung"))
             });
             ui.spacing_mut().slider_width = ui.available_width().max(60.0);
             let mut pos = to_slider(self.sim_quality, 1.0, sim::SIMULATION_QUALITY_MAX);
             if ui.add(egui::Slider::new(&mut pos, 0.0..=100.0).integer().show_value(false))
-                .on_hover_text(format!("{pos:.0} %\nWie fein das Material in der Vorschau gezeichnet wird (ändert nicht die Werkzeugwege)\n{} Punkte je mm · Raster {:.2} mm", (self.sim_quality * 10.0).round() / 10.0, spacing))
+                .on_hover_text(t!("%{pos} %\nWie fein das Material in der Vorschau gezeichnet wird (ändert nicht die Werkzeugwege)\n%{ppm} Punkte je mm · Raster %{spacing} mm", pos = format!("{pos:.0}"), ppm = (self.sim_quality * 10.0).round() / 10.0, spacing = format!("{spacing:.2}")))
                 .changed()
             {
                 self.sim_quality = from_slider(pos, 1.0, sim::SIMULATION_QUALITY_MAX);
@@ -683,35 +715,35 @@ impl App {
             ui.add_space(LABEL + ui.spacing().item_spacing.x);
             let width = ui.available_width();
             ui.allocate_ui_with_layout(Vec2::new(width, 12.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("schneller").small().color(muted()));
+                ui.label(egui::RichText::new(t!("schneller")).small().color(muted()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("genauer").small().color(muted()));
+                    ui.label(egui::RichText::new(t!("genauer")).small().color(muted()));
                 });
             });
         });
-        ui.checkbox(&mut self.paths_in_3d, "G-Code-Fahrt im 3D einblenden")
-            .on_hover_text("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb.");
+        ui.checkbox(&mut self.paths_in_3d, t!("G-Code-Fahrt im 3D einblenden"))
+            .on_hover_text(t!("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb."));
     }
 
     fn save_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Export").size(15.0).color(ink()));
+        ui.label(egui::RichText::new(t!("Export")).size(15.0).color(ink()));
         // the three choices of the original's save form
         use super::OutputScope;
         for (scope, name) in [
-            (OutputScope::All, "Alle Werkzeugwege"),
-            (OutputScope::Visible, "Sichtbare Werkzeugwege"),
+            (OutputScope::All, t!("Alle Werkzeugwege")),
+            (OutputScope::Visible, t!("Sichtbare Werkzeugwege")),
         ] {
             ui.radio_value(&mut self.output_scope, scope, name);
         }
         let count = self.output_indices().len();
         let tools = self.tool_groups(&self.output_indices()).len();
         ui.label(egui::RichText::new(if tools > 1 {
-            format!("{count} Werkzeugwege mit {tools} Werkzeugwechseln: beim Speichern wählen Sie eine Datei oder je Werkzeug eine.")
+            t!("%{count} Werkzeugwege mit %{tools} Werkzeugwechseln: beim Speichern wählen Sie eine Datei oder je Werkzeug eine.", count = count, tools = tools)
         } else {
-            format!("{count} Werkzeugwege kommen in eine Datei.")
+            t!("%{count} Werkzeugwege kommen in eine Datei.", count = count)
         }).color(muted()));
         ui.add_space(4.0);
-        ui.label("Postprozessor");
+        ui.label(t!("Postprozessor"));
         let selected_label = self.pp().label();
         let pp_manage;
         {
@@ -735,14 +767,14 @@ impl App {
         }
 
         ui.add_space(6.0);
-        if ui.add_enabled(count > 0, egui::Button::new("Werkzeugpfade speichern…").min_size(Vec2::new(200.0, 26.0))).clicked() {
+        if ui.add_enabled(count > 0, egui::Button::new(t!("Werkzeugpfade speichern…")).min_size(Vec2::new(200.0, 26.0))).clicked() {
             self.export_gcode();
         }
     }
 
     pub(super) fn pp_dialog_ui(&mut self, ctx: &egui::Context) {
         let Some(dlg) = &mut self.pp_dialog else { return };
-        let title = if dlg.index.is_some() { "Postprozessor-Verwaltung" } else { "Neuer Postprozessor" };
+        let title = if dlg.index.is_some() { t!("Postprozessor-Verwaltung") } else { t!("Neuer Postprozessor") };
         let mut save = false;
         let mut delete = false;
         let mut pick: Option<usize> = None;
@@ -764,11 +796,11 @@ impl App {
                 // Bottom buttons first so they are always visible
                 egui::TopBottomPanel::bottom("pp_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(egui::Button::new(egui::RichText::new("Speichern").strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                        if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                             save = true;
                         }
                         ui.add_space(4.0);
-                        if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                        if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
                             close = true;
                         }
                     });
@@ -776,15 +808,15 @@ impl App {
 
                 // Left list panel
                 egui::SidePanel::left("pp_list_panel").exact_width(150.0).resizable(false).frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 4.0, top: 0.0, bottom: 0.0 })).show_inside(ui, |ui| {
-                    ui.label(egui::RichText::new("Postprozessoren").strong());
+                    ui.label(egui::RichText::new(t!("Postprozessoren")).strong());
                     // +/- buttons pinned at the bottom
                     egui::TopBottomPanel::bottom("pp_list_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 4.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                         ui.horizontal(|ui| {
-                            if ui.small_button("+").on_hover_text("Neuen Postprozessor anlegen").clicked() {
+                            if ui.small_button("+").on_hover_text(t!("Neuen Postprozessor anlegen")).clicked() {
                                 pick = Some(usize::MAX);
                             }
                             let can_delete = dlg.index.is_some() && !is_builtin;
-                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text("Ausgewählten Postprozessor löschen").clicked() {
+                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text(t!("Ausgewählten Postprozessor löschen")).clicked() {
                                 delete = true;
                             }
                         });
@@ -808,7 +840,7 @@ impl App {
             if p == usize::MAX {
                 self.pp_dialog = Some(super::PpDialog {
                     editing: crate::gcode::PostProcessor {
-                        name: "Neuer Postprozessor".into(),
+                        name: t!("Neuer Postprozessor").into(),
                         inch: false, ext: "nc".into(), tool_change: true,
                         job_start: String::new(), job_end: String::new(),
                         on_tool_change: "G0 Z{safe_z}\nM5\nT{tool_number} M6\nM0 (Werkzeugwechsel – weiter mit Cycle Start)".into(),
@@ -865,22 +897,22 @@ impl App {
 
     fn pp_editor(ui: &mut egui::Ui, dlg: &mut super::PpDialog) {
         let pp = &mut dlg.editing;
-        ui.label(egui::RichText::new("Name").small().strong());
+        ui.label(egui::RichText::new(t!("Name")).small().strong());
         ui.text_edit_singleline(&mut pp.name);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            ui.label("Dateiendung:");
+            ui.label(t!("Dateiendung:"));
             egui::TextEdit::singleline(&mut pp.ext).desired_width(60.0).show(ui);
         });
-        ui.checkbox(&mut pp.tool_change, "Werkzeugwechsel unterstützt");
+        ui.checkbox(&mut pp.tool_change, t!("Werkzeugwechsel unterstützt"));
         ui.add_space(6.0);
 
-        const TABS: &[(&str, &str)] = &[
-            ("Job Start", "Wird einmal am Anfang eingefügt.\nPlatzhalter: {safe_z} {home_z} {tool_number} {rpm}"),
-            ("Vor Werkzeugweg", "Vor jedem Werkzeugweg (nach S/M3)."),
-            ("Werkzeugwechsel", "Zwischen zwei Werkzeugwegen mit unterschiedlichem Werkzeug."),
-            ("Nach Werkzeugweg", "Am Ende jedes Werkzeugwegs."),
-            ("Job Ende", "Wird einmal am Ende eingefügt."),
+        const TABS: &[(crate::lang::Tr, crate::lang::Tr)] = &[
+            (tr!("Job Start"), tr!("Wird einmal am Anfang eingefügt.\nPlatzhalter: {safe_z} {home_z} {tool_number} {rpm}")),
+            (tr!("Vor Werkzeugweg"), tr!("Vor jedem Werkzeugweg (nach S/M3).")),
+            (tr!("Werkzeugwechsel"), tr!("Zwischen zwei Werkzeugwegen mit unterschiedlichem Werkzeug.")),
+            (tr!("Nach Werkzeugweg"), tr!("Am Ende jedes Werkzeugwegs.")),
+            (tr!("Job Ende"), tr!("Wird einmal am Ende eingefügt.")),
         ];
 
         ui.horizontal(|ui| {
@@ -922,14 +954,14 @@ impl App {
         let output = egui::TextEdit::multiline(val)
             .font(egui::FontId::monospace(12.0))
             .desired_width(f32::INFINITY)
-            .hint_text("(leer = kein Einfügen)")
+            .hint_text(t!("(leer = kein Einfügen)"))
             .layouter(&mut layouter.clone())
             .min_size(Vec2::new(0.0, remaining))
             .show(ui);
         super::gcode_highlight::gcode_tooltips(val, &output.response, &output.galley, output.galley_pos);
 
         ui.add_space(2.0);
-        ui.label(egui::RichText::new("Platzhalter: {safe_z} {home_z} {tool_number} {rpm}").small().color(muted()));
+        ui.label(egui::RichText::new(t!("Platzhalter: {safe_z} {home_z} {tool_number} {rpm}")).small().color(muted()));
     }
 
     pub(super) fn tool_dialog_ui(&mut self, ctx: &egui::Context) {
@@ -942,7 +974,7 @@ impl App {
         let mat = dlg.material.clone();
         let mut open = true;
         let screen = ctx.screen_rect();
-        egui::Window::new("Werkzeug-Verwaltung")
+        egui::Window::new(t!("Werkzeug-Verwaltung"))
             .id(egui::Id::new("tool_dialog_win"))
             .open(&mut open)
             .order(egui::Order::Foreground)
@@ -954,11 +986,11 @@ impl App {
             .show(ctx, |ui| {
                 egui::TopBottomPanel::bottom("tool_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.add(egui::Button::new(egui::RichText::new("Speichern").strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                        if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                             save = true;
                         }
                         ui.add_space(4.0);
-                        if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                        if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
                             close = true;
                         }
                     });
@@ -966,16 +998,16 @@ impl App {
 
                 egui::SidePanel::left("tool_list_panel").exact_width(160.0).resizable(false).frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 4.0, top: 0.0, bottom: 0.0 })).show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Werkzeuge").strong());
+                        ui.label(egui::RichText::new(t!("Werkzeuge")).strong());
                         ui.label(egui::RichText::new(format!("({})", crate::tools::material_label(&mat))).small().color(muted()));
                     });
                     egui::TopBottomPanel::bottom("tool_list_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 4.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                         ui.horizontal(|ui| {
-                            if ui.small_button("+").on_hover_text("Neues Werkzeug anlegen").clicked() {
+                            if ui.small_button("+").on_hover_text(t!("Neues Werkzeug anlegen")).clicked() {
                                 pick = Some(usize::MAX);
                             }
                             let can_delete = dlg.index.is_some();
-                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text("Ausgewähltes Werkzeug löschen").clicked() {
+                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text(t!("Ausgewähltes Werkzeug löschen")).clicked() {
                                 delete = true;
                             }
                         });
@@ -986,7 +1018,7 @@ impl App {
                                 continue;
                             }
                             let is_selected = dlg.index == Some(i);
-                            let label = if is_selected { &dlg.editing.name } else { &entry.tool.name };
+                            let label = &crate::tools::shown_name(if is_selected { &dlg.editing.name } else { &entry.tool.name });
                             let orig_tool = dlg.original.get(i).map(|e| &e.tool);
                             let changed = if is_selected {
                                 orig_tool.map_or(true, |b| dlg.editing != *b)
@@ -1084,11 +1116,11 @@ impl App {
 
     fn tool_editor(ui: &mut egui::Ui, dlg: &mut super::ToolDialog) {
         let t = &mut dlg.editing;
-        ui.label(egui::RichText::new("Name").small().strong());
+        ui.label(egui::RichText::new(t!("Name")).small().strong());
         ui.text_edit_singleline(&mut t.name);
         ui.add_space(4.0);
         egui::Grid::new("tool_edit_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-            ui.label("Typ");
+            ui.label(t!("Typ"));
             egui::ComboBox::from_id_salt("tool_kind").width(140.0).selected_text(t.kind.group()).show_ui(ui, |ui| {
                 for &k in crate::tools::ToolKind::all() {
                     if ui.selectable_label(t.kind == k, k.group()).clicked() {
@@ -1097,27 +1129,27 @@ impl App {
                 }
             });
             ui.end_row();
-            ui.label("Durchmesser");
+            ui.label(t!("Durchmesser"));
             ui.add(egui::DragValue::new(&mut t.diameter).speed(0.1).range(0.1..=100.0).max_decimals(2).suffix(" mm"));
             ui.end_row();
             if t.kind == crate::tools::ToolKind::VBit || t.kind == crate::tools::ToolKind::Drill {
-                ui.label("Winkel");
+                ui.label(t!("Winkel"));
                 ui.add(egui::DragValue::new(&mut t.angle).speed(1.0).range(1.0..=180.0).suffix(" °"));
                 ui.end_row();
             }
-            ui.label("Drehzahl");
-            ui.add(egui::DragValue::new(&mut t.rpm).speed(100).range(0..=60000).suffix(" U/min"));
+            ui.label(t!("Drehzahl"));
+            ui.add(egui::DragValue::new(&mut t.rpm).speed(100).range(0..=60000).suffix(t!(" U/min")));
             ui.end_row();
-            ui.label("Vorschub");
+            ui.label(t!("Vorschub"));
             ui.add(egui::DragValue::new(&mut t.feed).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
             ui.end_row();
-            ui.label("Eintauchen");
+            ui.label(t!("Eintauchen"));
             ui.add(egui::DragValue::new(&mut t.plunge).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
             ui.end_row();
-            ui.label("Zustellung");
+            ui.label(t!("Zustellung"));
             ui.add(egui::DragValue::new(&mut t.stepdown).speed(0.05).range(0.01..=50.0).max_decimals(3).suffix(" mm"));
             ui.end_row();
-            ui.label("Querzustellung");
+            ui.label(t!("Querzustellung"));
             let pct = if t.diameter > 0.0 { t.stepover / t.diameter * 100.0 } else { 0.0 };
             ui.horizontal(|ui| {
                 ui.add(egui::DragValue::new(&mut t.stepover).speed(0.05).range(0.01..=50.0).max_decimals(3).suffix(" mm"));
@@ -1137,8 +1169,8 @@ impl App {
         let total: f64 = self.toolpaths.iter().filter(|t| t.visible).map(|t| t.stats().minutes).sum();
         ui.add_space(4.0);
         ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 16.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(egui::RichText::new(format!("Σ Fräszeit (sichtbar) {}", fmt_time(total))).small().color(muted()))
-                .on_hover_text(format!("Gesamte Fräszeit der sichtbaren Werkzeugwege: {total:.2} Minuten"));
+            ui.label(egui::RichText::new(t!("Σ Fräszeit (sichtbar) %{time}", time = fmt_time(total))).small().color(muted()))
+                .on_hover_text(t!("Gesamte Fräszeit der sichtbaren Werkzeugwege: %{minutes} Minuten", minutes = format!("{total:.2}")));
         });
     }
 
@@ -1152,23 +1184,23 @@ impl App {
 
     fn toolpath_list(&mut self, ui: &mut egui::Ui) {
         let all_hidden = self.toolpaths.iter().all(|t| !t.visible);
-        let label = if all_hidden { "Alle einblenden" } else { "Alle ausblenden" };
+        let label = if all_hidden { t!("Alle einblenden") } else { t!("Alle ausblenden") };
         ui.horizontal(|ui| {
-            if eye(ui, !all_hidden, label).clicked() {
+            if eye(ui, !all_hidden, &label).clicked() {
                 for t in &mut self.toolpaths {
                     t.visible = all_hidden;
                 }
                 self.sim = None;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("↻").on_hover_text("Alle Werkzeugpfade neu berechnen").clicked() {
+                if ui.small_button("↻").on_hover_text(t!("Alle Werkzeugpfade neu berechnen")).clicked() {
                     self.recompute_all();
                     self.status = "Alle Werkzeugpfade neu berechnet".into();
                 }
             });
         });
         if self.toolpaths.is_empty() {
-            ui.label(egui::RichText::new("Noch keine Werkzeugpfade.").color(muted()));
+            ui.label(egui::RichText::new(t!("Noch keine Werkzeugpfade.")).color(muted()));
             return;
         }
         let (mut remove, mut edit) = (None, None);
@@ -1189,8 +1221,8 @@ impl App {
             if tool_entries[i] {
                 ui.horizontal(|ui| {
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new(format!("Werkzeug: {}", tp.tool.name)).small().strong().color(muted()))
-                        .on_hover_text("Ab hier fräst dieses Werkzeug, bis ein anderes eingetragen ist. Beim Speichern lässt sich je Werkzeug eine eigene Datei schreiben.");
+                    ui.label(egui::RichText::new(t!("Werkzeug: %{name}", name = crate::tools::shown_name(&tp.tool.name))).small().strong().color(muted()))
+                        .on_hover_text(t!("Ab hier fräst dieses Werkzeug, bis ein anderes eingetragen ist. Beim Speichern lässt sich je Werkzeug eine eigene Datei schreiben."));
                 });
             }
             let active = self.editor.as_ref().is_some_and(|e| e.index == Some(i));
@@ -1233,7 +1265,7 @@ impl App {
                         tp.visible = !tp.visible;
                     }
                     let minutes = tp.stats().minutes;
-                    let tip = format!("{}\n{}: Start {:.1} mm, Schnitt {:.1} mm\nGesamte Fräszeit: {:.2} Minuten ({})\nDoppelklick: bearbeiten", tp.name, tp.strategy.label(), tp.start_depth, tp.cut_depth, minutes, fmt_time(minutes));
+                    let tip = t!("%{name}\n%{kind}: Start %{start} mm, Schnitt %{cut} mm\nGesamte Fräszeit: %{minutes} Minuten (%{time})\nDoppelklick: bearbeiten", name = tp.name, kind = tp.strategy.label(), start = format!("{:.1}", tp.start_depth), cut = format!("{:.1}", tp.cut_depth), minutes = format!("{minutes:.2}"), time = fmt_time(minutes));
                     let (sq, sq_resp) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
                     ui.painter().rect_filled(sq, 2.0, tp_color(&tp.strategy));
                     sq_resp.on_hover_text(&tip);
@@ -1252,7 +1284,7 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let hovered = ui.rect_contains_pointer(ui.max_rect());
                         if hovered {
-                            if ui.small_button("🗑").on_hover_text("Löschen").clicked() {
+                            if ui.small_button("🗑").on_hover_text(t!("Löschen")).clicked() {
                                 remove = Some(i);
                             }
                             let edit_btn = ui.add(egui::Button::new("").small().min_size(Vec2::new(18.0, 18.0)));
@@ -1269,7 +1301,7 @@ impl App {
                                 p.line_segment([tip + Vec2::new(3.0, 1.0), top + Vec2::new(1.0, -3.0)], Stroke::new(1.0_f32, c));
                                 p.line_segment([tip + Vec2::new(-1.0, 3.0), top + Vec2::new(-3.0, 1.0)], Stroke::new(1.0_f32, c));
                             }
-                            edit_btn.on_hover_text("Bearbeiten");
+                            edit_btn.on_hover_text(t!("Bearbeiten"));
                         }
                         ui.label(egui::RichText::new(fmt_time(tp.stats().minutes)).small().color(muted()));
                     });
@@ -1467,7 +1499,7 @@ pub(super) fn combo_with_manage(
                 items(ui);
             });
             ui.separator();
-            if ui.button("Verwalten\u{2026}").clicked() {
+            if ui.button(t!("Verwalten\u{2026}")).clicked() {
                 manage = true;
                 ui.memory_mut(|m| m.close_popup());
             }

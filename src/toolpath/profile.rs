@@ -12,8 +12,8 @@ pub struct ProfileTool {
 }
 
 impl ToolpathKind for ProfileTool {
-    fn label(&self) -> &'static str {
-        "Profil"
+    fn label(&self) -> String {
+        t!("Profil")
     }
 
     fn cut(&self, out: &mut Out, cx: &CutContext) -> Option<String> {
@@ -28,7 +28,7 @@ impl ToolpathKind for ProfileTool {
         };
         let rings = region.offset(off).rings();
         if rings.is_empty() && !closed.is_empty() {
-            warning = Some("Werkzeug zu groß für diese Form".into());
+            warning = Some(t!("Werkzeug zu groß für diese Form").into());
         }
         let tab_top = -(cx.cut_depth - TAB_THICKNESS.min(cx.cut_depth));
         for ring in &rings {

@@ -40,7 +40,7 @@ pub fn format_of(path: &Path) -> Option<&'static Format> {
 
 /// Read a file with the reader of its format.
 pub fn read_file(path: &Path) -> Result<(&'static Format, Import), String> {
-    let format = format_of(path).ok_or_else(|| "Dieses Dateiformat kann nicht importiert werden.".to_string())?;
+    let format = format_of(path).ok_or_else(|| t!("Dieses Dateiformat kann nicht importiert werden.").to_string())?;
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     Ok((format, (format.read)(&bytes)?))
 }
