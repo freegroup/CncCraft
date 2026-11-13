@@ -211,6 +211,7 @@ impl Toolpath {
         let contours: Vec<Contour> = shapes.iter().filter(|s| !s.hidden && self.shape_ids.contains(&s.id)).flat_map(|s| s.shape.contours()).collect();
         let mut out = Out { moves: vec![], job };
         out.rapid([0.0, 0.0, job.home_z]);
+        out.rapid([0.0, 0.0, job.safe_z]);
         if contours.is_empty() {
             self.warning = Some("Keine Vektoren gewählt".into());
         } else {
@@ -263,7 +264,7 @@ impl Out<'_> {
     pub fn feed(&mut self, p: [f64; 3]) {
         self.moves.push(Move { to: p, rapid: false });
     }
-    /// Retract, travel above `p`, then plunge to it.
+    /// Retract to safe_z, travel in XY at safe_z, then plunge to target.
     pub fn go_to(&mut self, p: [f64; 3]) {
         let c = self.cur();
         let safe = self.job.safe_z;
@@ -271,8 +272,9 @@ impl Out<'_> {
             if c[2] < safe {
                 self.rapid([c[0], c[1], safe]);
             }
-            self.rapid([p[0], p[1], safe]);
-            // rapid down to just above where material may already be cut
+            self.rapid([p[0], p[1], c[2].max(safe)]);
+        }
+        if (self.cur()[2] - 0.5_f64.min(safe)).abs() > 1e-6 {
             self.rapid([p[0], p[1], 0.5_f64.min(safe)]);
         }
         self.feed(p);

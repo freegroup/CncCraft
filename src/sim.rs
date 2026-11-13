@@ -277,22 +277,41 @@ impl Projection {
     }
 }
 
-/// Toolpath lines drawn over the 3D view (cutting moves only, slightly above where they cut).
+/// Toolpath lines drawn over the 3D view: rapid/travel dashed cyan, plunge yellow, cut in strategy colour.
 pub fn paint_paths(painter: &egui::Painter, proj: &Projection, paths: &[(&Toolpath, egui::Color32)]) {
+    let rapid_col = egui::Color32::from_rgba_premultiplied(0x00, 0xbb, 0xcc, 0x70);
+    let plunge_col = egui::Color32::from_rgb(0xe0, 0xb0, 0x20).gamma_multiply(0.55);
     for (tp, col) in paths {
-        let mut pts: Vec<Pos2> = Vec::new();
+        let mut prev: Option<[f64; 3]> = None;
         for m in &tp.moves {
-            if m.rapid && pts.len() > 1 {
-                painter.add(egui::Shape::line(std::mem::take(&mut pts), Stroke::new(1.0_f32, *col)));
+            let p = proj.to_screen([m.to[0] as f32, m.to[1] as f32, (m.to[2] as f32).min(0.3)]);
+            if let Some(pr) = prev {
+                let from = proj.to_screen([pr[0] as f32, pr[1] as f32, (pr[2] as f32).min(0.3)]);
+                if m.rapid {
+                    paint_dashed_3d(painter, from, p, 4.0, 3.0, Stroke::new(0.6_f32, rapid_col));
+                } else {
+                    let lateral = (m.to[0] - pr[0]).abs() > 1e-6 || (m.to[1] - pr[1]).abs() > 1e-6;
+                    let c = if lateral { *col } else { plunge_col };
+                    painter.line_segment([from, p], Stroke::new(1.0_f32, c));
+                }
             }
-            if m.rapid {
-                pts.clear();
-            }
-            pts.push(proj.to_screen([m.to[0] as f32, m.to[1] as f32, (m.to[2] as f32).min(0.3)]));
+            prev = Some(m.to);
         }
-        if pts.len() > 1 {
-            painter.add(egui::Shape::line(pts, Stroke::new(1.0_f32, *col)));
-        }
+    }
+}
+
+fn paint_dashed_3d(painter: &egui::Painter, a: Pos2, b: Pos2, dash: f32, gap: f32, stroke: Stroke) {
+    let d = b - a;
+    let len = d.length();
+    if len < 0.5 {
+        return;
+    }
+    let dir = d / len;
+    let mut t = 0.0_f32;
+    while t < len {
+        let end = (t + dash).min(len);
+        painter.line_segment([a + dir * t, a + dir * end], stroke);
+        t = end + gap;
     }
 }
 
