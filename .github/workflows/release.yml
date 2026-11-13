@@ -22,7 +22,33 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Regel: Änderungen an .rs-Dateien müssen als feat:/fix: committet werden, damit
+  # semantic-release ein Release erzeugt. Dieser Job schlägt fehl, wenn seit dem
+  # letzten Release-Tag .rs-Dateien geändert wurden, aber kein feat:/fix:-Commit vorliegt.
+  guard-rs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: ".rs-Änderungen erfordern feat:/fix:-Commit"
+        run: |
+          base=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n1)
+          echo "Basis seit letztem Release: $base"
+          if git diff --name-only "$base"..HEAD | grep -qE '\.rs$'; then
+            if git log "$base"..HEAD --format='%s' | grep -qE '^(feat|fix)(\([^)]+\))?!?:'; then
+              echo "OK: .rs-Dateien geändert und feat:/fix:-Commit vorhanden."
+            else
+              echo "::error::.rs-Dateien wurden seit $base geändert, aber es gibt keinen feat:/fix:-Commit – es würde kein Release ausgelöst. Bitte die Code-Änderung als feat: oder fix: committen."
+              exit 1
+            fi
+          else
+            echo "Keine .rs-Änderungen seit $base – kein feat/fix erforderlich."
+          fi
+
   release:
+    needs: guard-rs
     runs-on: ubuntu-latest
     outputs:
       published: ${{ steps.sr.outputs.new_release_published }}
