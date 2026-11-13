@@ -39,7 +39,7 @@ pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
 pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, Shape, Text};
 pub use geometry::Contour;
 pub use handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
-pub use item::Item;
+pub use item::{can_group, group_items, ungroup_items, Item, Source};
 pub use region::{Region, Ring};
 pub use snap::{snap_angle, SnapKind, Snapping};
 pub use vars::{Resolved, VarEvent, Variable, Variables};
@@ -80,6 +80,10 @@ pub trait Editable: Clone {
     /// The shape's layer is locked: it is drawn, but nothing can be done with it.
     fn frozen(&self) -> bool {
         false
+    }
+    /// The outermost group the shape is in: picking one member of a group picks all of them.
+    fn group(&self) -> Option<u64> {
+        None
     }
     fn translated(&self, dx: f64, dy: f64) -> Self;
     /// Scale by (sx, sy) about the fixed world point `anchor`. Factors are always positive.

@@ -6,11 +6,34 @@ use crate::geometry::{dist_to_segment, point_in_ring};
 use crate::{Editable, Pt};
 use serde::{Deserialize, Serialize};
 
+/// Where a shape was imported from, so it can be read from disk again.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Source {
+    /// The file's path as it was when the shape came in.
+    pub file: String,
+    /// The format's short name ("DXF").
+    pub format: String,
+    /// Which of the file's shapes this is (in the order the importer made them), so a reload
+    /// knows what to read back into it. A copy keeps the number of its original.
+    pub index: usize,
+    /// How far the import moved the drawing (mm), so a reload puts it in the same place.
+    pub offset: Pt,
+}
+
 /// A shape in a drawing, with the id the selection refers to.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Item {
     pub id: u64,
     pub shape: Shape,
+    /// The file the shape was imported from, if it was. Any shape can have one. Old project files
+    /// have none.
+    #[serde(default)]
+    pub source: Option<Source>,
+    /// The groups the shape is in, innermost first: a group inside a group lists both. Picking any
+    /// member picks the whole outermost group; ungrouping takes the shape out of its outermost
+    /// group only. Old project files have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<u64>,
     /// Sizes typed as a formula or variable (e.g. `Höhe = "hoehe"`): the expression is the source
     /// of truth and the shape's number is derived from it whenever the variables change. Old
     /// project files have none.
@@ -35,6 +58,49 @@ pub struct Item {
 
 fn first_layer() -> u32 {
     1
+}
+
+/// Whether the items with these ids can be grouped: they are at least two things, where a whole
+/// group counts as one thing (a single group, however many shapes it holds, is nothing to group).
+pub fn can_group(items: &[Item], ids: &[u64]) -> bool {
+    let mut units: Vec<(bool, u64)> = Vec::new();
+    for item in items.iter().filter(|i| ids.contains(&i.id)) {
+        let unit = match item.groups.last() {
+            Some(group) => (true, *group),
+            None => (false, item.id),
+        };
+        if !units.contains(&unit) {
+            units.push(unit);
+        }
+    }
+    units.len() >= 2
+}
+
+/// Put the items with these ids (and the rest of their outermost groups) into a new group
+/// `group_id`. Groups inside groups work: a group that is grouped becomes part of the new one.
+/// Returns whether anything was grouped (see [`can_group`]).
+pub fn group_items(items: &mut [Item], ids: &[u64], group_id: u64) -> bool {
+    if !can_group(items, ids) {
+        return false;
+    }
+    let tops: Vec<u64> = items.iter().filter(|i| ids.contains(&i.id)).filter_map(|i| i.groups.last().copied()).collect();
+    let members: Vec<usize> = (0..items.len()).filter(|&k| ids.contains(&items[k].id) || items[k].groups.last().is_some_and(|g| tops.contains(g))).collect();
+    for k in members {
+        items[k].groups.push(group_id);
+    }
+    true
+}
+
+/// Take the items with these ids (and the rest of their outermost groups) out of their outermost
+/// group: the group is dissolved, a group inside it stays. Returns whether there was a group.
+pub fn ungroup_items(items: &mut [Item], ids: &[u64]) -> bool {
+    let tops: Vec<u64> = items.iter().filter(|i| ids.contains(&i.id)).filter_map(|i| i.groups.last().copied()).collect();
+    for item in items.iter_mut() {
+        if item.groups.last().is_some_and(|g| tops.contains(g)) {
+            item.groups.pop();
+        }
+    }
+    !tops.is_empty()
 }
 
 impl Item {
@@ -63,7 +129,7 @@ impl Item {
     }
 
     pub fn new(id: u64, shape: impl Into<Shape>) -> Self {
-        Item { id, shape: shape.into(), bound: vec![], locked: (false, false), layer: 1, hidden: false, frozen: false }
+        Item { id, shape: shape.into(), source: None, groups: vec![], bound: vec![], locked: (false, false), layer: 1, hidden: false, frozen: false }
     }
 }
 
@@ -110,6 +176,10 @@ impl Editable for Item {
 
     fn hidden(&self) -> bool {
         self.hidden
+    }
+
+    fn group(&self) -> Option<u64> {
+        self.groups.last().copied()
     }
 
     fn frozen(&self) -> bool {
@@ -329,6 +399,108 @@ mod tests {
         assert_eq!(circle.snap_points(), vec![([1.0, 2.0], SnapKind::Centre)]);
         let open = Item::new(3, Path::new(vec![[0.0, 0.0], [4.0, 0.0], [4.0, 2.0]], false));
         assert_eq!((kinds(&open, SnapKind::Node), kinds(&open, SnapKind::MidPoint), kinds(&open, SnapKind::Centre)), (3, 2, 0));
+    }
+
+    fn dots(n: u64) -> Vec<Item> {
+        (1..=n).map(|id| Item::new(id, Circle::new([id as f64 * 10.0, 0.0], 2.0))).collect()
+    }
+
+    #[test]
+    fn a_click_on_a_member_picks_the_whole_group() {
+        let mut items = dots(4);
+        assert!(group_items(&mut items, &[1, 2], 100));
+        let mut ed = Editor::default();
+        assert!(matches!(ed.press(&items, [20.0, 2.0], VIEW, Tool::Select, false), Started::Move));
+        ed.release(&items);
+        let mut picked = ed.selection.clone();
+        picked.sort();
+        assert_eq!(picked, vec![1, 2], "one member brings the other");
+
+        // a shape of its own is picked alone, and a band picks a group when it takes one member
+        assert!(matches!(ed.press(&items, [30.0, 2.0], VIEW, Tool::Select, false), Started::Move));
+        ed.release(&items);
+        assert_eq!(ed.selection, vec![3]);
+        ed.press(&items, [5.0, 20.0], VIEW, Tool::Select, false);
+        ed.drag(&mut items, [15.0, -5.0], false);
+        ed.release(&items);
+        let mut picked = ed.selection.clone();
+        picked.sort();
+        assert_eq!(picked, vec![1, 2]);
+
+        // shift-click on a member of the selected group takes the whole group out again
+        assert!(matches!(ed.press(&items, [10.0, 2.0], VIEW, Tool::Select, true), Started::Move));
+        ed.release(&items);
+        assert!(ed.selection.is_empty());
+    }
+
+    #[test]
+    fn a_click_on_one_of_several_selected_shapes_picks_that_one_alone() {
+        let mut items = dots(3);
+        let mut ed = Editor::default();
+        ed.selection = vec![1, 2, 3];
+        ed.press(&items, [10.0, 2.0], VIEW, Tool::Select, false);
+        ed.release(&items);
+        assert_eq!(ed.selection, vec![1], "a click without moving narrows the selection");
+
+        // dragging one of several selected shapes still moves them all and keeps the selection
+        ed.selection = vec![1, 2, 3];
+        ed.press(&items, [10.0, 2.0], VIEW, Tool::Select, false);
+        ed.drag(&mut items, [15.0, 2.0], false);
+        ed.release(&items);
+        assert_eq!(ed.selection, vec![1, 2, 3]);
+
+        // in a group the click narrows to the group
+        let mut items = dots(3);
+        group_items(&mut items, &[1, 2], 100);
+        ed.selection = vec![1, 2, 3];
+        ed.press(&items, [10.0, 2.0], VIEW, Tool::Select, false);
+        ed.release(&items);
+        ed.selection.sort();
+        assert_eq!(ed.selection, vec![1, 2]);
+
+        // a shift-click still adds and removes
+        ed.press(&items, [30.0, 2.0], VIEW, Tool::Select, true);
+        ed.release(&items);
+        ed.selection.sort();
+        assert_eq!(ed.selection, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn groups_nest_and_ungroup_one_level_at_a_time() {
+        let mut items = dots(4);
+        assert!(group_items(&mut items, &[1, 2], 100));
+        // the group and a loose shape make a bigger group
+        assert!(group_items(&mut items, &[1, 3], 200));
+        assert_eq!(items[0].groups, vec![100, 200]);
+        assert_eq!(items[1].groups, vec![100, 200], "the rest of the group came along");
+        assert_eq!(items[2].groups, vec![200]);
+        assert!(items[3].groups.is_empty());
+        // one group already: nothing to do
+        assert!(!group_items(&mut items, &[1, 2, 3], 300));
+        assert!(!group_items(&mut items, &[4], 300), "one shape alone");
+
+        assert!(ungroup_items(&mut items, &[3]));
+        assert_eq!((items[0].groups.clone(), items[1].groups.clone(), items[2].groups.clone()), (vec![100], vec![100], vec![]));
+        assert!(ungroup_items(&mut items, &[1]));
+        assert!(items.iter().all(|i| i.groups.is_empty()));
+        assert!(!ungroup_items(&mut items, &[1, 2, 3]), "nothing left to ungroup");
+    }
+
+    #[test]
+    fn grouping_needs_two_things_and_ungrouping_takes_every_selected_group_apart() {
+        let mut items = dots(5);
+        assert!(!can_group(&items, &[1]), "one shape");
+        assert!(can_group(&items, &[1, 2]));
+        group_items(&mut items, &[1, 2], 100);
+        group_items(&mut items, &[3, 4], 200);
+        assert!(!can_group(&items, &[1, 2]), "a whole group is one thing");
+        assert!(!can_group(&items, &[1, 2, 99]), "an id that is not there counts for nothing");
+        assert!(can_group(&items, &[1, 2, 5]), "a group and a shape");
+        assert!(can_group(&items, &[1, 3]), "two groups");
+
+        // two groups selected: both are dissolved, the shape outside any group is left as it is
+        assert!(ungroup_items(&mut items, &[1, 2, 3, 4, 5]));
+        assert!(items.iter().all(|i| i.groups.is_empty()));
     }
 
     #[test]

@@ -8,7 +8,9 @@ mod fields;
 mod gcode_highlight;
 mod gcode_overlay;
 mod input;
+mod grouping;
 mod icons;
+mod importing;
 mod layers_ui;
 mod layout;
 mod menus;
@@ -96,6 +98,11 @@ enum Icon {
     ZoomSelection,
     /// Opens the variables dialog (an f(x) button next to Job setup).
     Variables,
+    /// Brings in a drawing from a file (a page marked DXF); next to the shape tools.
+    ImportDxf,
+    /// Make the selection one group, and take the outermost group apart (under the boolean operations).
+    Group,
+    Ungroup,
     /// Shows or hides the dimension lines (a switch beside grid and magnet).
     Dimensions,
     /// The dimension mode: constrain the distance between two points or a point and a line.
@@ -104,6 +111,15 @@ enum Icon {
     Align,
     /// Show or hide the origin: the axis cross of the sheet and the zero cross of the 3D view.
     Origin,
+}
+
+/// What the right-click menu of the canvas works on: the shape under the pointer when it opened.
+#[derive(Clone)]
+struct ShapeMenu {
+    id: u64,
+    /// The file the shape was imported from, if it was.
+    source: Option<shape_edit::Source>,
+    grouped: bool,
 }
 
 /// What a copy carries: the shapes with their own sizes and level/upright constraints (never a
@@ -282,6 +298,10 @@ pub struct App {
     thumb_restore_mode: Option<ViewMode>,
     /// The moves of the G-code shown over the 3D view (see `gcode_overlay`).
     gcode_overlay: Option<gcode_overlay::GcodeOverlay>,
+    /// The file of an import that could not be found when it was to be read again (shows a notice).
+    import_missing: Option<String>,
+    /// The shape the canvas' right-click menu was opened on (only shapes with something to offer).
+    shape_menu: Option<ShapeMenu>,
     status: String,
     mouse_mm: Option<Pt>,
     offset_dist: f64,
@@ -455,6 +475,8 @@ impl App {
             thumb_pending: 0,
             thumb_restore_mode: None,
             gcode_overlay: None,
+            import_missing: None,
+            shape_menu: None,
             status: "Bereit".into(),
             mouse_mm: None,
             offset_dist: 5.0,
@@ -1780,6 +1802,44 @@ impl App {
         // shapes
         let view = self.view();
         let hover_id = if self.tool == DrawTool::Select && !self.edit.is_busy() { mouse.and_then(|m| self.edit.shape_under(&self.shapes, m, view)) } else { None };
+        // a shape that came from a file offers, on a right click, to be read from disk again, and one
+        // in a group to be ungrouped; the shape under the pointer is looked at once, when the menu opens
+        if resp.secondary_clicked() {
+            self.shape_menu = mouse
+                .and_then(|m| self.edit.shape_under(&self.shapes, m, view))
+                .and_then(|id| self.shapes.iter().find(|s| s.id == id))
+                .map(|s| ShapeMenu { id: s.id, source: s.source.clone(), grouped: !s.groups.is_empty() })
+                .filter(|m| m.source.is_some() || m.grouped);
+        }
+        if let Some(menu) = self.shape_menu.clone() {
+            let (mut reload, mut ungroup) = (false, false);
+            resp.context_menu(|ui| {
+                if let Some(source) = &menu.source {
+                    let name = std::path::Path::new(&source.file).file_name().map_or_else(|| source.file.clone(), |n| n.to_string_lossy().into_owned());
+                    ui.label(egui::RichText::new(format!("{}-Import: {name}", source.format)).small().color(muted()));
+                    if ui.button("Neu von Platte laden").on_hover_text("Liest die Datei noch einmal ein und ersetzt die importierten Formen").clicked() {
+                        reload = true;
+                        ui.close_menu();
+                    }
+                }
+                if menu.source.is_some() && menu.grouped {
+                    ui.separator();
+                }
+                if menu.grouped && ui.button("Gruppe auflösen").on_hover_text("Löst die äußerste Gruppe auf; eine Gruppe darin bleibt").clicked() {
+                    ungroup = true;
+                    ui.close_menu();
+                }
+            });
+            if reload || ungroup {
+                self.shape_menu = None;
+            }
+            if let Some(source) = menu.source.as_ref().filter(|_| reload) {
+                self.reload_import(&source.file, None);
+            }
+            if ungroup {
+                self.ungroup(&[menu.id]);
+            }
+        }
         // always, as in Fusion 360: edges that are still free are blue, edges whose length was set
         // (a size typed in or from a variable, a distance on the shape) black
         let mark_free = true;
@@ -2334,6 +2394,8 @@ impl App {
             Action::Undo => self.do_undo(),
             Action::Redo => self.do_redo(),
             Action::SelectAll => self.edit.selection = self.shapes.iter().filter(|s| !s.hidden && !s.frozen).map(|s| s.id).collect(),
+            Action::Group => self.group_selection(),
+            Action::Ungroup => self.ungroup_selection(),
             Action::Duplicate => self.duplicate(),
             Action::Copy => self.copy_selection(),
             Action::Cut => {
@@ -2497,6 +2559,7 @@ impl App {
         self.push_undo();
         self.edit.selection.clear();
         let mut map = vec![];
+        let first_copy = self.shapes.len();
         for it in &clip.items {
             let id = self.new_id();
             let mut copy = it.translated(10.0, -10.0);
@@ -2511,6 +2574,10 @@ impl App {
             map.push((it.id, id));
             self.edit.selection.push(id);
         }
+        // the copies of a group form a group of their own
+        let mut pasted = self.shapes.split_off(first_copy);
+        self.regroup_copies(&mut pasted);
+        self.shapes.extend(pasted);
         self.add_extras(clip, &map, [10.0, -10.0]);
         self.status = format!("{} Objekt(e) eingefügt", map.len());
     }
@@ -2527,6 +2594,14 @@ impl App {
                 map.push((o.id, id));
             }
             self.shapes.push(o);
+        }
+        // the copies of a group form a group of their own
+        let mut moved: Vec<Item> = self.shapes.iter().filter(|s| copies.contains(&s.id)).cloned().collect();
+        self.regroup_copies(&mut moved);
+        for m in moved {
+            if let Some(s) = self.shapes.iter_mut().find(|s| s.id == m.id) {
+                s.groups = m.groups;
+            }
         }
         // the copies bring their own constraints and the toolpaths of their originals
         let old: Vec<u64> = map.iter().map(|(o, _)| *o).collect();
@@ -2720,6 +2795,7 @@ impl eframe::App for App {
         if self.shortcuts_open {
             shortcuts::window(ctx, &mut self.shortcuts_open);
         }
+        self.import_missing_ui(ctx);
         self.pp_dialog_ui(ctx);
         self.tool_dialog_ui(ctx);
         self.save_thumbnail(ctx);

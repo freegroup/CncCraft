@@ -22,6 +22,9 @@ pub(super) enum Action {
     Undo,
     Redo,
     SelectAll,
+    /// Make the selection one group / take the outermost group apart.
+    Group,
+    Ungroup,
     Duplicate,
     Copy,
     Cut,
@@ -83,6 +86,8 @@ pub(super) const SHORTCUTS: &[Shortcut] = &[
     sc(Action::Undo, Key::Z, true, false, "Rückgängig", EST),
     sc(Action::Redo, Key::Z, true, true, "Wiederholen", "Text „Ctrl+Shift+Z“ im Programm (0x1004eea4c)"),
     sc(Action::SelectAll, Key::A, true, false, "Alles auswählen", EST),
+    sc(Action::Group, Key::G, true, false, "Gruppieren (auch Gruppen in Gruppen)", EST),
+    sc(Action::Ungroup, Key::G, true, true, "Gruppe auflösen (eine Ebene)", EST),
     sc(Action::Duplicate, Key::D, true, false, "Duplizieren", EST),
     sc(Action::Copy, Key::C, true, false, "Kopieren", EST),
     sc(Action::Cut, Key::X, true, false, "Ausschneiden", EST),

@@ -92,7 +92,127 @@ const STAGES: &[Stage] = &[
     stage("Kopieren und Einfügen: Werkzeugweg und eigene Constraints kommen mit, Bezüge zu anderem nicht", copy_paste),
     stage("⌘C und ⌘V (am Mac als Kopieren-/Einfügen-Ereignis) kopieren und fügen ein", cmd_c_cmd_v),
     stage("Nullpunkt-Schalter: Achsenkreuz im Blatt und in 3D zugleich aus und wieder an", origin_toggle),
+    stage("DXF-Datei importieren: eine Gruppe, ein Klick wählt alle, Auflösen ist möglich", dxf_import_is_a_group),
+    stage("Gruppe auflösen: die Formen sind wieder einzeln, Gruppieren ist wieder möglich", dxf_ungroup),
+    stage("Nach dem Auflösen: ein Klick auf den Kreis wählt nur den Kreis", dxf_click_one_after_ungroup),
+    stage("DXF mit nur einer Form: eine Gruppe aus einem Mitglied, Auflösen ist möglich", dxf_single_shape),
 ];
+
+/// A DXF line entity.
+fn dxf_line(a: Pt, b: Pt) -> String {
+    format!("  0\nLINE\n  8\n0\n 10\n{}\n 20\n{}\n 30\n0.0\n 11\n{}\n 21\n{}\n 31\n0.0\n", a[0], a[1], b[0], b[1])
+}
+
+/// Four loose lines that make a rectangle with the corners `lo` and `hi`.
+fn dxf_rectangle(lo: Pt, hi: Pt) -> String {
+    let corners = [lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]];
+    (0..4).map(|i| dxf_line(corners[i], corners[(i + 1) % 4])).collect()
+}
+
+/// Write a DXF file (R14) with these entities to the temporary folder.
+fn write_dxf(name: &str, entities: &str) -> std::path::PathBuf {
+    let text = format!("  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1014\n  0\nENDSEC\n  0\nSECTION\n  2\nENTITIES\n{entities}  0\nENDSEC\n  0\nEOF\n");
+    let path = std::env::temp_dir().join(format!("cnccraft-selftest-{}-{name}.dxf", std::process::id()));
+    std::fs::write(&path, text).expect("a temporary file can be written");
+    path
+}
+
+/// A DXF file (four loose lines that make a rectangle, a circle, one more line) is written to disk
+/// and imported. It comes in as one group: a click on the circle picks all three shapes, "Gruppe
+/// auflösen" is offered and "Gruppieren" is not (it is one group already).
+fn dxf_import_is_a_group(app: &mut App) -> (Vec<Event>, Check) {
+    let entities = format!("{}  0\nCIRCLE\n  8\n0\n 10\n40\n 20\n100\n 30\n0.0\n 40\n10\n{}", dxf_rectangle([20.0, 150.0], [60.0, 170.0]), dxf_line([100.0, 160.0], [140.0, 160.0]));
+    let path = write_dxf("gruppe", &entities);
+
+    app.tool = DrawTool::Select;
+    app.mode = super::ViewMode::TwoD;
+    let before = app.shapes.len();
+    app.import_file(&path);
+    let _ = std::fs::remove_file(&path);
+    let ids: Vec<u64> = app.shapes.iter().skip(before).map(|s| s.id).collect();
+    app.edit.selection.clear();
+    // on the circle's left edge
+    let at = app.to_screen([30.0, 100.0]);
+    let click = vec![
+        Event::PointerMoved(at),
+        Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::default() },
+        Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::default() },
+    ];
+    let check: Check = Box::new(move |app| {
+        let (mut picked, mut want) = (app.edit.selection.clone(), ids.clone());
+        picked.sort();
+        want.sort();
+        let grouped = ids.iter().all(|id| app.shapes.iter().find(|s| s.id == *id).is_some_and(|s| s.groups.len() == 1));
+        let (group_on, ungroup_on) = (app.icon_state(super::Icon::Group).1, app.icon_state(super::Icon::Ungroup).1);
+        let msg = format!("{} Formen importiert, alle in einer Gruppe: {grouped}, der Klick wählte {} davon, Gruppieren aktiv: {group_on}, Gruppe auflösen aktiv: {ungroup_on}", ids.len(), picked.len());
+        if ids.len() == 3 && grouped && picked == want && !group_on && ungroup_on {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (click, check)
+}
+
+/// After ungrouping the import its three shapes are all still selected; a click on the circle (one
+/// of the selected shapes) picks the circle alone, so each shape can be worked on by itself.
+fn dxf_click_one_after_ungroup(app: &mut App) -> (Vec<Event>, Check) {
+    let circle = app.edit.selection.iter().copied().find(|id| app.shapes.iter().any(|s| s.id == *id && matches!(s.shape, Shape::Circle(_)))).expect("the import has a circle");
+    let at = app.to_screen([30.0, 100.0]);
+    let click = vec![
+        Event::PointerMoved(at),
+        Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::default() },
+        Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::default() },
+    ];
+    let check: Check = Box::new(move |app| {
+        let msg = format!("gewählt: {:?} (der Kreis ist {circle})", app.edit.selection);
+        if app.edit.selection == vec![circle] {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (click, check)
+}
+
+/// A file that comes in as one shape only (a rectangle of four lines) is a group of one: "Gruppe
+/// auflösen" is offered, "Gruppieren" is not.
+fn dxf_single_shape(app: &mut App) -> (Vec<Event>, Check) {
+    let path = write_dxf("einzeln", &dxf_rectangle([200.0, 150.0], [240.0, 170.0]));
+    app.tool = DrawTool::Select;
+    let before = app.shapes.len();
+    app.import_file(&path);
+    let _ = std::fs::remove_file(&path);
+    let ids: Vec<u64> = app.shapes.iter().skip(before).map(|s| s.id).collect();
+    let check: Check = Box::new(move |app| {
+        let grouped = ids.iter().all(|id| app.shapes.iter().find(|s| s.id == *id).is_some_and(|s| s.groups.len() == 1));
+        let (group_on, ungroup_on) = (app.icon_state(super::Icon::Group).1, app.icon_state(super::Icon::Ungroup).1);
+        let msg = format!("{} Form importiert, in einer Gruppe: {grouped}, gewählt: {}, Gruppieren aktiv: {group_on}, Gruppe auflösen aktiv: {ungroup_on}", ids.len(), app.edit.selection.len());
+        if ids.len() == 1 && grouped && app.edit.selection == ids && !group_on && ungroup_on {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// Ungrouping the selected import: the three shapes lie loose again and can be grouped again.
+fn dxf_ungroup(app: &mut App) -> (Vec<Event>, Check) {
+    let ids = app.edit.selection.clone();
+    app.ungroup_selection();
+    let check: Check = Box::new(move |app| {
+        let loose = ids.iter().all(|id| app.shapes.iter().find(|s| s.id == *id).is_some_and(|s| s.groups.is_empty()));
+        let (group_on, ungroup_on) = (app.icon_state(super::Icon::Group).1, app.icon_state(super::Icon::Ungroup).1);
+        let msg = format!("{} Formen gewählt, alle ohne Gruppe: {loose}, Gruppieren aktiv: {group_on}, Gruppe auflösen aktiv: {ungroup_on}", app.edit.selection.len());
+        if ids.len() == 3 && loose && app.edit.selection.len() == 3 && group_on && !ungroup_on {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
 
 /// The rectangle with both sizes tied to variables: dragging its right and top handles does
 /// nothing (a constraint), while the shape stays selected.

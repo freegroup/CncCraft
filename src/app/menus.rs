@@ -54,6 +54,9 @@ impl App {
         self.menu_item(ui, "Duplizieren", Action::Duplicate, any);
         self.menu_item(ui, "Löschen", Action::Delete, any);
         ui.separator();
+        self.menu_item(ui, "Gruppieren", Action::Group, self.selection_can_group());
+        self.menu_item(ui, "Gruppe auflösen", Action::Ungroup, self.selection_has_group());
+        ui.separator();
         self.menu_item(ui, "Alles auswählen", Action::SelectAll, true);
         self.menu_item(ui, "Knoten bearbeiten", Action::NodeEdit, any || self.tool == DrawTool::NodeEdit);
         if ui.add_enabled(self.edit.selection.len() == 1, egui::Button::new("Maße bearbeiten").shortcut_text("↩")).clicked() {

@@ -105,6 +105,9 @@ pub struct Editor<S> {
     targets: Vec<(Pt, SnapKind)>,
     moved: bool,
     toggle_on_release: Option<u64>,
+    /// The press landed on one of several selected shapes: if it ends without moving, the click
+    /// narrows the selection to that shape (and its group).
+    narrow_on_release: Option<u64>,
 }
 
 impl<S> Default for Editor<S> {
@@ -121,6 +124,7 @@ impl<S> Default for Editor<S> {
             targets: vec![],
             moved: false,
             toggle_on_release: None,
+            narrow_on_release: None,
         }
     }
 }
@@ -267,6 +271,7 @@ impl<S: Editable> Editor<S> {
     pub fn press(&mut self, shapes: &[S], p: Pt, view: View, tool: Tool, additive: bool) -> Started {
         self.moved = false;
         self.toggle_on_release = None;
+        self.narrow_on_release = None;
         self.gesture = None;
         self.last_snap = None;
         self.clicked_selected = false;
@@ -344,6 +349,9 @@ impl<S: Editable> Editor<S> {
             Some(id) => {
                 let selected = self.selection.contains(&id);
                 self.clicked_selected = selected && !additive;
+                if selected && !additive && self.selection.len() > 1 {
+                    self.narrow_on_release = Some(id);
+                }
                 if !selected {
                     self.rotate_mode = false;
                 }
@@ -354,6 +362,7 @@ impl<S: Editable> Editor<S> {
                 } else if !selected {
                     self.selection = vec![id];
                 }
+                self.select_whole_groups(shapes);
                 self.gesture = Some(Gesture::Move { start: p, orig: self.selected(shapes) });
                 Started::Move
             }
@@ -383,6 +392,19 @@ impl<S: Editable> Editor<S> {
             None => {}
         }
         Started::Nothing
+    }
+
+    /// A shape in a group brings the rest of its (outermost) group into the selection.
+    fn select_whole_groups(&mut self, shapes: &[S]) {
+        let groups: Vec<u64> = shapes.iter().filter(|s| self.selection.contains(&s.id())).filter_map(|s| s.group()).collect();
+        if groups.is_empty() {
+            return;
+        }
+        for s in shapes {
+            if !s.hidden() && !s.frozen() && s.group().is_some_and(|g| groups.contains(&g)) && !self.selection.contains(&s.id()) {
+                self.selection.push(s.id());
+            }
+        }
     }
 
     fn selected(&self, shapes: &[S]) -> Vec<S> {
@@ -487,7 +509,20 @@ impl<S: Editable> Editor<S> {
             Gesture::Move { .. } if self.moved => Outcome::Moved,
             Gesture::Move { .. } => {
                 if let Some(id) = self.toggle_on_release.take() {
-                    self.selection.retain(|x| *x != id);
+                    // a shift-click on a member takes the whole group out
+                    let group = find(shapes, id).and_then(|s| s.group());
+                    self.selection.retain(|x| *x != id && (group.is_none() || find(shapes, *x).and_then(|s| s.group()) != group));
+                }
+                // a click on one of several selected shapes picks that one (with its group) alone
+                if let Some(id) = self.narrow_on_release.take() {
+                    let kept = std::mem::replace(&mut self.selection, vec![id]);
+                    self.select_whole_groups(shapes);
+                    if self.selection.len() == kept.len() && kept.iter().all(|k| self.selection.contains(k)) {
+                        self.selection = kept;
+                    } else {
+                        self.clicked_selected = false;
+                        self.rotate_mode = false;
+                    }
                 }
                 if self.clicked_selected {
                     self.rotate_mode = !self.rotate_mode;
@@ -517,6 +552,7 @@ impl<S: Editable> Editor<S> {
                             self.selection.push(id);
                         }
                     }
+                    self.select_whole_groups(shapes);
                 }
                 Outcome::Selected
             }

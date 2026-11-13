@@ -18,6 +18,7 @@ mod appicon;
 mod gcode;
 mod layers;
 mod geom;
+mod import;
 mod lang;
 mod props;
 mod sheet;

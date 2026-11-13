@@ -499,6 +499,23 @@ impl Pen<'_> {
                 self.solid(self.disc(-9.0, 9.0, 3.2));
                 self.dashed(&[self.at(-9.0, 9.0), self.at(5.0, -5.0)]);
             }
+            Icon::Group => {
+                // two shapes held together by a dashed frame
+                self.dashed_rect(Rect::from_center_size(self.c, Vec2::splat(22.0 * self.scale)));
+                self.solid(self.rrect(-3.5, -3.5, 9.0, 9.0, 1.5));
+                self.hollow(self.rrect(3.5, 3.5, 9.0, 9.0, 1.5));
+            }
+            Icon::Ungroup => {
+                // the frame is gone, the two shapes lie apart
+                self.solid(self.rrect(-6.0, -6.0, 9.0, 9.0, 1.5));
+                self.hollow(self.rrect(6.0, 6.0, 9.0, 9.0, 1.5));
+            }
+            Icon::ImportDxf => {
+                // a page with a folded corner, marked DXF
+                self.line(&[(-9.0, 11.0), (-9.0, -11.0), (3.0, -11.0), (9.0, -5.0), (9.0, 11.0), (-9.0, 11.0)]);
+                self.line(&[(3.0, -11.0), (3.0, -5.0), (9.0, -5.0)]);
+                self.p.text(self.at(0.0, 3.5), egui::Align2::CENTER_CENTER, "DXF", egui::FontId::proportional(9.5 * self.scale.max(0.7)), self.k.line);
+            }
             Icon::Variables => {
                 // f(x): an italic f with a small (x) after it
                 self.p.text(self.at(-5.0, 0.0), egui::Align2::CENTER_CENTER, "ƒ", egui::FontId::proportional(20.0), self.k.line);

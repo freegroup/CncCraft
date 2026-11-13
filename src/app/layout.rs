@@ -37,25 +37,26 @@ pub(super) enum ToolpathTab {
 /// The tool column's groups, top to bottom, as the original registers them (0x10011d034):
 /// `mode` (select, transform, node edit), `draw_line`, `draw_shape` (rectangle, circle,
 /// ellipse, polygon), `draw_text`, `edit_object`, `align` (align, mirror), `offset` and
-/// `binary_operation`; the job setup sits apart at the end. The original's `bitmap`, `join`,
-/// `create_fillets` and `group_ungroup` groups have no tools here yet, so they are left out;
+/// `binary_operation` and `group_ungroup`; the job setup sits apart at the end. The original's
+/// `bitmap`, `join` and `create_fillets` groups have no tools here yet, so they are left out;
 /// duplicating is no tool there either (menu and ⌘D).
 const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Select), Icon::Transform, Icon::Draw(DrawTool::NodeEdit)],
     &[Icon::Draw(DrawTool::Polyline)],
-    &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon)],
+    &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon), Icon::ImportDxf],
     &[Icon::Draw(DrawTool::Text)],
     &[Icon::Delete, Icon::Curves],
     &[Icon::Center, Icon::MirrorH, Icon::MirrorV],
     &[Icon::Offset],
     &[Icon::Union, Icon::Subtract, Icon::Intersect],
+    &[Icon::Group, Icon::Ungroup],
 ];
 
 /// How many groups the tool column has (one remembered choice each when folded).
-pub(super) const GROUP_COUNT: usize = 8;
+pub(super) const GROUP_COUNT: usize = 9;
 
 /// What each group is, for the folded column's tooltips.
-const GROUP_NAMES: [&str; GROUP_COUNT] = ["Modus", "Linien zeichnen", "Formen zeichnen", "Text", "Objekte bearbeiten", "Ausrichten und Spiegeln", "Versatz", "Boolesche Operationen"];
+const GROUP_NAMES: [&str; GROUP_COUNT] = ["Modus", "Linien zeichnen", "Formen zeichnen", "Text", "Objekte bearbeiten", "Ausrichten und Spiegeln", "Versatz", "Boolesche Operationen", "Gruppieren"];
 
 /// Icons per row in the expanded column, and the size of one icon cell.
 const ROW: usize = 5;
@@ -76,6 +77,9 @@ fn tip(icon: Icon) -> &'static str {
         Icon::Subtract => "Abziehen: die zuerst gewählte Form minus die anderen",
         Icon::Intersect => "Schnittmenge (mindestens zwei Formen)",
         Icon::Job => "Job einrichten (Größe, Material, Nullpunkt)",
+        Icon::Group => "Gruppieren (⌘G): die Auswahl wird eine Gruppe; auch Gruppen lassen sich gruppieren",
+        Icon::Ungroup => "Gruppe auflösen (⌘⇧G): löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick",
+        Icon::ImportDxf => "DXF-Zeichnung importieren (R12, R14 und neuer); Rechtsklick auf eine importierte Form: neu von Platte laden",
         Icon::Variables => "Variablen (f(x): benannte Werte für die Maße)",
         _ => "",
     }
@@ -250,7 +254,10 @@ impl App {
             });
         });
         if let Some((k, icon)) = picked {
-            self.tool_choice[g] = k;
+            // the import is an action, not a tool: the folded button keeps showing the last tool
+            if icon != Icon::ImportDxf {
+                self.tool_choice[g] = k;
+            }
             self.flyout = None;
             return Some(icon);
         }
@@ -261,17 +268,24 @@ impl App {
         None
     }
 
-    fn column_icon(&self, ui: &mut egui::Ui, icon: Icon) -> egui::Response {
+    /// Whether a tool column icon is switched on, and whether it can be used now.
+    pub(super) fn icon_state(&self, icon: Icon) -> (bool, bool) {
         let any = !self.edit.selection.is_empty();
-        let (selected, enabled) = match icon {
+        match icon {
             Icon::Draw(t) => (self.tool == t, true),
             Icon::Transform => (self.tool_form == Some(ToolForm::Transform), true),
             Icon::Offset => (self.tool_form == Some(ToolForm::Offset), true),
             Icon::Union | Icon::Subtract | Icon::Intersect => (false, self.edit.selection.len() >= 2),
-            Icon::Job => (false, true),
+            Icon::Group => (false, self.selection_can_group()),
+            Icon::Ungroup => (false, self.selection_has_group()),
+            Icon::Job | Icon::ImportDxf => (false, true),
             Icon::Variables => (self.vars_open, true),
             _ => (false, any),
-        };
+        }
+    }
+
+    fn column_icon(&self, ui: &mut egui::Ui, icon: Icon) -> egui::Response {
+        let (selected, enabled) = self.icon_state(icon);
         ui.add_enabled_ui(enabled, |ui| icon_button(ui, icon, selected, tip(icon))).inner
     }
 
@@ -297,7 +311,10 @@ impl App {
             Icon::Union => self.combine(Combine::Union),
             Icon::Subtract => self.combine(Combine::Subtract),
             Icon::Intersect => self.combine(Combine::Intersect),
+            Icon::Group => self.group_selection(),
+            Icon::Ungroup => self.ungroup_selection(),
             Icon::Job => self.job_dialog = Some((self.job.clone(), false)),
+            Icon::ImportDxf => self.import_dialog(),
             Icon::Variables => self.vars_open = !self.vars_open,
             _ => {}
         }
