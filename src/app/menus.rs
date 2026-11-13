@@ -129,6 +129,16 @@ impl App {
             self.start_preview(false);
             ui.close_menu();
         }
+        ui.separator();
+        if ui.button("Postprozessor-Verwaltung…").clicked() {
+            let idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
+            self.pp_dialog = Some(super::PpDialog {
+                editing: self.postprocs[idx].clone(),
+                index: Some(idx),
+                hook_tab: 0,
+            });
+            ui.close_menu();
+        }
     }
 
     /// A menu entry showing its keys from the shortcut table; runs the action when clicked.

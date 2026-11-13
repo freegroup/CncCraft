@@ -1391,7 +1391,7 @@ fn scopes(app: &mut App) -> (Vec<Event>, Check) {
     use super::{OutputScope, PreviewScope};
     app.tp_selected = Some(1);
     app.preview_scope = PreviewScope::Selected;
-    app.output_scope = OutputScope::Selected;
+    app.output_scope = OutputScope::All;
     let selected = (app.preview_indices(), app.output_indices());
     // hide the first toolpath: "visible" leaves it out, "all" keeps it
     if let Some(t) = app.toolpaths.first_mut() {
@@ -1410,8 +1410,8 @@ fn scopes(app: &mut App) -> (Vec<Event>, Check) {
     app.output_scope = OutputScope::Visible;
     app.tp_selected = None;
     let check: Check = Box::new(move |_| {
-        let msg = format!("ausgewählt {:?}/{:?}, sichtbar {:?}/{:?}, alle {:?}", selected.0, selected.1, visible.0, visible.1, all);
-        if selected.0 == vec![1] && selected.1 == vec![1] && !visible.0.contains(&0) && !visible.1.contains(&0) && visible.0.len() + 1 == n && all.len() == n {
+        let msg = format!("preview-ausgewählt {:?}, export-alle {:?}, sichtbar {:?}/{:?}, alle {:?}", selected.0, selected.1, visible.0, visible.1, all);
+        if selected.0 == vec![1] && selected.1.len() == n && !visible.0.contains(&0) && !visible.1.contains(&0) && visible.0.len() + 1 == n && all.len() == n {
             Ok(msg)
         } else {
             Err(msg)
@@ -1511,14 +1511,14 @@ fn tool_changes(app: &mut App) -> (Vec<Event>, Check) {
     app.export_gcode();
     let asked = app.export_ask.take();
     app.tp_selected = Some(0);
-    app.output_scope = OutputScope::Selected;
+    app.output_scope = OutputScope::All;
     // one toolpath is one tool: no question (and no save window, which would block the test)
     let asked_for_one = app.tool_groups(&app.output_indices()).len() > 1;
     app.output_scope = OutputScope::Visible;
     app.tp_selected = None;
     let per_tool = {
         let paths: Vec<&crate::toolpath::Toolpath> = indices.iter().map(|&i| &app.toolpaths[i]).collect();
-        crate::toolgroups::files(&app.job, &paths, app.post, "schild")
+        crate::toolgroups::files(&app.job, &paths, app.pp(), "schild")
     };
     let check: Check = Box::new(move |_| {
         let names: Vec<&str> = per_tool.iter().map(|f| f.0.as_str()).collect();

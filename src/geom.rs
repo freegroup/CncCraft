@@ -4,4 +4,3 @@
 
 pub use shape_edit::geometry::{bounds_of, dist, perimeter, signed_area, Contour};
 pub use shape_edit::{Item, Pt, Region, Ring};
-

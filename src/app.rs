@@ -5,6 +5,7 @@ mod align;
 mod cursor;
 mod distance;
 mod fields;
+mod gcode_highlight;
 mod input;
 mod icons;
 mod layers_ui;
@@ -19,7 +20,7 @@ use layout::{ToolForm, ToolpathTab};
 
 use shortcuts::Action;
 
-use crate::gcode::{self, Post};
+use crate::gcode;
 use crate::geom::{dist, Item, Pt, Region};
 use crate::sheet;
 use crate::sim::{self, Camera, HeightMap};
@@ -135,7 +136,7 @@ pub(crate) enum PreviewScope {
 /// everything goes into one file or each tool gets its own (see `toolgroups`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum OutputScope {
-    Selected,
+    All,
     Visible,
 }
 
@@ -166,6 +167,16 @@ struct Project {
     /// The layers and which one is active. Old project files have one layer with everything on it.
     #[serde(default)]
     layers: crate::layers::Layers,
+    #[serde(default)]
+    hooks: gcode::OldPostHooks,
+    #[serde(default)]
+    postprocs: Vec<gcode::PostProcessor>,
+}
+
+struct PpDialog {
+    editing: gcode::PostProcessor,
+    index: Option<usize>,
+    hook_tab: usize,
 }
 
 /// A new shape being drawn by dragging. Selecting, moving, resizing and node editing are
@@ -247,10 +258,15 @@ pub struct App {
     sim_quality: f64,
     start_page: bool,
     job_dialog: Option<(Job, bool)>,
-    post: Post,
+    postprocs: Vec<gcode::PostProcessor>,
+    post_idx: usize,
+    pp_dialog: Option<PpDialog>,
     undo: Vec<Vec<Item>>,
     redo: Vec<Vec<Item>>,
     path: Option<PathBuf>,
+    recent_files: Vec<PathBuf>,
+    thumb_pending: u8,
+    thumb_restore_mode: Option<ViewMode>,
     status: String,
     mouse_mm: Option<Pt>,
     offset_dist: f64,
@@ -409,10 +425,19 @@ impl App {
             sim_quality: sim::SIMULATION_QUALITY,
             start_page: true,
             job_dialog: None,
-            post: Post::GcodeMm,
+            postprocs: gcode::builtins(),
+            post_idx: cc.storage.and_then(|s| s.get_string("cnccraft_post_idx")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0),
+            pp_dialog: None,
             undo: vec![],
             redo: vec![],
             path: None,
+            recent_files: cc.storage
+                .and_then(|s| s.get_string("cnccraft_recent"))
+                .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+                .map(|v| v.into_iter().map(PathBuf::from).collect())
+                .unwrap_or_default(),
+            thumb_pending: 0,
+            thumb_restore_mode: None,
             status: "Bereit".into(),
             mouse_mm: None,
             offset_dist: 5.0,
@@ -487,6 +512,7 @@ impl App {
             layer_dialog: None,
             layer_open: false,
         };
+        app.post_idx = app.post_idx.min(app.postprocs.len().saturating_sub(1));
         if app.shot.is_some() || app.selftest.is_some() {
             app.load_example();
             // for the review screenshot: show the job dialog if asked, so its look is visible
@@ -654,7 +680,6 @@ impl App {
         self.start_page = false;
         self.fitted = false;
         self.sim = None;
-        self.status = "Beispiel geladen".into();
         self.mark_clean();
     }
 
@@ -687,7 +712,7 @@ impl App {
 
     /// The document as project text, to tell whether it changed since it was last saved.
     fn project_text(&self) -> String {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone() };
         serde_json::to_string(&proj).unwrap_or_default()
     }
 
@@ -832,11 +857,12 @@ impl App {
             self.path.clone()
         };
         let Some(path) = path else { return };
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone() };
         match serde_json::to_string_pretty(&proj).map_err(|e| e.to_string()).and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string())) {
             Ok(()) => {
-                self.status = format!("Gespeichert: {}", path.display());
+                self.add_recent(&path);
                 self.path = Some(path);
+                self.thumb_pending = 1;
                 self.mark_clean();
             }
             Err(e) => self.status = format!("Speichern fehlgeschlagen: {e}"),
@@ -849,6 +875,10 @@ impl App {
             return;
         }
         let Some(path) = rfd::FileDialog::new().add_filter("CncCraft-Projekt", &["cnccraft", "funke"]).pick_file() else { return };
+        self.open_path(path);
+    }
+
+    fn open_path(&mut self, path: PathBuf) {
         let res = std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str::<Project>(&s).map_err(|e| e.to_string()));
         match res {
             Ok(p) => {
@@ -861,17 +891,26 @@ impl App {
                 self.aligns = p.aligns;
                 self.layers = p.layers.repaired();
                 self.layers.sync(&mut self.shapes);
+                if !p.postprocs.is_empty() {
+                    self.postprocs = p.postprocs;
+                } else {
+                    self.postprocs = gcode::migrate_old_format(&p.hooks);
+                }
+                self.post_idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
                 self.vars_committed.clear();
                 self.var_events.clear();
                 self.vars_dirty = true;
                 for tp in &mut self.toolpaths {
                     tp.compute(&self.job, &self.shapes);
                 }
-                self.status = format!("Geöffnet: {}", path.display());
+                self.add_recent(&path);
                 self.path = Some(path);
                 self.mark_clean();
             }
-            Err(e) => self.status = format!("Öffnen fehlgeschlagen: {e}"),
+            Err(e) => {
+                self.recent_files.retain(|p| *p != path);
+                self.status = format!("Öffnen fehlgeschlagen: {e}");
+            }
         }
     }
 
@@ -881,7 +920,7 @@ impl App {
         let indices = self.output_indices();
         if indices.is_empty() {
             self.status = match self.output_scope {
-                OutputScope::Selected => "Kein Werkzeugweg ausgewählt (in der Liste anklicken)".into(),
+                OutputScope::All => "Keine Werkzeugwege vorhanden".into(),
                 _ => "Keine sichtbaren Werkzeugwege zum Speichern".into(),
             };
             return;
@@ -897,6 +936,16 @@ impl App {
     pub(super) fn tool_groups(&self, indices: &[usize]) -> Vec<Vec<usize>> {
         let tools: Vec<&Tool> = indices.iter().map(|&i| &self.toolpaths[i].tool).collect();
         crate::toolgroups::groups(&tools)
+    }
+
+    fn pp(&self) -> &gcode::PostProcessor {
+        &self.postprocs[self.post_idx.min(self.postprocs.len().saturating_sub(1))]
+    }
+
+    fn add_recent(&mut self, path: &std::path::Path) {
+        self.recent_files.retain(|p| p != path);
+        self.recent_files.insert(0, path.to_path_buf());
+        self.recent_files.truncate(10);
     }
 
     /// The name offered first in the save window: the project's own, else a general one.
@@ -923,25 +972,25 @@ impl App {
                 return;
             };
             let stem = file.file_stem().map(|s| crate::toolgroups::file_part(&s.to_string_lossy())).filter(|s| !s.is_empty()).unwrap_or_else(|| "werkzeugwege".into());
-            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.post, &stem).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
+            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.pp(), &stem).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
             let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-            let count = files.len();
             match std::fs::write(&file, crate::zipfile::stored(&files, seconds)) {
-                Ok(()) => self.status = format!("Die Werkzeugwege wurden in {count} separate Dateien aufgeteilt, gespeichert in {}", file.display()),
+                Ok(()) => {}
                 Err(e) => self.status = format!("Fehler: {e}"),
             }
             return;
         }
+        let pp = self.pp().clone();
         let Some(file) = rfd::FileDialog::new()
-            .add_filter(self.post.label(), &[self.post.ext()])
-            .set_file_name(format!("{}.{}", self.export_stem(), self.post.ext()))
+            .add_filter(&pp.label(), &[&pp.ext])
+            .set_file_name(format!("{}.{}", self.export_stem(), pp.ext))
             .save_file()
         else {
             return;
         };
-        let text = gcode::write(&self.job, &paths, self.post);
+        let text = gcode::write(&self.job, &paths, &pp);
         match std::fs::write(&file, text) {
-            Ok(()) => self.status = format!("Werkzeugwege gespeichert: {}", file.display()),
+            Ok(()) => {}
             Err(e) => self.status = format!("Fehler: {e}"),
         }
     }
@@ -966,7 +1015,7 @@ impl App {
                     ui.label(egui::RichText::new(format!("{}.  {} – {what}", n + 1, tool.name)).color(muted()));
                 }
                 ui.add_space(8.0);
-                if self.post.supports_tool_change() {
+                if self.pp().tool_change {
                     ui.label(egui::RichText::new("Alles in eine Datei oder für jedes Werkzeug eine eigene Datei (zusammen in einer ZIP-Datei)?").color(ink()));
                 } else {
                     ui.label(egui::RichText::new("Die sichtbaren Werkzeugwege verwenden unterschiedliche Werkzeuge und die gewählte Ausgabe unterstützt keinen Werkzeugwechsel. Bitte für jedes Werkzeug eine eigene Datei speichern (zusammen in einer ZIP-Datei).").color(ink()));
@@ -978,7 +1027,7 @@ impl App {
                     }
                     // the original's rule: several tools in one file only with a post-processor that can change tools
                     let one_file = ui
-                        .add_enabled(self.post.supports_tool_change(), egui::Button::new("Alles in eine Datei").min_size(Vec2::new(130.0, 30.0)).rounding(4.0))
+                        .add_enabled(self.pp().tool_change, egui::Button::new("Alles in eine Datei").min_size(Vec2::new(130.0, 30.0)).rounding(4.0))
                         .on_disabled_hover_text("Die gewählte Ausgabe (GRBL) unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.");
                     if one_file.clicked() {
                         choice = Some(Some(false));
@@ -1406,7 +1455,7 @@ impl App {
     fn output_indices(&self) -> Vec<usize> {
         let cuts = |t: &Toolpath| t.moves.iter().any(|m| !m.rapid);
         match self.output_scope {
-            OutputScope::Selected => self.tp_selected.filter(|&i| i < self.toolpaths.len() && cuts(&self.toolpaths[i])).into_iter().collect(),
+            OutputScope::All => (0..self.toolpaths.len()).filter(|&i| cuts(&self.toolpaths[i])).collect(),
             OutputScope::Visible => (0..self.toolpaths.len()).filter(|&i| self.toolpaths[i].visible && cuts(&self.toolpaths[i])).collect(),
         }
     }
@@ -1484,6 +1533,84 @@ impl App {
                     ui.add_space(20.0);
                 }
             });
+
+            // Recent files list
+            let mut open_recent: Option<PathBuf> = None;
+            if !self.recent_files.is_empty() {
+                ui.add_space(30.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("Zuletzt verwendet").size(16.0).strong().color(ink()));
+                });
+                ui.add_space(8.0);
+                let list_width = 500.0_f32.min(ui.available_width() - 40.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(((ui.available_width() - list_width) / 2.0).max(0.0));
+                    ui.vertical(|ui| {
+                        ui.set_width(list_width);
+                        for path in &self.recent_files {
+                            let name = path.file_stem().map_or_else(|| "?".into(), |s| s.to_string_lossy().into_owned());
+                            let dir = path.parent().map_or(String::new(), |p| p.to_string_lossy().into_owned());
+                            let thumb = thumb_path(path);
+                            let frame = egui::Frame::none()
+                                .fill(crate::theme::card())
+                                .rounding(6.0)
+                                .inner_margin(egui::Margin::symmetric(10.0, 6.0));
+                            let row = frame.show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    let tex_id = egui::Id::new(("thumb_tex", path.as_os_str()));
+                                    let loaded = ui.data(|d| d.get_temp::<egui::TextureId>(tex_id));
+                                    let tid = loaded.unwrap_or_else(|| {
+                                        if let Ok(img) = image::open(&thumb) {
+                                            let rgba = img.to_rgba8();
+                                            let size = [rgba.width() as usize, rgba.height() as usize];
+                                            let full_size_id = egui::Id::new(("thumb_size", path.as_os_str()));
+                                            ui.data_mut(|d| d.insert_temp(full_size_id, [size[0] as f32, size[1] as f32]));
+                                            let ci = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
+                                            let t = ui.ctx().load_texture(format!("thumb_{}", path.display()), ci, egui::TextureOptions::LINEAR);
+                                            let id = t.id();
+                                            ui.data_mut(|d| d.insert_temp(tex_id, id));
+                                            ui.data_mut(|d| d.insert_temp(egui::Id::new(("thumb_handle", path.as_os_str())), t));
+                                            id
+                                        } else {
+                                            egui::TextureId::default()
+                                        }
+                                    });
+                                    if tid != egui::TextureId::default() {
+                                        let th = 80.0_f32;
+                                        let tw = th * 16.0 / 9.0;
+                                        let img_resp = ui.add(egui::Image::new(egui::load::SizedTexture::new(tid, Vec2::new(tw, th))).rounding(6.0));
+                                        let full_size_id = egui::Id::new(("thumb_size", path.as_os_str()));
+                                        let full_size = ui.data(|d| d.get_temp::<[f32; 2]>(full_size_id)).unwrap_or([tw, th]);
+                                        img_resp.on_hover_ui(|ui| {
+                                            ui.add(egui::Image::new(egui::load::SizedTexture::new(tid, Vec2::new(full_size[0], full_size[1]))).rounding(6.0));
+                                        });
+                                    } else {
+                                        ui.label(egui::RichText::new("📄").size(32.0));
+                                    }
+                                    ui.add_space(6.0);
+                                    ui.vertical(|ui| {
+                                        ui.label(egui::RichText::new(&name).strong().color(ink()));
+                                        ui.label(egui::RichText::new(&dir).small().color(muted()));
+                                    });
+                                });
+                            });
+                            let resp = ui.interact(row.response.rect, egui::Id::new(("recent", path.as_os_str())), Sense::click());
+                            if resp.hovered() {
+                                ui.painter().rect_stroke(row.response.rect, 6.0, Stroke::new(1.5_f32, ACCENT));
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+                            if resp.clicked() {
+                                open_recent = Some(path.clone());
+                            }
+                            ui.add_space(2.0);
+                        }
+                    });
+                });
+            }
+            if let Some(path) = open_recent {
+                self.open_path(path);
+            }
         });
     }
 
@@ -1613,25 +1740,6 @@ impl App {
 
         // the worksheet under the design (board, grid…), each a decoration of its own
         self.sheet.paint(sheet::Layer::Under, &self.sheet_view(rect), &painter);
-
-        // toolpaths
-        for tp in self.toolpaths.iter().filter(|t| t.visible) {
-            let col = tp_color(&tp.strategy);
-            let mut line: Vec<Pos2> = vec![];
-            for m in &tp.moves {
-                let p = self.to_screen([m.to[0], m.to[1]]);
-                if m.rapid || m.to[2] >= 0.0 {
-                    if line.len() > 1 {
-                        painter.add(egui::Shape::line(std::mem::take(&mut line), Stroke::new(1.2_f32, col)));
-                    }
-                    line.clear();
-                }
-                line.push(p);
-            }
-            if line.len() > 1 {
-                painter.add(egui::Shape::line(line, Stroke::new(1.2_f32, col)));
-            }
-        }
 
         // shapes
         let view = self.view();
@@ -2388,6 +2496,65 @@ impl App {
         self.edit.selection = copies;
     }
 
+    fn save_thumbnail(&mut self, ctx: &egui::Context) {
+        if self.thumb_pending == 0 || self.shot.is_some() {
+            return;
+        }
+        if self.thumb_pending == 1 {
+            // Switch to 3D and ensure a simulation exists
+            self.thumb_restore_mode = Some(self.mode);
+            self.mode = ViewMode::ThreeD;
+            if self.sim.is_none() {
+                self.start_preview(false);
+            }
+            self.thumb_pending = 2;
+            ctx.request_repaint();
+            return;
+        }
+        if self.thumb_pending == 2 {
+            // Wait one frame for the 3D view to render
+            self.thumb_pending = 3;
+            ctx.request_repaint();
+            return;
+        }
+        if self.thumb_pending == 3 {
+            self.thumb_pending = 4;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+            ctx.request_repaint();
+            return;
+        }
+        let image = ctx.input(|i| {
+            i.raw.events.iter().find_map(|e| match e {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        if let Some(img) = image {
+            self.thumb_pending = 0;
+            // Restore the original view mode
+            if let Some(mode) = self.thumb_restore_mode.take() {
+                self.mode = mode;
+            }
+            let Some(path) = &self.path else { return };
+            let thumb = thumb_path(path);
+            let [w, h] = img.size;
+            let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+            if let Some(full) = image::RgbaImage::from_raw(w as u32, h as u32, bytes) {
+                let ppp = ctx.pixels_per_point();
+                let r = self.canvas_rect;
+                let x = (r.left() * ppp).round() as u32;
+                let y = (r.top() * ppp).round() as u32;
+                let cw = ((r.width() * ppp).round() as u32).min(w as u32 - x);
+                let ch = ((r.height() * ppp).round() as u32).min(h as u32 - y);
+                let cropped = image::imageops::crop_imm(&full, x, y, cw, ch).to_image();
+                let tw = 320u32;
+                let th = (tw as f32 * ch as f32 / cw as f32).round().max(1.0) as u32;
+                let small = image::imageops::resize(&cropped, tw, th, image::imageops::FilterType::Triangle);
+                let _ = small.save(&thumb);
+            }
+        }
+    }
+
     fn screenshot(&mut self, ctx: &egui::Context) {
         let Some((path, frames)) = &mut self.shot else { return };
         *frames += 1;
@@ -2423,6 +2590,11 @@ impl App {
 impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("cnccraft_theme", self.theme_choice.key().to_string());
+        storage.set_string("cnccraft_post_idx", self.post_idx.to_string());
+        let paths: Vec<String> = self.recent_files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        if let Ok(json) = serde_json::to_string(&paths) {
+            storage.set_string("cnccraft_recent", json);
+        }
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
@@ -2508,11 +2680,19 @@ impl eframe::App for App {
         if self.shortcuts_open {
             shortcuts::window(ctx, &mut self.shortcuts_open);
         }
+        self.pp_dialog_ui(ctx);
+        self.save_thumbnail(ctx);
         self.screenshot(ctx);
     }
 }
 
 // ---------------- helpers ----------------
+
+fn thumb_path(project: &std::path::Path) -> PathBuf {
+    let mut p = project.as_os_str().to_owned();
+    p.push(".thumb.png");
+    PathBuf::from(p)
+}
 
 fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::none().fill(surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(4.0).inner_margin(8.0).outer_margin(egui::Margin::symmetric(6.0, 4.0)).show(ui, |ui| {

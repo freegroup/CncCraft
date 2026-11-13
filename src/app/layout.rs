@@ -11,7 +11,6 @@
 
 use super::shortcuts::Action;
 use super::{fmt_time, icon_button, tp_color, App, Combine, DrawTool, Editor, Icon, ViewMode};
-use crate::gcode::Post;
 use crate::sim;
 use crate::theme::{ACCENT, hairline, ink, muted};
 use crate::toolpath::Strategy;
@@ -681,36 +680,232 @@ impl App {
         // the three choices of the original's save form
         use super::OutputScope;
         for (scope, name) in [
-            (OutputScope::Selected, "Ausgewählter Werkzeugweg"),
+            (OutputScope::All, "Alle Werkzeugwege"),
             (OutputScope::Visible, "Sichtbare Werkzeugwege"),
         ] {
             ui.radio_value(&mut self.output_scope, scope, name);
         }
         let count = self.output_indices().len();
-        ui.label(egui::RichText::new(match self.output_scope {
-            OutputScope::Selected => format!("{count} Werkzeugweg wird gespeichert (in der Liste anklicken)."),
-            OutputScope::Visible => {
-                let tools = self.tool_groups(&self.output_indices()).len();
-                if tools > 1 {
-                    format!("{count} Werkzeugwege mit {tools} Werkzeugwechseln: beim Speichern wählen Sie eine Datei oder je Werkzeug eine.")
-                } else {
-                    format!("{count} Werkzeugwege kommen in eine Datei.")
-                }
-            }
+        let tools = self.tool_groups(&self.output_indices()).len();
+        ui.label(egui::RichText::new(if tools > 1 {
+            format!("{count} Werkzeugwege mit {tools} Werkzeugwechseln: beim Speichern wählen Sie eine Datei oder je Werkzeug eine.")
+        } else {
+            format!("{count} Werkzeugwege kommen in eine Datei.")
         }).color(muted()));
         ui.add_space(4.0);
-        // the original has two lists, "Machine" and "Post-processor" (0x100110f38); here the
-        // post-processor is all there is to choose
-        ui.label("Postprozessor").on_hover_text("Bestimmt, wie der G-Code geschrieben wird (Einheit, Dialekt). Das Original trennt zusätzlich eine Maschinenliste ab; sie fehlt hier noch.");
-        egui::ComboBox::from_id_salt("post").width(260.0).selected_text(self.post.label()).show_ui(ui, |ui| {
-            for p in Post::ALL {
-                ui.selectable_value(&mut self.post, p, p.label());
+        ui.label("Postprozessor");
+        let selected_label = self.pp().label();
+        egui::ComboBox::from_id_salt("post").width(260.0).selected_text(selected_label).show_ui(ui, |ui| {
+            for (i, pp) in self.postprocs.iter().enumerate() {
+                ui.selectable_value(&mut self.post_idx, i, pp.label());
+            }
+            ui.separator();
+            if ui.button("Verwalten…").clicked() {
+                let idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
+                self.pp_dialog = Some(super::PpDialog {
+                    editing: self.postprocs[idx].clone(),
+                    index: Some(idx),
+                    hook_tab: 0,
+                });
             }
         });
+
         ui.add_space(6.0);
         if ui.add_enabled(count > 0, egui::Button::new("Werkzeugpfade speichern…").min_size(Vec2::new(200.0, 26.0))).clicked() {
             self.export_gcode();
         }
+    }
+
+    pub(super) fn pp_dialog_ui(&mut self, ctx: &egui::Context) {
+        let Some(dlg) = &mut self.pp_dialog else { return };
+        let title = if dlg.index.is_some() { "Postprozessor-Verwaltung" } else { "Neuer Postprozessor" };
+        let mut save = false;
+        let mut delete = false;
+        let mut pick: Option<usize> = None;
+        let mut close = false;
+        let is_builtin = dlg.editing.builtin;
+
+        let mut open = true;
+        let screen = ctx.screen_rect();
+        egui::Window::new(title)
+            .id(egui::Id::new("pp_dialog_win"))
+            .open(&mut open)
+            .order(egui::Order::Foreground)
+            .resizable(true)
+            .default_width(560.0)
+            .min_width(400.0)
+            .default_height((screen.height() - 120.0).clamp(300.0, 520.0))
+            .max_height(screen.height() - 60.0)
+            .show(ctx, |ui| {
+                // Bottom buttons first so they are always visible
+                egui::TopBottomPanel::bottom("pp_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(egui::Button::new(egui::RichText::new("Speichern").strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
+                            save = true;
+                        }
+                        ui.add_space(4.0);
+                        if ui.add(egui::Button::new("Abbrechen").min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                            close = true;
+                        }
+                    });
+                });
+
+                // Left list panel
+                egui::SidePanel::left("pp_list_panel").exact_width(150.0).resizable(false).frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 4.0, top: 0.0, bottom: 0.0 })).show_inside(ui, |ui| {
+                    ui.label(egui::RichText::new("Postprozessoren").strong());
+                    // +/- buttons pinned at the bottom
+                    egui::TopBottomPanel::bottom("pp_list_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 4.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("+").on_hover_text("Neuen Postprozessor anlegen").clicked() {
+                                pick = Some(usize::MAX);
+                            }
+                            let can_delete = dlg.index.is_some() && !is_builtin;
+                            if ui.add_enabled(can_delete, egui::Button::new("−").small()).on_hover_text("Ausgewählten Postprozessor löschen").clicked() {
+                                delete = true;
+                            }
+                        });
+                    });
+                    // List fills the rest and scrolls
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                        for (i, pp) in self.postprocs.iter().enumerate() {
+                            let selected = dlg.index == Some(i);
+                            if ui.selectable_label(selected, &pp.name).clicked() {
+                                pick = Some(i);
+                            }
+                        }
+                    });
+                });
+
+                // Right side: editor fills the rest
+                Self::pp_editor(ui, dlg);
+            });
+
+        if let Some(p) = pick {
+            if p == usize::MAX {
+                self.pp_dialog = Some(super::PpDialog {
+                    editing: crate::gcode::PostProcessor {
+                        name: "Neuer Postprozessor".into(),
+                        inch: false, ext: "nc".into(), tool_change: true,
+                        job_start: String::new(), job_end: String::new(),
+                        on_tool_change: "G0 Z{safe_z}\nM5\nT{tool_number} M6\nM0 (Werkzeugwechsel – weiter mit Cycle Start)".into(),
+                        before_path: String::new(), after_path: String::new(),
+                        builtin: false,
+                    },
+                    index: None,
+                    hook_tab: 0,
+                });
+                return;
+            } else if p < self.postprocs.len() {
+                if let Some(dlg) = &mut self.pp_dialog {
+                    dlg.editing = self.postprocs[p].clone();
+                    dlg.index = Some(p);
+                }
+            }
+            return;
+        }
+
+        if save {
+            if let Some(dlg) = self.pp_dialog.take() {
+                if let Some(idx) = dlg.index {
+                    if idx < self.postprocs.len() {
+                        self.postprocs[idx] = dlg.editing;
+                    }
+                } else {
+                    self.postprocs.push(dlg.editing);
+                    self.post_idx = self.postprocs.len() - 1;
+                }
+                self.status = "Postprozessor gespeichert".into();
+            }
+            return;
+        }
+
+        if delete {
+            if let Some(dlg) = self.pp_dialog.take() {
+                if let Some(idx) = dlg.index {
+                    if idx < self.postprocs.len() && !self.postprocs[idx].builtin {
+                        self.postprocs.remove(idx);
+                        if self.post_idx >= self.postprocs.len() {
+                            self.post_idx = self.postprocs.len().saturating_sub(1);
+                        }
+                        self.status = "Postprozessor gelöscht".into();
+                    }
+                }
+            }
+            return;
+        }
+
+        if close {
+            self.pp_dialog = None;
+        }
+    }
+
+    fn pp_editor(ui: &mut egui::Ui, dlg: &mut super::PpDialog) {
+        let pp = &mut dlg.editing;
+        ui.label(egui::RichText::new("Name").small().strong());
+        ui.text_edit_singleline(&mut pp.name);
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Dateiendung:");
+            egui::TextEdit::singleline(&mut pp.ext).desired_width(60.0).show(ui);
+        });
+        ui.checkbox(&mut pp.tool_change, "Werkzeugwechsel unterstützt");
+        ui.add_space(6.0);
+
+        const TABS: &[(&str, &str)] = &[
+            ("Job Start", "Wird einmal am Anfang eingefügt.\nPlatzhalter: {safe_z} {home_z} {tool_number} {rpm}"),
+            ("Vor Werkzeugweg", "Vor jedem Werkzeugweg (nach S/M3)."),
+            ("Werkzeugwechsel", "Zwischen zwei Werkzeugwegen mit unterschiedlichem Werkzeug."),
+            ("Nach Werkzeugweg", "Am Ende jedes Werkzeugwegs."),
+            ("Job Ende", "Wird einmal am Ende eingefügt."),
+        ];
+
+        ui.horizontal(|ui| {
+            let filled = [
+                !pp.job_start.trim().is_empty(),
+                !pp.before_path.trim().is_empty(),
+                !pp.on_tool_change.trim().is_empty(),
+                !pp.after_path.trim().is_empty(),
+                !pp.job_end.trim().is_empty(),
+            ];
+            for (i, &(label, _)) in TABS.iter().enumerate() {
+                let text = if filled[i] {
+                    egui::RichText::new(label).color(super::ACCENT)
+                } else {
+                    egui::RichText::new(label)
+                };
+                if ui.selectable_label(dlg.hook_tab == i, text).clicked() {
+                    dlg.hook_tab = i;
+                }
+            }
+        });
+        ui.add_space(2.0);
+
+        let (_, tip) = TABS[dlg.hook_tab];
+        ui.label(egui::RichText::new(tip).small().color(muted()));
+
+        let val = match dlg.hook_tab {
+            0 => &mut pp.job_start,
+            1 => &mut pp.before_path,
+            2 => &mut pp.on_tool_change,
+            3 => &mut pp.after_path,
+            _ => &mut pp.job_end,
+        };
+
+        let remaining = (ui.available_height() - 24.0).max(80.0);
+        let layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
+            super::gcode_highlight::layout_gcode(ui, text, wrap_width)
+        };
+        let output = egui::TextEdit::multiline(val)
+            .font(egui::FontId::monospace(12.0))
+            .desired_width(f32::INFINITY)
+            .hint_text("(leer = kein Einfügen)")
+            .layouter(&mut layouter.clone())
+            .min_size(Vec2::new(0.0, remaining))
+            .show(ui);
+        super::gcode_highlight::gcode_tooltips(val, &output.response, &output.galley, output.galley_pos);
+
+        ui.add_space(2.0);
+        ui.label(egui::RichText::new("Platzhalter: {safe_z} {home_z} {tool_number} {rpm}").small().color(muted()));
     }
 
     /// The toolpath list: hide/show all, then one row per toolpath with its eye, colour, name
