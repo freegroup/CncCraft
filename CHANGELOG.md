@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/freegroup/CncCraft/compare/v1.4.0...v1.5.0) (2026-11-14)
+
+
+### Bug Fixes
+
+* take the thumbnail of a saved project before closing or opening something else ([93dcb20](https://github.com/freegroup/CncCraft/commit/93dcb20c2a9e4ea14cdcc2dc6c5a440f6360ebb7))
+
+
+### Features
+
+* run the simulation in real time ([dd501bc](https://github.com/freegroup/CncCraft/commit/dd501bc3e7d980e18708f4045755d5acc13d42fb))
+
 # [1.4.0](https://github.com/freegroup/CncCraft/compare/v1.3.0...v1.4.0) (2026-11-14)
 
 
