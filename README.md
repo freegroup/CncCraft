@@ -1,5 +1,7 @@
 # CncCraft
 
+### [Website &amp; documentation → freegroup.github.io/CncCraft](https://freegroup.github.io/CncCraft/)
+
 **CNC design and milling software** — an open-source Rust/egui reimplementation of the core features of [Vectric Spark](https://www.vectric.com/products/spark), built for makers and CNC hobbyists.
 
 Draw shapes, arrange toolpaths, preview the result in 3D, and export G-Code — all in a fast, native desktop app that runs on macOS, Linux, and Windows.
