@@ -292,6 +292,11 @@ pub struct App {
     path: Option<PathBuf>,
     recent_files: Vec<PathBuf>,
     thumb_pending: u8,
+    /// When the thumbnail was started (seconds), so a screenshot that never comes does not hold the program.
+    thumb_started: f64,
+    /// What the save-changes question had chosen (closing, a new job, ...): it waits until the
+    /// thumbnail of the saved file is taken, since the window or the document would be gone by then.
+    after_thumb: Option<Pending>,
     thumb_restore_mode: Option<ViewMode>,
     /// The moves of the G-code shown over the 3D view (see `gcode_overlay`).
     gcode_overlay: Option<gcode_overlay::GcodeOverlay>,
@@ -491,6 +496,8 @@ impl App {
                 .map(|v| v.into_iter().map(PathBuf::from).collect())
                 .unwrap_or_default(),
             thumb_pending: 0,
+            thumb_started: 0.0,
+            after_thumb: None,
             thumb_restore_mode: None,
             gcode_overlay: None,
             tp_scrolled_for: Vec::new(),
@@ -832,7 +839,7 @@ impl App {
 
     /// A window that asks something and must be answered first is open.
     pub(super) fn modal_open(&self) -> bool {
-        self.unsaved.is_some() || self.export_dialog || self.job_dialog.is_some() || self.about
+        self.unsaved.is_some() || self.after_thumb.is_some() || self.export_dialog || self.job_dialog.is_some() || self.about
     }
 
     /// Drop everything that is being typed or drawn, and the pop-ups: the floating value fields and
@@ -906,7 +913,11 @@ impl App {
                 // a cancelled save window leaves the question open
                 if !self.is_dirty() {
                     self.unsaved = None;
-                    self.run_pending(Some(ctx), what);
+                    if self.thumb_pending != 0 {
+                        self.after_thumb = Some(what);
+                    } else {
+                        self.run_pending(Some(ctx), what);
+                    }
                 }
             }
             Some(1) => {
@@ -2614,7 +2625,17 @@ impl App {
         if self.thumb_pending == 0 || self.shot.is_some() {
             return;
         }
+        let now = ctx.input(|i| i.time);
+        if self.thumb_pending != 1 && now - self.thumb_started > 3.0 {
+            // no picture came: give up, and let whatever waited for it go on
+            self.thumb_pending = 0;
+            if let Some(mode) = self.thumb_restore_mode.take() {
+                self.mode = mode;
+            }
+            return;
+        }
         if self.thumb_pending == 1 {
+            self.thumb_started = now;
             // Switch to 3D and ensure a simulation exists
             self.thumb_restore_mode = Some(self.mode);
             self.mode = ViewMode::ThreeD;
@@ -2828,6 +2849,11 @@ impl eframe::App for App {
         self.pp_dialog_ui(ctx);
         self.tool_dialog_ui(ctx);
         self.save_thumbnail(ctx);
+        if self.thumb_pending == 0 {
+            if let Some(what) = self.after_thumb.take() {
+                self.run_pending(Some(ctx), what);
+            }
+        }
         self.screenshot(ctx);
     }
 }
