@@ -723,6 +723,7 @@ impl App {
         let (mut go, mut cancel, mut manage) = (false, false, false);
         let indices = self.output_indices();
         let count = indices.len();
+        let scope_matters = self.output_scope_matters();
         // with more than one tool the window also asks for one file or one for each tool
         let tool_lines: Vec<String> = if self.export_choice(&indices) {
             self.tool_groups(&indices)
@@ -743,50 +744,52 @@ impl App {
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .frame(egui::Frame::window(&ctx.style()).fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
             .show(ctx, |ui| {
-                ui.set_width(560.0);
-                // three groups: which toolpaths and the format they are written in side by side, and
-                // below them (only when the toolpaths need more than one tool) how the tools are
-                // split into files
-                ui.columns(2, |cols| {
-                    super::dialog_group(&mut cols[0], &t!("Werkzeugpfade"), |ui| {
+                ui.set_width(460.0);
+                // the groups one under the other: which toolpaths (only when some are hidden, else
+                // "all" and "visible" are the same), the format, and (only when the toolpaths need
+                // more than one tool) how the tools are split into files
+                if scope_matters {
+                    super::dialog_group(ui, &t!("Werkzeugpfade"), |ui| {
                         for (scope, name) in [(OutputScope::All, t!("Alle Werkzeugwege")), (OutputScope::Visible, t!("Sichtbare Werkzeugwege"))] {
                             ui.radio_value(&mut self.output_scope, scope, name);
                         }
                         ui.label(egui::RichText::new(t!("%{n} Werkzeugwege", n = count)).color(muted()));
                     });
-                    super::dialog_group(&mut cols[1], &t!("Exportformat"), |ui| {
-                        let selected_label = self.pp().label();
-                        let post_idx = &mut self.post_idx;
-                        let postprocs = &self.postprocs;
-                        manage = combo_with_manage(ui, "post", 200.0, &selected_label, |ui| {
-                            for (i, pp) in postprocs.iter().enumerate() {
-                                if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
-                                    *post_idx = i;
-                                }
+                }
+                super::dialog_group(ui, &t!("Exportformat"), |ui| {
+                    let selected_label = self.pp().label();
+                    let post_idx = &mut self.post_idx;
+                    let postprocs = &self.postprocs;
+                    manage = combo_with_manage(ui, "post", 260.0, &selected_label, |ui| {
+                        for (i, pp) in postprocs.iter().enumerate() {
+                            if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
+                                *post_idx = i;
                             }
-                        });
+                        }
                     });
+                    if !scope_matters {
+                        ui.label(egui::RichText::new(t!("%{n} Werkzeugwege", n = count)).color(muted()));
+                    }
                 });
                 if !tool_lines.is_empty() {
                     super::dialog_group(ui, &t!("Werkzeugwechsel"), |ui| {
+                        ui.label(egui::RichText::new(t!("Die Werkzeugwege brauchen %{n} Werkzeuge nacheinander:", n = tool_lines.len())).color(ink()));
+                        for line in &tool_lines {
+                            ui.label(egui::RichText::new(line).color(muted()));
+                        }
+                        ui.add_space(4.0);
                         // several tools in one file only with a post-processor that can change tools
                         let one_file_possible = self.pp().tool_change;
                         let per_tool = self.export_per_tool || !one_file_possible;
-                        ui.columns(2, |cols| {
-                            cols[0].label(egui::RichText::new(t!("Die Werkzeugwege brauchen %{n} Werkzeuge nacheinander:", n = tool_lines.len())).color(ink()));
-                            for line in &tool_lines {
-                                cols[0].label(egui::RichText::new(line).color(muted()));
-                            }
-                            if cols[1].add_enabled(one_file_possible, egui::RadioButton::new(!per_tool, t!("Alles in eine Datei"))).on_disabled_hover_text(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).clicked() {
-                                self.export_per_tool = false;
-                            }
-                            if cols[1].add(egui::RadioButton::new(per_tool, t!("Je Werkzeug eine Datei (zusammen in einer ZIP-Datei)"))).clicked() {
-                                self.export_per_tool = true;
-                            }
-                            if !one_file_possible {
-                                cols[1].label(egui::RichText::new(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).color(muted()));
-                            }
-                        });
+                        if ui.add_enabled(one_file_possible, egui::RadioButton::new(!per_tool, t!("Alles in eine Datei"))).on_disabled_hover_text(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).clicked() {
+                            self.export_per_tool = false;
+                        }
+                        if ui.add(egui::RadioButton::new(per_tool, t!("Je Werkzeug eine Datei (zusammen in einer ZIP-Datei)"))).clicked() {
+                            self.export_per_tool = true;
+                        }
+                        if !one_file_possible {
+                            ui.label(egui::RichText::new(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).color(muted()));
+                        }
                     });
                 }
                 super::dialog_buttons(ui, |ui| {

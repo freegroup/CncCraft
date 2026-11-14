@@ -1504,6 +1504,12 @@ impl App {
         }
     }
 
+    /// Whether "all" and "visible" export different toolpaths: only when a hidden one has something
+    /// to cut.
+    pub(super) fn output_scope_matters(&self) -> bool {
+        self.toolpaths.iter().any(|t| !t.visible && t.moves.iter().any(|m| !m.rapid))
+    }
+
     fn step_animation(&mut self) {
         let visible: Vec<usize> = self.preview_indices();
         let speed = self.sim_speed;
