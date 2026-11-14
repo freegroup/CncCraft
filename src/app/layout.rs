@@ -985,7 +985,7 @@ impl App {
             .max_height(screen.height() - 60.0)
             .show(ctx, |ui| {
                 egui::TopBottomPanel::bottom("tool_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 30.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                             save = true;
                         }

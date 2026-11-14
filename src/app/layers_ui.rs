@@ -230,8 +230,7 @@ impl App {
                 let mut choice = None;
                 egui::Window::new(t!("Ebene löschen")).id(egui::Id::new("Ebene löschen")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
                     ui.label(t!("Ebene „%{name}“ enthält %{count} Form(en).", name = name, count = count));
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
+                    super::dialog_buttons(ui, |ui| {
                         if ui.button(t!("Formen auf andere Ebene verschieben")).clicked() {
                             choice = Some(Some(Leftovers::MoveAway));
                         }
@@ -270,8 +269,7 @@ fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool)
         if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             ok = true;
         }
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        super::dialog_buttons(ui, |ui| {
             ok |= ui.button(t!("OK")).clicked();
             cancel |= ui.button(t!("Abbrechen")).clicked();
         });

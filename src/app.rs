@@ -878,8 +878,7 @@ impl App {
                 };
                 ui.label(egui::RichText::new(ask).strong().color(ink()));
                 ui.label(egui::RichText::new(then).color(muted()));
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
+                dialog_buttons(ui, |ui| {
                     if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                         answer = Some(0);
                     }
@@ -1457,7 +1456,7 @@ impl App {
                     apply = true;
                 }
             });
-            ui.horizontal(|ui| {
+            dialog_buttons(ui, |ui| {
                 let b = egui::Button::new(egui::RichText::new(t!("Berechnen")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
                 if ui.add(b).clicked() {
                     close = true;
@@ -1764,9 +1763,7 @@ impl App {
                     });
                 });
 
-                ui.add_space(6.0);
-                // buttons at the bottom right, primary highlighted
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                dialog_buttons(ui, |ui| {
                     let primary = if *is_new { t!("Erstellen") } else { t!("Übernehmen") };
                     if ui.add(egui::Button::new(egui::RichText::new(primary).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
                         ok = true;
@@ -2835,9 +2832,11 @@ impl eframe::App for App {
             egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
                 ui.label(t!("CncCraft – Entwurf und Werkzeugwege für CNC-Fräsen."));
                 ui.label(t!("Werkzeugdaten und Voreinstellungen nach dem Vorbild von Vectric Spark."));
-                if ui.button(t!("Schließen")).clicked() {
-                    self.about = false;
-                }
+                dialog_buttons(ui, |ui| {
+                    if ui.button(t!("Schließen")).clicked() {
+                        self.about = false;
+                    }
+                });
             });
         }
         if self.shortcuts_open {
@@ -2869,6 +2868,15 @@ fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
 }
 
 /// A grouped box in a dialog: a titled white panel with a hairline border.
+/// The button row that ends every dialog: a line above it and the buttons at the right end, the
+/// main one outermost (so it is added first).
+fn dialog_buttons(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(2.0);
+    ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 30.0), egui::Layout::right_to_left(egui::Align::Center), add);
+}
+
 fn dialog_group(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(4.0);
     ui.label(egui::RichText::new(title).strong().size(13.0).color(ink()));

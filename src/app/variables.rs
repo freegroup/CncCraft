@@ -228,8 +228,7 @@ impl App {
                 ui.add(egui::TextEdit::multiline(&mut nv.comment).hint_text(t!("Kommentar eingeben")).desired_rows(4).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(8.0, 6.0)));
                 ui.end_row();
             });
-            ui.add_space(2.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            super::dialog_buttons(ui, |ui| {
                 if ui.add_enabled(valid, egui::Button::new(RichText::new(t!("OK")).color(ink())).min_size(egui::vec2(84.0, 30.0))).clicked() {
                     ok = true;
                 }

@@ -181,13 +181,12 @@ impl App {
             ui.label(t!("Sie wurde vielleicht verschoben, umbenannt oder gelöscht. Die importierten Formen bleiben unverändert in der Zeichnung."));
             ui.add_space(4.0);
             ui.label(egui::RichText::new(&file).small().color(muted()));
-            ui.add_space(8.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(t!("Schließen")).clicked() {
-                    close = true;
-                }
+            super::dialog_buttons(ui, |ui| {
                 if ui.button(t!("Datei suchen…")).clicked() {
                     search = true;
+                }
+                if ui.button(t!("Schließen")).clicked() {
+                    close = true;
                 }
             });
         });
