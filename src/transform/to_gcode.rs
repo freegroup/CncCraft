@@ -18,11 +18,46 @@ fn expand(s: &str, ctx: &HookCtx) -> String {
     for line in out.lines() {
         let trimmed = line.trim();
         if !trimmed.is_empty() {
-            result.push_str(line.trim_start());
+            result.push_str(&semicolon_comments(line.trim_start()));
             result.push('\n');
         }
     }
     result
+}
+
+/// A line with every comment written after a semicolon: a `(comment)` in the post-processor's own
+/// text moves behind the code of its line (all comments in the files are `;` comments).
+fn semicolon_comments(line: &str) -> String {
+    let (code_part, tail) = match line.find(';') {
+        Some(i) => (&line[..i], Some(line[i + 1..].trim())),
+        None => (line, None),
+    };
+    let (mut code, mut notes) = (String::new(), Vec::new());
+    let mut chars = code_part.chars();
+    while let Some(c) = chars.next() {
+        if c == '(' {
+            let mut note = String::new();
+            for d in chars.by_ref() {
+                if d == ')' {
+                    break;
+                }
+                note.push(d);
+            }
+            notes.push(note.trim().to_string());
+        } else {
+            code.push(c);
+        }
+    }
+    if let Some(t) = tail {
+        notes.push(t.to_string());
+    }
+    let code = code.trim_end();
+    let notes: Vec<&str> = notes.iter().map(String::as_str).filter(|n| !n.is_empty()).collect();
+    match (code.is_empty(), notes.is_empty()) {
+        (_, true) => code.to_string(),
+        (true, false) => format!("; {}", notes.join(" ")),
+        (false, false) => format!("{code} ; {}", notes.join(" ")),
+    }
 }
 
 struct HookCtx {
@@ -39,24 +74,152 @@ impl HookCtx {
     }
 }
 
+/// What the header of a file says besides the job and the toolpaths.
+#[derive(Default, Clone)]
+pub struct ExportMeta {
+    /// Which toolpaths were chosen to be exported ("Sichtbare Werkzeugwege (4)").
+    pub scope: Option<String>,
+    /// This file is number `n` of `m` (one file for each tool).
+    pub file: Option<(usize, usize)>,
+}
+
+#[cfg(test)]
 pub fn write(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -> String {
-    write_with_sections(job, paths, pp).0
+    write_with_meta(job, paths, pp, &ExportMeta::default())
+}
+
+pub fn write_with_meta(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) -> String {
+    build(job, paths, pp, meta).0
 }
 
 /// The G-code, and the line (counted from 0) where each toolpath's own part starts.
 pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -> (String, Vec<usize>) {
+    build(job, paths, pp, &ExportMeta::default())
+}
+
+const RULE_WIDTH: usize = 76;
+const LABEL_WIDTH: usize = 20;
+
+fn minutes_text(min: f64) -> String {
+    let s = (min * 60.0).round() as i64;
+    if s >= 3600 {
+        format!("{}:{:02}:{:02}", s / 3600, (s / 60) % 60, s % 60)
+    } else {
+        format!("{}:{:02}", s / 60, s % 60)
+    }
+}
+
+/// The comment block at the top of every file: where it comes from, the workpiece, the tools
+/// with all their settings and the toolpaths. Every line is a `;` comment.
+fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) -> String {
+    let rule = format!("; {}\n", "=".repeat(RULE_WIDTH));
+    let thin = format!(";   {}\n", "-".repeat(RULE_WIDTH - 2));
+    let row = |label: String, value: String| format!(";     {label:<LABEL_WIDTH$}{value}\n");
+    let sub = |label: String, value: String| format!(";         {label:<LABEL_WIDTH$}{value}\n");
+    let mm = |v: f64| format!("{v:.1} mm");
+    let mut h = String::new();
+    h.push_str(&rule);
+    h.push_str(&format!(";   CncCraft {}  ·  G-Code\n", env!("CARGO_PKG_VERSION")));
+    h.push_str(";   https://github.com/freegroup/CncCraft\n");
+    h.push_str(&rule);
+
+    h.push_str(";\n");
+    h.push_str(&format!(";   {}\n", t!("DATEI")));
+    h.push_str(&thin);
+    h.push_str(&row(t!("Erstellt"), chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()));
+    h.push_str(&row(t!("Postprozessor"), pp.label()));
+    if let Some(scope) = &meta.scope {
+        h.push_str(&row(t!("Export"), scope.clone()));
+    }
+    if let Some((n, m)) = meta.file {
+        h.push_str(&row(t!("Datei"), t!("%{n} von %{m}", n = n, m = m)));
+    }
+
+    h.push_str(";\n");
+    h.push_str(&format!(";   {}\n", t!("WERKSTÜCK")));
+    h.push_str(&thin);
+    h.push_str(&row(t!("Größe (X × Y × Z)"), format!("{:.1} × {:.1} × {:.1} mm", job.width, job.height, job.thickness)));
+    h.push_str(&row(t!("Material"), crate::tools::material_label(&job.material)));
+    h.push_str(&row(
+        t!("Nullpunkt XY"),
+        match job.datum {
+            crate::toolpath::Datum::LowerLeft => t!("unten links"),
+            crate::toolpath::Datum::Center => t!("Mitte"),
+        },
+    ));
+    h.push_str(&row(
+        t!("Nullpunkt Z"),
+        match job.z_zero {
+            crate::toolpath::ZZero::MaterialSurface => t!("Materialoberfläche"),
+            crate::toolpath::ZZero::MachineBed => t!("Maschinentisch"),
+        },
+    ));
+    h.push_str(&row(t!("Sichere Höhe"), mm(job.safe_z)));
+    h.push_str(&row(t!("Referenzhöhe"), mm(job.home_z)));
+    h.push_str(&row(t!("Einheiten"), if job.inches { t!("Zoll (G20)") } else { t!("Millimeter (G21)") }));
+    if job.inches {
+        h.push_str(&row(String::new(), t!("Maße in diesem Kopf in mm")));
+    }
+
+    // every tool once, in the order it is first used
+    let mut tools: Vec<&crate::tools::Tool> = vec![];
+    for tp in paths {
+        if !tools.contains(&&tp.tool) {
+            tools.push(&tp.tool);
+        }
+    }
+    h.push_str(";\n");
+    h.push_str(&format!(";   {}\n", t!("WERKZEUGE")));
+    h.push_str(&thin);
+    for (n, tool) in tools.iter().enumerate() {
+        if n > 0 {
+            h.push_str(";\n");
+        }
+        h.push_str(&format!(";     T{}  {}\n", tool.number, crate::tools::shown_name(&tool.name)));
+        h.push_str(&sub(t!("Typ"), tool.kind.group()));
+        h.push_str(&sub(t!("Durchmesser"), mm(tool.diameter)));
+        if matches!(tool.kind, crate::tools::ToolKind::VBit | crate::tools::ToolKind::Drill) {
+            h.push_str(&sub(t!("Spitzenwinkel"), format!("{:.0}°", tool.angle)));
+        }
+        h.push_str(&sub(t!("Drehzahl"), format!("{} {}", tool.rpm, t!("U/min"))));
+        h.push_str(&sub(t!("Vorschub"), format!("{:.0} mm/min", tool.feed)));
+        h.push_str(&sub(t!("Eintauchen"), format!("{:.0} mm/min", tool.plunge)));
+        h.push_str(&sub(t!("Zustellung"), mm(tool.stepdown)));
+        h.push_str(&sub(t!("Querzustellung"), mm(tool.stepover)));
+    }
+
+    h.push_str(";\n");
+    h.push_str(&format!(";   {}\n", t!("WERKZEUGWEGE")));
+    h.push_str(&thin);
+    // a table: one line for each toolpath, the columns as wide as their longest entry
+    let mut table: Vec<[String; 6]> = vec![[t!("Nr."), t!("Name"), t!("Strategie"), t!("Werkzeug"), t!("Tiefe (Start → Schnitt)"), t!("Zeit")]];
+    let mut total = 0.0;
+    for (n, tp) in paths.iter().enumerate() {
+        let minutes = tp.stats().minutes;
+        total += minutes;
+        table.push([(n + 1).to_string(), tp.name.clone(), tp.strategy.label(), format!("T{}", tp.tool.number), format!("{:.1} → {:.1} mm", tp.start_depth, tp.cut_depth), minutes_text(minutes)]);
+    }
+    let widths: Vec<usize> = (0..6).map(|c| table.iter().map(|r| r[c].chars().count()).max().unwrap_or(0)).collect();
+    for (i, r) in table.iter().enumerate() {
+        let cells: Vec<String> = r.iter().zip(&widths).map(|(cell, w)| format!("{cell:<w$}")).collect();
+        h.push_str(&format!(";     {}\n", cells.join("   ").trim_end()));
+        if i == 0 {
+            h.push_str(&format!(";     {}\n", widths.iter().map(|w| "-".repeat(*w)).collect::<Vec<_>>().join("   ")));
+        }
+    }
+    h.push_str(";\n");
+    h.push_str(&format!(";     {}  {}\n", t!("Gesamte Fräszeit:"), minutes_text(total)));
+    h.push_str(&rule);
+    h
+}
+
+fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) -> (String, Vec<usize>) {
     let (k, [dx, dy, dz]) = frame(job);
     let f = |v: f64| format!("{:.3}", v * k);
     let mut sections = Vec::with_capacity(paths.len());
     let mut s = String::new();
-    s.push_str(&t!("( CncCraft – %{n} Werkzeugweg(e) )\n", n = paths.len()));
-    s.push_str(&t!(
-        "( Material: %{w} x %{h} x %{d} mm, Z-Null: %{zero} )\n",
-        w = format!("{:.1}", job.width),
-        h = format!("{:.1}", job.height),
-        d = format!("{:.1}", job.thickness),
-        zero = if dz == 0.0 { t!("Materialoberfläche") } else { t!("Maschinentisch") }
-    ));
+    s.push_str(&header(job, paths, pp, meta));
+    s.push_str("\n");
     s.push_str(if job.inches { "G20\n" } else { "G21\n" });
     s.push_str("G90 G17 G40 G49 G80 G94\n");
 
@@ -64,7 +227,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         let ctx = HookCtx { tool_number: first.tool.number, rpm: first.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_start, &ctx);
         if !block.is_empty() {
-            s.push_str(&t!("( -- Job Start -- )\n"));
+            s.push_str(&t!("; -- Job Start --\n"));
             s.push_str(&block);
         }
     }
@@ -76,7 +239,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         if !first && pp.tool_change {
             let block = expand(&pp.on_tool_change, &ctx);
             if !block.is_empty() {
-                s.push_str(&t!("( -- Werkzeugwechsel -- )\n"));
+                s.push_str(&t!("; -- Werkzeugwechsel --\n"));
                 s.push_str(&block);
             } else {
                 s.push_str("M5\n");
@@ -87,7 +250,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         }
 
         sections.push(s.bytes().filter(|b| *b == b'\n').count());
-        s.push_str(&format!("( {} – {} )\n", tp.name, tp.tool.name));
+        s.push_str(&format!("; {} – {}\n", tp.name, crate::tools::shown_name(&tp.tool.name)));
         s.push_str(&format!("S{} M3\n", tp.tool.rpm));
 
         let block = expand(&pp.before_path, &ctx);
@@ -132,7 +295,7 @@ pub fn write_with_sections(job: &Job, paths: &[&Toolpath], pp: &PostProcessor) -
         let ctx = HookCtx { tool_number: last.tool.number, rpm: last.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_end, &ctx);
         if !block.is_empty() {
-            s.push_str(&t!("( -- Job Ende -- )\n"));
+            s.push_str(&t!("; -- Job Ende --\n"));
             s.push_str(&block);
         }
     }
@@ -232,7 +395,7 @@ mod tests {
         let b = profile_around(2, [150.0, 100.0], &mut items, &j);
         let (code, sections) = write_with_sections(&j, &[&a, &b], &builtins()[1]);
         assert_eq!(sections.len(), 2);
-        assert!(code.lines().nth(sections[1]).is_some_and(|l| l.starts_with("( Profil")), "the section starts at the toolpath's own comment");
+        assert!(code.lines().nth(sections[1]).is_some_and(|l| l.starts_with("; Profil")), "the section starts at the toolpath's own comment");
 
         let steps = trace_job(&code, &j);
         // the first move: from home (work origin, home height) at safe_z to the first cut
@@ -262,6 +425,24 @@ mod tests {
 
 
     #[test]
+    fn every_comment_is_a_semicolon_comment_and_the_header_tells_the_job() {
+        rust_i18n::set_locale("de");
+        let mut j = job();
+        j.datum = crate::toolpath::Datum::Center;
+        let tp = simple_toolpath();
+        let mut pp = builtins()[0].clone();
+        pp.before_path = "( Vor dem Weg )\nM8 (Kühlung)".into();
+        let meta = ExportMeta { scope: Some("Sichtbare Werkzeugwege (1)".into()), file: Some((1, 2)) };
+        let code = write_with_meta(&j, &[&tp], &pp, &meta);
+        println!("{code}");
+        assert!(code.lines().all(|l| !l.contains('(') || l.trim_start().starts_with(';') || l.contains(" ; ")), "a parenthesis comment is left:\n{code}");
+        for needle in ["https://github.com/freegroup/CncCraft", env!("CARGO_PKG_VERSION"), "Erstellt", "300.0 × 200.0 × 18.0 mm", "Mitte", "T1", "Drehzahl", "18000", "1 von 2", "Sichtbare Werkzeugwege (1)"] {
+            assert!(code.contains(needle), "header lacks {needle}:\n{code}");
+        }
+        assert!(code.contains("M8 ; Kühlung") && code.contains("\n; Vor dem Weg\n"), "{code}");
+    }
+
+    #[test]
     fn hooks_are_injected() {
         let j = job();
         let tp = simple_toolpath();
@@ -269,8 +450,8 @@ mod tests {
         pp.job_start = "M8 (Kühlung an)".into();
         pp.job_end = "M9 (Kühlung aus)".into();
         let code = write(&j, &[&tp], &pp);
-        assert!(code.contains("M8 (Kühlung an)"), "job_start hook missing");
-        assert!(code.contains("M9 (Kühlung aus)"), "job_end hook missing");
+        assert!(code.contains("M8 ; Kühlung an"), "job_start hook missing");
+        assert!(code.contains("M9 ; Kühlung aus"), "job_end hook missing");
     }
 
     #[test]

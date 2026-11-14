@@ -885,7 +885,7 @@ impl App {
                         name: t!("Neuer Postprozessor").into(),
                         inch: false, ext: "nc".into(), tool_change: true,
                         job_start: String::new(), job_end: String::new(),
-                        on_tool_change: "G0 Z{safe_z}\nM5\nT{tool_number} M6\nM0 (Werkzeugwechsel – weiter mit Cycle Start)".into(),
+                        on_tool_change: "G0 Z{safe_z}\nM5\nT{tool_number} M6\nM0 ; Werkzeugwechsel – weiter mit Cycle Start".into(),
                         before_path: String::new(), after_path: String::new(),
                         builtin: false,
                     },

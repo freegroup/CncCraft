@@ -1051,7 +1051,8 @@ impl App {
                 return;
             };
             let stem = file.file_stem().map(|s| crate::toolgroups::file_part(&s.to_string_lossy())).filter(|s| !s.is_empty()).unwrap_or_else(|| "werkzeugwege".into());
-            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.pp(), &stem).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
+            let scope = self.export_scope_text(indices.len());
+            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.pp(), &stem, Some(&scope)).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
             let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
             match std::fs::write(&file, crate::zipfile::stored(&files, seconds)) {
                 Ok(()) => {}
@@ -1067,7 +1068,8 @@ impl App {
         else {
             return;
         };
-        let text = crate::transform::to_gcode::write(&self.job, &paths, &pp);
+        let meta = crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(indices.len())), file: None };
+        let text = crate::transform::to_gcode::write_with_meta(&self.job, &paths, &pp, &meta);
         match std::fs::write(&file, text) {
             Ok(()) => {}
             Err(e) => self.status = format!("Fehler: {e}"),
@@ -1502,6 +1504,15 @@ impl App {
             OutputScope::All => (0..self.toolpaths.len()).filter(|&i| cuts(&self.toolpaths[i])).collect(),
             OutputScope::Visible => (0..self.toolpaths.len()).filter(|&i| self.toolpaths[i].visible && cuts(&self.toolpaths[i])).collect(),
         }
+    }
+
+    /// Which toolpaths were exported, for the header of the file ("Sichtbare Werkzeugwege (4)").
+    fn export_scope_text(&self, count: usize) -> String {
+        let what = match self.output_scope {
+            OutputScope::All => t!("Alle Werkzeugwege"),
+            OutputScope::Visible => t!("Sichtbare Werkzeugwege"),
+        };
+        format!("{what} ({count})")
     }
 
     /// Whether "all" and "visible" export different toolpaths: only when a hidden one has something

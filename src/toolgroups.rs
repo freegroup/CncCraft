@@ -57,16 +57,19 @@ pub fn file_part(name: &str) -> String {
 
 /// One machine file per stretch of the same tool: `<stem>_<nn>_<tool>.<ext>` with the running number
 /// counted from 01 in the order the stretches are cut, and its G-code.
-pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str) -> Vec<(String, String)> {
+pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, scope: Option<&str>) -> Vec<(String, String)> {
     let tools: Vec<&Tool> = paths.iter().map(|t| &t.tool).collect();
-    let width = groups(&tools).len().to_string().len().max(2);
-    groups(&tools)
+    let all = groups(&tools);
+    let count = all.len();
+    let width = all.len().to_string().len().max(2);
+    all
         .iter()
         .enumerate()
         .map(|(n, group)| {
             let part: Vec<&Toolpath> = group.iter().map(|&i| paths[i]).collect();
             let name = format!("{stem}_{:0width$}_{}.{}", n + 1, file_part(&paths[group[0]].tool.name), pp.ext);
-            (name, to_gcode::write(job, &part, pp))
+            let meta = to_gcode::ExportMeta { scope: scope.map(str::to_string), file: Some((n + 1, count)) };
+            (name, to_gcode::write_with_meta(job, &part, pp, &meta))
         })
         .collect()
 }
@@ -119,13 +122,15 @@ mod tests {
         let a = path(&lib, "profile", Some((ToolKind::EndMill, 3.0)));
         let b = path(&lib, "pocket", Some((ToolKind::EndMill, 3.0)));
         let c = path(&lib, "vcarve", None);
+        rust_i18n::set_locale("de");
         let pp = &builtins()[0];
-        let list = files(&Job::default(), &[&a, &b, &c], pp, "schild");
+        let list = files(&Job::default(), &[&a, &b, &c], pp, "schild", None);
         assert_eq!(list.len(), 2);
         assert!(list[0].0.starts_with("schild_01_Schaftfraeser") && list[0].0.ends_with(".nc"), "{}", list[0].0);
         assert!(list[1].0.starts_with("schild_02_V-Fraeser") && list[1].0.ends_with(".nc"), "{}", list[1].0);
-        assert!(list[0].1.contains("( CncCraft – 2 Werkzeugweg(e) )"));
-        assert!(list[1].1.contains("( CncCraft – 1 Werkzeugweg(e) )"));
+        // each file's header says which file of how many it is, and only its own tool
+        assert!(list[0].1.contains("1 von 2") && list[1].1.contains("2 von 2"));
+        assert!(list[0].1.contains("T1  ") && !list[0].1.contains("V-Fräser"));
         assert!(list[0].1.contains("M6") && list[1].1.contains("M6"));
     }
 
@@ -135,7 +140,7 @@ mod tests {
         let a = path(&lib, "profile", Some((ToolKind::EndMill, 3.0)));
         let c = path(&lib, "vcarve", None);
         let pp = &builtins()[1]; // GRBL
-        let list = files(&Job::default(), &[&a, &c], pp, "x");
+        let list = files(&Job::default(), &[&a, &c], pp, "x", None);
         assert_eq!(list.iter().map(|f| f.0.rsplit('.').next().unwrap()).collect::<Vec<_>>(), vec!["gcode", "gcode"]);
     }
 }
