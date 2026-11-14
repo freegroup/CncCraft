@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/freegroup/CncCraft/compare/v1.5.0...v1.6.0) (2026-11-14)
+
+
+### Features
+
+* add a spline tool and show the real cutter in the 3D simulation ([a4fcf28](https://github.com/freegroup/CncCraft/commit/a4fcf28eb59f834f7328f2c6dea589fbe0616a46))
+
 # [1.5.0](https://github.com/freegroup/CncCraft/compare/v1.4.0...v1.5.0) (2026-11-14)
 
 
