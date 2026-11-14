@@ -4,12 +4,15 @@
 //! lets each switch be turned off, and can gain new ones while the program runs.
 
 mod cube;
+mod tool;
 mod zero;
 
 pub use cube::ViewCube;
+pub use tool::CutterOverlay;
 pub use zero::{arrow_length, zero_point, ZeroCross};
 
 use crate::sim::Camera;
+use crate::tools::Tool;
 use egui::Rect;
 
 /// What a 3D-view decoration may know and change: where the view is on screen and the camera
@@ -23,6 +26,12 @@ pub struct View3dContext<'a> {
     pub proj: &'a crate::sim::Projection,
     pub zero: [f32; 3],
     pub arrow_length: f32,
+    /// Current cutter position and tool during simulation (set while animation runs).
+    pub cutter: Option<([f64; 3], &'a Tool)>,
+    /// Material thickness in mm, for sizing the shaft.
+    pub thickness: f32,
+    /// The 3D renderer, so decorations can inject GPU meshes.
+    pub renderer: &'a crate::view3d::Renderer,
 }
 
 /// One decoration of the 3D view. It draws itself and reacts to the pointer; it may answer with
@@ -46,6 +55,7 @@ impl Default for ViewDecorations {
     fn default() -> Self {
         let mut d = ViewDecorations { items: Vec::new() };
         d.add(Box::new(ZeroCross));
+        d.add(Box::new(CutterOverlay::default()));
         d.add(Box::new(ViewCube));
         d
     }
@@ -94,7 +104,7 @@ mod tests {
         d.add(Box::new(Probe(seen.clone())));
         let names: Vec<&str> = d.switches().map(|(n, _)| n).collect();
         assert_eq!(names, vec!["Probe"]);
-        assert_eq!(ViewDecorations::default().switches().map(|(n, _)| n).collect::<Vec<_>>(), vec!["Nullpunkt-Achsenkreuz", "Ansichtswürfel"]);
+        assert_eq!(ViewDecorations::default().switches().map(|(n, _)| n).collect::<Vec<_>>(), vec!["Nullpunkt-Achsenkreuz", "Fräser", "Ansichtswürfel"]);
         for (_, shown) in d.switches() {
             *shown = false;
         }
@@ -105,7 +115,8 @@ mod tests {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let job = crate::toolpath::Job::default();
                 let proj = crate::sim::Projection::new(ui.max_rect(), &job, &Camera::default());
-                let mut view = View3dContext { area: ui.max_rect(), cam: &mut cam, proj: &proj, zero: zero_point(&job), arrow_length: arrow_length(&job) };
+                let renderer = crate::view3d::Renderer::default();
+                let mut view = View3dContext { area: ui.max_rect(), cam: &mut cam, proj: &proj, zero: zero_point(&job), arrow_length: arrow_length(&job), cutter: None, thickness: job.thickness as f32, renderer: &renderer };
                 assert!(d.show(ui, &mut view).is_empty());
             });
         });

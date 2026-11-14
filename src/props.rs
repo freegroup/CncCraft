@@ -110,7 +110,7 @@ pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
     let before = shape.clone();
     ui.label(egui::RichText::new(t!(shape.label())).strong().color(ink()));
     egui::Grid::new("props").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-        if matches!(shape, Shape::Path(_) | Shape::Compound(_)) {
+        if matches!(shape, Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_)) {
             curves_center(ui, shape);
         }
         match shape {
@@ -121,6 +121,7 @@ pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
             Shape::Text(t) => text(ui, t),
             Shape::Path(p) => path(ui, p),
             Shape::Compound(c) => compound(ui, c),
+            Shape::Spline(_) => {}
         }
     });
     if let Some((lo, hi)) = shape.bounds() {

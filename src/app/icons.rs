@@ -308,6 +308,22 @@ impl Pen<'_> {
                     self.dot(x, y);
                 }
             }
+            Icon::Draw(DrawTool::Spline) => {
+                let curve: Vec<(f32, f32)> = (0..=16)
+                    .map(|i| {
+                        let t = i as f32 / 16.0;
+                        let u = 1.0 - t;
+                        let (u2, t2) = (u * u, t * t);
+                        let (u3, t3) = (u2 * u, t2 * t);
+                        let x = u3 * (-10.0) + 3.0 * u2 * t * (-6.0) + 3.0 * u * t2 * 6.0 + t3 * 10.0;
+                        let y = u3 * (-8.0) + 3.0 * u2 * t * 9.0 + 3.0 * u * t2 * (-9.0) + t3 * 8.0;
+                        (x, y)
+                    })
+                    .collect();
+                self.line(&curve);
+                self.dot(-10.0, -8.0);
+                self.dot(10.0, 8.0);
+            }
             Icon::Draw(DrawTool::Rect) => self.solid(self.rrect(0.0, 0.0, 20.0, 15.0, 2.5)),
             Icon::Draw(DrawTool::Circle) => self.solid(self.disc(0.0, 0.0, 9.5)),
             Icon::Draw(DrawTool::Ellipse) => self.solid(self.ellipse(0.0, 0.0, 11.0, 7.0)),

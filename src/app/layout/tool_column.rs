@@ -22,7 +22,7 @@ pub(in crate::app) enum ToolForm {
 /// duplicating is no tool there either (menu and ⌘D).
 const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Select), Icon::Transform, Icon::Draw(DrawTool::NodeEdit)],
-    &[Icon::Draw(DrawTool::Polyline)],
+    &[Icon::Draw(DrawTool::Polyline), Icon::Draw(DrawTool::Spline)],
     &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon), Icon::ImportDxf],
     &[Icon::Draw(DrawTool::Text)],
     &[Icon::Delete, Icon::Curves],

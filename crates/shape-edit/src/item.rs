@@ -1,6 +1,6 @@
 //! [`Item`]: a shape with an id, ready for the [`crate::Editor`].
 
-use crate::forms::{Compound, Dim, Grip, GripKind, Path, Shape};
+use crate::forms::{Compound, Dim, Grip, GripKind, Path, Shape, Spline, SplineNode};
 use crate::snap::SnapKind;
 use crate::geometry::{dist_to_segment, point_in_ring};
 use crate::{Editable, Pt};
@@ -135,6 +135,33 @@ impl Item {
     pub fn new(id: u64, shape: impl Into<Shape>) -> Self {
         Item { id, shape: shape.into(), source: None, groups: vec![], bound: vec![], dim_offsets: vec![], locked: (false, false), layer: 1, hidden: false, frozen: false }
     }
+
+    /// Toggle a spline node between smooth and corner. `index` is the editor node index
+    /// (triple-encoded: 3*i+1 is a pos node). Returns the new item or `None` if the shape is
+    /// not a spline, the index is not a pos node, or it is out of range.
+    pub fn toggle_spline_node(&self, index: usize) -> Option<Self> {
+        let Shape::Spline(s) = &self.shape else { return None };
+        if index % 3 != 1 {
+            return None;
+        }
+        let si = index / 3;
+        if si >= s.nodes.len() {
+            return None;
+        }
+        let mut nodes = s.nodes.clone();
+        if nodes[si].smooth {
+            nodes[si].smooth = false;
+            nodes[si].cp_in = nodes[si].pos;
+            nodes[si].cp_out = nodes[si].pos;
+        } else {
+            nodes[si].smooth = true;
+        }
+        let mut sp = Spline::new(nodes, s.closed);
+        if sp.nodes[si].smooth {
+            recompute_smooth_handles(&mut sp, si);
+        }
+        Some(Item { shape: sp.into(), ..self.clone() })
+    }
 }
 
 /// How far the shape is turned (degrees), for the classes that can be.
@@ -144,7 +171,7 @@ fn rotation_of(shape: &Shape) -> f64 {
         Shape::Ellipse(s) => s.rotation,
         Shape::Polygon(s) => s.rotation,
         Shape::Text(s) => s.rotation,
-        Shape::Circle(_) | Shape::Path(_) | Shape::Compound(_) => 0.0,
+        Shape::Circle(_) | Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => 0.0,
     }
 }
 
@@ -167,6 +194,36 @@ fn with_paths(shape: &Shape, f: impl FnOnce(&mut Vec<Path>) -> bool) -> Option<S
         Shape::Path(_) => Shape::Path(list.remove(0)),
         _ => Shape::Compound(Compound::new(list)),
     })
+}
+
+/// Recompute the control handles of a smooth node based on its neighbours.
+fn recompute_smooth_handles(spline: &mut Spline, i: usize) {
+    let n = spline.nodes.len();
+    if n < 2 || !spline.nodes[i].smooth {
+        return;
+    }
+    let prev_pos = if i == 0 {
+        if spline.closed { spline.nodes[n - 1].pos } else { spline.nodes[0].pos }
+    } else {
+        spline.nodes[i - 1].pos
+    };
+    let next_pos = if i == n - 1 {
+        if spline.closed { spline.nodes[0].pos } else { spline.nodes[n - 1].pos }
+    } else {
+        spline.nodes[i + 1].pos
+    };
+    let p = spline.nodes[i].pos;
+    let dx = next_pos[0] - prev_pos[0];
+    let dy = next_pos[1] - prev_pos[1];
+    let len = (dx * dx + dy * dy).sqrt().max(1e-12);
+    let ux = dx / len;
+    let uy = dy / len;
+    let d_in = crate::geometry::dist(prev_pos, p);
+    let d_out = crate::geometry::dist(p, next_pos);
+    let arm_in = d_in * 0.3;
+    let arm_out = d_out * 0.3;
+    spline.nodes[i].cp_in = [p[0] - ux * arm_in, p[1] - uy * arm_in];
+    spline.nodes[i].cp_out = [p[0] + ux * arm_out, p[1] + uy * arm_out];
 }
 
 impl Editable for Item {
@@ -277,13 +334,14 @@ impl Editable for Item {
             Shape::Ellipse(e) => Some(e.center),
             Shape::Polygon(p) => Some(p.center),
             Shape::Text(t) => Some(t.center),
-            Shape::Path(_) | Shape::Compound(_) => None,
+            Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => None,
         };
         out.extend(centre.map(|c| (c, SnapKind::Centre)));
         // corners and edge middles of shapes made of straight segments
         let straight = match &self.shape {
             Shape::Rect(r) => r.corner_radius <= 0.0,
             Shape::Polygon(_) | Shape::Path(_) | Shape::Compound(_) => true,
+            Shape::Spline(_) => false,
             _ => false,
         };
         if straight {
@@ -292,10 +350,22 @@ impl Editable for Item {
                 out.extend(c.segments().map(|(a, b)| ([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0], SnapKind::MidPoint)));
             }
         }
+        if let Shape::Spline(s) = &self.shape {
+            out.extend(s.nodes.iter().map(|n| (n.pos, SnapKind::Node)));
+        }
         out
     }
 
     fn nodes(&self) -> Option<Vec<Pt>> {
+        if let Shape::Spline(s) = &self.shape {
+            let mut pts = Vec::with_capacity(s.nodes.len() * 3);
+            for n in &s.nodes {
+                pts.push(n.cp_in);
+                pts.push(n.pos);
+                pts.push(n.cp_out);
+            }
+            return Some(pts);
+        }
         Some(paths(&self.shape)?.into_iter().flat_map(|p| p.points.iter().copied()).collect())
     }
 
@@ -314,6 +384,11 @@ impl Editable for Item {
     }
 
     fn segments(&self) -> Vec<(usize, usize)> {
+        if let Shape::Spline(s) = &self.shape {
+            let n = s.nodes.len();
+            let m = if s.closed { n } else { n.saturating_sub(1) };
+            return (0..m).map(|i| (i * 3 + 1, ((i + 1) % n) * 3 + 1)).collect();
+        }
         let Some(paths) = paths(&self.shape) else { return vec![] };
         let mut start = 0;
         let mut out = Vec::new();
@@ -326,7 +401,88 @@ impl Editable for Item {
         out
     }
 
+    fn segment_distance(&self, p: Pt, seg_a: usize, seg_b: usize) -> f64 {
+        if let Shape::Spline(s) = &self.shape {
+            let si_a = seg_a / 3;
+            let si_b = seg_b / 3;
+            if si_a >= s.nodes.len() || si_b >= s.nodes.len() {
+                return f64::MAX;
+            }
+            let a = &s.nodes[si_a];
+            let b = &s.nodes[si_b];
+            let mut prev = a.pos;
+            let steps = 20;
+            let mut best = f64::MAX;
+            for i in 1..=steps {
+                let t = i as f64 / steps as f64;
+                let u = 1.0 - t;
+                let (u2, t2) = (u * u, t * t);
+                let (u3, t3) = (u2 * u, t2 * t);
+                let cur = [
+                    u3 * a.pos[0] + 3.0 * u2 * t * a.cp_out[0] + 3.0 * u * t2 * b.cp_in[0] + t3 * b.pos[0],
+                    u3 * a.pos[1] + 3.0 * u2 * t * a.cp_out[1] + 3.0 * u * t2 * b.cp_in[1] + t3 * b.pos[1],
+                ];
+                let d = dist_to_segment(p, prev, cur);
+                if d < best { best = d; }
+                prev = cur;
+            }
+            return best;
+        }
+        let Some(nodes) = self.nodes() else { return f64::MAX };
+        if seg_a >= nodes.len() || seg_b >= nodes.len() { return f64::MAX; }
+        dist_to_segment(p, nodes[seg_a], nodes[seg_b])
+    }
+
     fn with_node(&self, index: usize, p: Pt) -> Self {
+        if let Shape::Spline(s) = &self.shape {
+            let si = index / 3;
+            let sub = index % 3;
+            if si < s.nodes.len() {
+                let mut nodes = s.nodes.clone();
+                match sub {
+                    1 => {
+                        // move the position: shift both handles by the same delta
+                        let old = nodes[si].pos;
+                        let dx = p[0] - old[0];
+                        let dy = p[1] - old[1];
+                        nodes[si].pos = p;
+                        nodes[si].cp_in = [nodes[si].cp_in[0] + dx, nodes[si].cp_in[1] + dy];
+                        nodes[si].cp_out = [nodes[si].cp_out[0] + dx, nodes[si].cp_out[1] + dy];
+                    }
+                    0 => {
+                        // move cp_in; mirror cp_out on smooth nodes
+                        nodes[si].cp_in = p;
+                        if nodes[si].smooth {
+                            let pos = nodes[si].pos;
+                            let dx = pos[0] - p[0];
+                            let dy = pos[1] - p[1];
+                            let len_in = (dx * dx + dy * dy).sqrt();
+                            let old_out = nodes[si].cp_out;
+                            let len_out = ((old_out[0] - pos[0]).powi(2) + (old_out[1] - pos[1]).powi(2)).sqrt();
+                            if len_in > 1e-12 {
+                                nodes[si].cp_out = [pos[0] + dx / len_in * len_out, pos[1] + dy / len_in * len_out];
+                            }
+                        }
+                    }
+                    _ => {
+                        // move cp_out; mirror cp_in on smooth nodes
+                        nodes[si].cp_out = p;
+                        if nodes[si].smooth {
+                            let pos = nodes[si].pos;
+                            let dx = pos[0] - p[0];
+                            let dy = pos[1] - p[1];
+                            let len_out = (dx * dx + dy * dy).sqrt();
+                            let old_in = nodes[si].cp_in;
+                            let len_in = ((old_in[0] - pos[0]).powi(2) + (old_in[1] - pos[1]).powi(2)).sqrt();
+                            if len_out > 1e-12 {
+                                nodes[si].cp_in = [pos[0] + dx / len_out * len_in, pos[1] + dy / len_out * len_in];
+                            }
+                        }
+                    }
+                }
+                return Item { shape: Spline::new(nodes, s.closed).into(), ..self.clone() };
+            }
+        }
         let shape = with_paths(&self.shape, |list| {
             let Some((pi, ni)) = Compound::new(list.clone()).locate(index) else { return false };
             list[pi].points[ni] = p;
@@ -336,6 +492,16 @@ impl Editable for Item {
     }
 
     fn with_inserted_node(&self, after: usize, p: Pt) -> Self {
+        if let Shape::Spline(s) = &self.shape {
+            let si = after / 3;
+            if si < s.nodes.len() {
+                let mut nodes = s.nodes.clone();
+                nodes.insert(si + 1, SplineNode::smooth(p, p, p));
+                let mut sp = Spline::new(nodes, s.closed);
+                recompute_smooth_handles(&mut sp, si + 1);
+                return Item { shape: sp.into(), ..self.clone() };
+            }
+        }
         let shape = with_paths(&self.shape, |list| {
             let Some((pi, ni)) = Compound::new(list.clone()).locate(after) else { return false };
             list[pi].points.insert(ni + 1, p);
@@ -345,6 +511,18 @@ impl Editable for Item {
     }
 
     fn without_node(&self, index: usize) -> Option<Self> {
+        if let Shape::Spline(s) = &self.shape {
+            if index % 3 != 1 {
+                return None;
+            }
+            let si = index / 3;
+            if s.nodes.len() <= s.min_nodes() || si >= s.nodes.len() {
+                return None;
+            }
+            let mut nodes = s.nodes.clone();
+            nodes.remove(si);
+            return Some(Item { shape: Spline::new(nodes, s.closed).into(), ..self.clone() });
+        }
         let shape = with_paths(&self.shape, |list| {
             let Some((pi, ni)) = Compound::new(list.clone()).locate(index) else { return false };
             if list[pi].points.len() <= list[pi].min_nodes() {

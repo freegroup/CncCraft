@@ -44,6 +44,7 @@ pub(super) enum Action {
     /// A drawing tool by one key: L line, R rectangle, C circle.
     Select,
     Line,
+    SplineTool,
     Rectangle,
     Circle,
     /// O: the offset tool.
@@ -74,6 +75,7 @@ pub(super) const SHORTCUTS: &[Shortcut] = &[
     sc(Action::Align, Key::H, false, false, tr!("Waagrecht/Senkrecht: eine Linie waagrecht oder senkrecht festlegen"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Select, Key::S, false, false, tr!("Auswählen (Selektionsmodus)"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Line, Key::L, false, false, tr!("Linie zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::SplineTool, Key::P, false, false, tr!("Spline zeichnen"), tr!("gewünscht")),
     sc(Action::Rectangle, Key::R, false, false, tr!("Rechteck zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Circle, Key::C, false, false, tr!("Kreis zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Offset, Key::O, false, false, tr!("Vektoren versetzen"), tr!("gewünscht (wie in Fusion 360)")),

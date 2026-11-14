@@ -36,7 +36,7 @@ pub mod vars;
 
 pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, Orient, SizeConstraint};
 pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
-pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, Shape, Text};
+pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, Shape, Spline, SplineNode, Text};
 pub use geometry::Contour;
 pub use handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
 pub use item::{can_group, group_items, ungroup_items, Item, Source};
@@ -138,6 +138,13 @@ pub trait Editable: Clone {
         let n = self.nodes().map_or(0, |n| n.len());
         let m = if self.nodes_closed() { n } else { n.saturating_sub(1) };
         (0..m).map(|i| (i, (i + 1) % n)).collect()
+    }
+    /// Distance from `p` to segment `(a, b)`.  Default: straight-line distance.  Splines
+    /// override this to walk the Bezier tessellation.
+    fn segment_distance(&self, p: Pt, seg_a: usize, seg_b: usize) -> f64 {
+        let Some(nodes) = self.nodes() else { return f64::MAX };
+        if seg_a >= nodes.len() || seg_b >= nodes.len() { return f64::MAX; }
+        geometry::dist_to_segment(p, nodes[seg_a], nodes[seg_b])
     }
     /// The shape with node `index` moved to world point `p`.
     fn with_node(&self, _index: usize, _p: Pt) -> Self {

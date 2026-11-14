@@ -1,7 +1,7 @@
 //! The gesture state machine: press, drag, release (plus click-free actions such as nudging
 //! and node insertion). All positions are world coordinates.
 
-use crate::geometry::{dist, dist_to_segment};
+use crate::geometry::dist;
 use crate::handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
 use crate::snap::{SnapKind, Snapping};
 use crate::{Editable, Grip, GripKind, Pt, SelectionStyle};
@@ -597,9 +597,8 @@ impl<S: Editable> Editor<S> {
     pub fn insert_node(&mut self, shapes: &mut [S], p: Pt, view: View) -> bool {
         let mut best: Option<(f64, u64, usize)> = None;
         for s in self.selection.iter().filter_map(|id| find(shapes, *id)) {
-            let Some(nodes) = s.nodes() else { continue };
             for (a, b) in s.segments() {
-                let d = dist_to_segment(p, nodes[a], nodes[b]);
+                let d = s.segment_distance(p, a, b);
                 if d <= view.tolerance && best.is_none_or(|x| d < x.0) {
                     best = Some((d, s.id(), a));
                 }

@@ -17,6 +17,7 @@ pub(super) enum Badge {
     Ellipse,
     Polygon,
     Line,
+    SplineBadge,
     Text,
     Node,
 }
@@ -34,6 +35,7 @@ impl App {
             DrawTool::Select => None,
             DrawTool::NodeEdit => Some(Badge::Node),
             DrawTool::Polyline => Some(Badge::Line),
+            DrawTool::Spline => Some(Badge::SplineBadge),
             DrawTool::Rect => Some(Badge::Rect),
             DrawTool::Circle => Some(Badge::Circle),
             DrawTool::Ellipse => Some(Badge::Ellipse),
@@ -120,6 +122,13 @@ fn badge_shapes(badge: Badge, c: Pos2) -> Vec<Part> {
         Badge::Ellipse => vec![Part::Poly((0..24).map(|i| { let a = i as f32 / 24.0 * std::f32::consts::TAU; p(6.5 * a.cos(), 4.0 * a.sin()) }).collect(), true)],
         Badge::Polygon => vec![Part::Poly((0..6).map(|i| { let a = i as f32 / 6.0 * std::f32::consts::TAU; p(6.0 * a.cos(), 6.0 * a.sin()) }).collect(), true)],
         Badge::Line => vec![Part::Poly(vec![p(-6.0, 5.0), p(-2.0, -3.0), p(2.0, 3.0), p(6.0, -5.0)], false)],
+        Badge::SplineBadge => vec![Part::Poly((0..=12).map(|i| {
+            let t = i as f32 / 12.0;
+            let u = 1.0 - t;
+            let x = u * u * u * (-6.0) + 3.0 * u * u * t * (-3.0) + 3.0 * u * t * t * 3.0 + t * t * t * 6.0;
+            let y = u * u * u * (-5.0) + 3.0 * u * u * t * 5.0 + 3.0 * u * t * t * (-5.0) + t * t * t * 5.0;
+            p(x, y)
+        }).collect(), false)],
         Badge::Text => vec![],
         // a small square: a node
         Badge::Node => vec![Part::Poly(vec![p(-3.5, -3.5), p(3.5, -3.5), p(3.5, 3.5), p(-3.5, 3.5)], true)],

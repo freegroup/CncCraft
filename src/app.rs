@@ -16,6 +16,7 @@ mod layout;
 mod menus;
 mod selftest;
 mod shortcuts;
+mod spline_deco;
 mod variables;
 
 use icons::icon_button;
@@ -43,6 +44,7 @@ pub enum DrawTool {
     Select,
     NodeEdit,
     Polyline,
+    Spline,
     Rect,
     Circle,
     Ellipse,
@@ -56,6 +58,7 @@ impl DrawTool {
             DrawTool::Select => t!("Auswählen und verschieben"),
             DrawTool::NodeEdit => t!("Knoten bearbeiten (Punkte ziehen, Doppelklick fügt ein, Entf löscht)"),
             DrawTool::Polyline => t!("Linie / Polylinie zeichnen (Doppelklick oder Enter beendet)"),
+            DrawTool::Spline => t!("Spline zeichnen (Doppelklick oder Enter beendet, Klick auf Anfang schließt)"),
             DrawTool::Rect => t!("Rechteck zeichnen"),
             DrawTool::Circle => t!("Kreis zeichnen"),
             DrawTool::Ellipse => t!("Ellipse zeichnen"),
@@ -1112,6 +1115,7 @@ impl App {
         let sel = std::mem::take(&mut self.edit.selection);
         self.shapes.retain(|s| !sel.contains(&s.id));
         self.edit.retain_existing(&self.shapes);
+        self.recompute_all();
     }
 
     /// The selected shapes, in the order they were selected.
@@ -1274,6 +1278,7 @@ impl App {
             }
             // bound sizes follow their variables again (to change those, change the variable)
             self.vars_dirty = true;
+            self.recompute_all();
         }
     }
 
@@ -1281,6 +1286,7 @@ impl App {
         if let Some(s) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.shapes, s));
             self.vars_dirty = true;
+            self.recompute_all();
         }
     }
 
@@ -2033,18 +2039,8 @@ impl App {
             }
         }
 
-        // node handles on the selected curves
-        if self.tool == DrawTool::NodeEdit {
-            for it in self.shapes.iter().filter(|s| self.edit.selection.contains(&s.id)) {
-                for (i, n) in it.nodes().unwrap_or_default().into_iter().enumerate() {
-                    let on = self.edit.active_node == Some((it.id, i));
-                    painter.rect(Rect::from_center_size(self.to_screen(n), Vec2::splat(if on { 9.0 } else { 7.0 })), 0.0, if on { ACCENT } else { Color32::WHITE }, Stroke::new(1.2_f32, SELECT));
-                }
-            }
-            if mouse.is_some_and(|m| self.edit.node_under(&self.shapes, m, view).is_some()) {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-            }
-        }
+        // node handles on the selected curves (spline handles, path squares)
+        self.draw_node_handles(&painter, mouse, view);
 
         // a click in the drawing while sizes are being typed takes them, like Enter; that press
         // does nothing else until the button is let go
@@ -2112,13 +2108,25 @@ impl App {
             }
         }
         if !self.poly.is_empty() {
-            let mut pts: Vec<Pos2> = self.poly.iter().map(|p| self.to_screen(*p)).collect();
-            if let Some(m) = resp.hover_pos() {
-                pts.push(m);
+            let draw_col = Color32::from_rgb(0x20, 0x60, 0xd0);
+            if self.tool == DrawTool::Spline && self.poly.len() >= 2 {
+                let mut all_pts = self.poly.clone();
+                if let Some(m) = resp.hover_pos() {
+                    all_pts.push(self.to_mm(m));
+                }
+                let preview_spline = shape_edit::Spline::from_points(&all_pts, false);
+                let eval = preview_spline.evaluate();
+                let screen: Vec<Pos2> = eval.iter().map(|p| self.to_screen(*p)).collect();
+                painter.add(egui::Shape::line(screen, Stroke::new(1.3_f32, draw_col)));
+            } else {
+                let mut pts: Vec<Pos2> = self.poly.iter().map(|p| self.to_screen(*p)).collect();
+                if let Some(m) = resp.hover_pos() {
+                    pts.push(m);
+                }
+                painter.add(egui::Shape::line(pts, Stroke::new(1.3_f32, draw_col)));
             }
-            painter.add(egui::Shape::line(pts, Stroke::new(1.3_f32, Color32::from_rgb(0x20, 0x60, 0xd0))));
             for p in &self.poly {
-                painter.circle_filled(self.to_screen(*p), 3.0, Color32::from_rgb(0x20, 0x60, 0xd0));
+                painter.circle_filled(self.to_screen(*p), 3.0, draw_col);
             }
         }
         // dimension lines, when switched on; then the typed values on the canvas: sizes of a new
@@ -2192,7 +2200,7 @@ impl App {
         let copy = resp.ctx.input(|i| i.modifiers.ctrl || i.modifiers.alt);
         self.update_snapping();
         // "Press SHIFT to disable snapping" while moving and drawing, as in the original
-        let shapes_tool = !matches!(self.tool, DrawTool::Select | DrawTool::NodeEdit | DrawTool::Polyline);
+        let shapes_tool = !matches!(self.tool, DrawTool::Select | DrawTool::NodeEdit | DrawTool::Polyline | DrawTool::Spline);
         if uniform && (shapes_tool || matches!(self.edit.gesture(), Some(Gesture::Move { .. }))) {
             self.edit.snapping.radius = 0.0;
         }
@@ -2202,11 +2210,7 @@ impl App {
                 let tool = self.edit_tool();
                 if self.tool == DrawTool::NodeEdit && resp.double_clicked() {
                     if let Some(m) = mouse {
-                        let before = self.shapes.clone();
-                        if self.edit.insert_node(&mut self.shapes, m, view) {
-                            self.push_undo_from(before);
-                            self.status = "Knoten eingefügt".into();
-                        }
+                        self.node_double_click(m, view);
                     }
                 } else if started {
                     if let Some(p) = press.or(pointer) {
@@ -2257,9 +2261,12 @@ impl App {
                         Outcome::Selected if self.edit.rotate_mode => self.status = "Drehen: an einer Ecke ziehen oder Winkel eingeben · erneut klicken zum Skalieren".into(),
                         _ => {}
                     }
+                    if outcome.changed_shapes() {
+                        self.recompute_all();
+                    }
                 }
             }
-            DrawTool::Polyline => {
+            DrawTool::Polyline | DrawTool::Spline => {
                 // Shift keeps the new segment on angle steps, otherwise the point snaps
                 let mouse = mouse.map(|m| match self.poly.last() {
                     Some(&last) if uniform => shape_edit::snap_angle(last, m, ANGLE_STEP),
@@ -2331,7 +2338,11 @@ impl App {
             return;
         }
         self.push_undo();
-        let id = self.add_shape(Path::new(pts, closed));
+        let id = if self.tool == DrawTool::Spline {
+            self.add_shape(shape_edit::Spline::from_points(&pts, closed))
+        } else {
+            self.add_shape(Path::new(pts, closed))
+        };
         self.edit.selection = vec![id];
     }
 
@@ -2376,7 +2387,6 @@ impl App {
         }
         if let Some(sim) = &self.sim {
             let proj = sim::Projection::new(rect, &self.job, &self.cam);
-            // the mesh is in centred job coordinates: only the job's size changes its layout
             let layout = self.job.width.to_bits() ^ self.job.height.to_bits().rotate_left(21) ^ self.job.thickness.to_bits().rotate_left(42);
             self.gl3d.update(&sim.hm, &proj, layout);
             painter.add(self.gl3d.callback(rect, &proj));
@@ -2387,7 +2397,14 @@ impl App {
         painter.text(rect.left_bottom() + Vec2::new(12.0, -12.0), Align2::LEFT_BOTTOM, t!("Ziehen: drehen · Rechtsklick ziehen: verschieben · Scrollen: zoomen · Würfel: Ansicht wählen"), FontId::proportional(12.0), MUTED);
         // the decorations of the 3D view (the view cube: turn the view, pick a side, home, perspective)
         let proj = sim::Projection::new(rect, &self.job, &self.cam);
-        let mut view = crate::viewdeco::View3dContext { area: rect, cam: &mut self.cam, proj: &proj, zero: crate::viewdeco::zero_point(&self.job), arrow_length: crate::viewdeco::arrow_length(&self.job) };
+        let visible = self.preview_indices();
+        let cutter: Option<([f64; 3], &crate::tools::Tool)> = self.sim.as_ref().and_then(|s| {
+            let pos = s.pos?;
+            let (k, _) = s.anim?;
+            let ti = *visible.get(k)?;
+            Some((pos, &self.toolpaths[ti].tool))
+        });
+        let mut view = crate::viewdeco::View3dContext { area: rect, cam: &mut self.cam, proj: &proj, zero: crate::viewdeco::zero_point(&self.job), arrow_length: crate::viewdeco::arrow_length(&self.job), cutter, thickness: self.job.thickness as f32, renderer: &self.gl3d };
         if let Some(message) = self.view_decos.show(ui, &mut view).pop() {
             self.status = message;
         }
@@ -2445,6 +2462,7 @@ impl App {
                     if self.edit.delete_active_node(&mut self.shapes) {
                         self.push_undo_from(before);
                         self.status = "Knoten gelöscht".into();
+                        self.recompute_all();
                     }
                 } else {
                     self.delete_selection();
@@ -2476,6 +2494,7 @@ impl App {
             Action::Align => self.toggle_align_mode(),
             Action::Select => self.pick_tool(DrawTool::Select),
             Action::Line => self.pick_tool(DrawTool::Polyline),
+            Action::SplineTool => self.pick_tool(DrawTool::Spline),
             Action::Rectangle => self.pick_tool(DrawTool::Rect),
             Action::Circle => self.pick_tool(DrawTool::Circle),
             Action::Offset => self.column_click(Icon::Offset),

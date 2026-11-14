@@ -29,7 +29,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    fn vertex(&mut self, p: [f32; 3], n: [f32; 3], c: [f32; 3]) -> u32 {
+    pub fn vertex(&mut self, p: [f32; 3], n: [f32; 3], c: [f32; 3]) -> u32 {
         let i = (self.vertices.len() / STRIDE) as u32;
         self.vertices.extend_from_slice(&[p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2]]);
         i
@@ -124,12 +124,17 @@ struct Gpu {
     ebo: glow::Buffer,
     count: i32,
     version: Option<u64>,
+    tool_vbo: glow::Buffer,
+    tool_ebo: glow::Buffer,
+    tool_count: i32,
+    tool_version: Option<u64>,
 }
 
 /// Shared between the app (which builds the mesh) and the paint callback (which draws it).
 #[derive(Clone, Default)]
 pub struct Renderer {
     mesh: Arc<Mutex<Mesh>>,
+    tool_mesh: Arc<Mutex<Mesh>>,
     gpu: Arc<Mutex<Option<Gpu>>>,
 }
 
@@ -209,7 +214,9 @@ unsafe fn compile(gl: &glow::Context) -> Result<Gpu, String> {
         }
     }
     gl.bind_vertex_array(None);
-    Ok(Gpu { program, vao, vbo, ebo, count: 0, version: None })
+    let tool_vbo = gl.create_buffer()?;
+    let tool_ebo = gl.create_buffer()?;
+    Ok(Gpu { program, vao, vbo, ebo, count: 0, version: None, tool_vbo, tool_ebo, tool_count: 0, tool_version: None })
 }
 
 impl Renderer {
@@ -223,9 +230,22 @@ impl Renderer {
         }
     }
 
-    /// A paint callback that draws the board into `rect` with the given projection.
+    /// Replace the tool mesh (built by the cutter decoration).
+    pub fn update_tool(&self, m: Mesh) {
+        *self.tool_mesh.lock().unwrap() = m;
+    }
+
+    /// Clear the tool mesh (no cutter to show).
+    pub fn clear_tool(&self) {
+        let mut tm = self.tool_mesh.lock().unwrap();
+        if !tm.indices.is_empty() {
+            *tm = Mesh::default();
+        }
+    }
+
+    /// A paint callback that draws the board and (optionally) the tool into `rect`.
     pub fn callback(&self, rect: egui::Rect, proj: &Projection) -> egui::PaintCallback {
-        let (mesh, gpu) = (self.mesh.clone(), self.gpu.clone());
+        let (mesh, tool_mesh, gpu) = (self.mesh.clone(), self.tool_mesh.clone(), self.gpu.clone());
         let (mvp, light) = (proj.matrix(), proj.light());
         let cb = egui_glow::CallbackFn::new(move |_info, painter| {
             let gl = painter.gl();
@@ -263,6 +283,37 @@ impl Renderer {
                 gl.disable(glow::CULL_FACE);
                 gl.disable(glow::BLEND);
                 gl.draw_elements(glow::TRIANGLES, g.count, glow::UNSIGNED_INT, 0);
+                // tool mesh (same shader, same depth buffer, drawn on top of the board)
+                let tm = tool_mesh.lock().unwrap();
+                if !tm.indices.is_empty() {
+                    if g.tool_version != Some(tm.version) {
+                        gl.bind_buffer(glow::ARRAY_BUFFER, Some(g.tool_vbo));
+                        gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, bytemuck_f32(&tm.vertices), glow::DYNAMIC_DRAW);
+                        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(g.tool_ebo));
+                        gl.buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, bytemuck_u32(&tm.indices), glow::DYNAMIC_DRAW);
+                        g.tool_count = tm.indices.len() as i32;
+                        g.tool_version = Some(tm.version);
+                    } else {
+                        gl.bind_buffer(glow::ARRAY_BUFFER, Some(g.tool_vbo));
+                        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(g.tool_ebo));
+                    }
+                    // re-bind vertex attributes to the tool buffers
+                    let stride = (STRIDE * 4) as i32;
+                    for (name, offset) in [("a_pos", 0), ("a_normal", 12), ("a_color", 24)] {
+                        if let Some(loc) = gl.get_attrib_location(g.program, name) {
+                            gl.vertex_attrib_pointer_f32(loc, 3, glow::FLOAT, false, stride, offset);
+                        }
+                    }
+                    gl.draw_elements(glow::TRIANGLES, g.tool_count, glow::UNSIGNED_INT, 0);
+                    // restore board buffers for next frame
+                    gl.bind_buffer(glow::ARRAY_BUFFER, Some(g.vbo));
+                    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(g.ebo));
+                    for (name, offset) in [("a_pos", 0), ("a_normal", 12), ("a_color", 24)] {
+                        if let Some(loc) = gl.get_attrib_location(g.program, name) {
+                            gl.vertex_attrib_pointer_f32(loc, 3, glow::FLOAT, false, stride, offset);
+                        }
+                    }
+                }
                 gl.disable(glow::DEPTH_TEST);
                 gl.enable(glow::BLEND);
                 gl.bind_vertex_array(None);

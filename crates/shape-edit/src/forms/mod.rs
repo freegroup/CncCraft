@@ -9,6 +9,7 @@ mod ellipse;
 mod path;
 mod polygon;
 mod rect;
+mod spline;
 mod text;
 
 pub use circle::Circle;
@@ -17,6 +18,7 @@ pub use ellipse::Ellipse;
 pub use path::Path;
 pub use polygon::Polygon;
 pub use rect::Rect;
+pub use spline::{Spline, SplineNode};
 pub use text::Text;
 
 use crate::geometry::{bounds_of, Contour};
@@ -106,6 +108,7 @@ pub enum Shape {
     Path(Path),
     Compound(Compound),
     Text(Text),
+    Spline(Spline),
 }
 
 /// Run `$body` with `$f` bound to the inner class, whatever it is.
@@ -119,6 +122,7 @@ macro_rules! each {
             Shape::Path($f) => $body,
             Shape::Compound($f) => $body,
             Shape::Text($f) => $body,
+            Shape::Spline($f) => $body,
         }
     };
 }
@@ -132,7 +136,7 @@ macro_rules! from_class {
         })*
     };
 }
-from_class!(Rect, Circle, Ellipse, Polygon, Path, Compound, Text);
+from_class!(Rect, Circle, Ellipse, Polygon, Path, Compound, Text, Spline);
 
 impl Shape {
     pub fn label(&self) -> &'static str {
@@ -161,8 +165,12 @@ impl Shape {
         self.contours().iter().all(|c| c.closed)
     }
     /// The same outline as editable curves (a path, or a compound for several outlines).
+    /// Shapes that already have editable nodes (paths, compounds, splines) stay as they are.
     pub fn to_curves(&self) -> Shape {
-        curves_from(self.contours())
+        match self {
+            Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => self.clone(),
+            _ => curves_from(self.contours()),
+        }
     }
 
     /// Turned by `deg` (anticlockwise) about `about`. Classes with their own rotation keep their
@@ -178,6 +186,12 @@ impl Shape {
             Shape::Text(t) => Text { center: turn(t.center), rotation: t.rotation + deg, ..t.clone() }.into(),
             Shape::Path(p) => path(p).into(),
             Shape::Compound(c) => Compound { paths: c.paths.iter().map(path).collect() }.into(),
+            Shape::Spline(s) => {
+                let nodes = s.nodes.iter().map(|n| SplineNode {
+                    pos: turn(n.pos), cp_in: turn(n.cp_in), cp_out: turn(n.cp_out), smooth: n.smooth,
+                }).collect();
+                Spline::new(nodes, s.closed).into()
+            }
         }
     }
 
