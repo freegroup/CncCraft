@@ -443,6 +443,13 @@ mod tests {
     }
 
     #[test]
+    fn the_times_of_the_moves_add_up_to_the_milling_time() {
+        let tp = simple_toolpath();
+        let sum: f64 = (0..tp.moves.len()).map(|i| tp.move_seconds(i)).sum();
+        assert!(sum > 0.0 && (sum - tp.stats().minutes * 60.0).abs() < 1e-6, "{sum} s against {} min", tp.stats().minutes);
+    }
+
+    #[test]
     fn hooks_are_injected() {
         let j = job();
         let tp = simple_toolpath();

@@ -191,9 +191,11 @@ impl App {
             ui.spacing_mut().slider_width = ui.available_width().max(60.0);
             // both sliders run from 0 to 100, as the original's (wxSlider 0..100 at 0x1000fc110 and
             // 0x1000fd37c); the value behind is spread logarithmically
-            let mut pos = to_slider(self.sim_speed as f64, 5.0, 400.0);
-            if ui.add(egui::Slider::new(&mut pos, 0.0..=100.0).integer().show_value(false)).on_hover_text(format!("{pos:.0} %")).changed() {
-                self.sim_speed = from_slider(pos, 5.0, 400.0).round() as usize;
+            // the middle is real time (1x); the ends are a sixtieth and sixty times that
+            let (lo, hi) = (crate::app::SIM_RATE_MIN, crate::app::SIM_RATE_MAX);
+            let mut pos = to_slider(self.sim_rate, lo, hi);
+            if ui.add(egui::Slider::new(&mut pos, 0.0..=100.0).integer().show_value(false)).on_hover_text(t!("%{x}× (Echtzeit: 1×)", x = format!("{:.2}", from_slider(pos, lo, hi)))).changed() {
+                self.sim_rate = if (pos - 50.0).abs() < 2.0 { 1.0 } else { from_slider(pos, lo, hi) };
             }
         });
         // the original's simulation quality, in grid points per mm; called "Darstellung" here,

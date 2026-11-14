@@ -529,5 +529,6 @@
  "; -- Job Start --\n": "; -- Job start --\n",
  "; -- Werkzeugwechsel --\n": "; -- Tool change --\n",
  "; -- Job Ende --\n": "; -- Job end --\n",
- "Zeigt das fertig gefräste Material sofort": "Shows the finished carving at once"
+ "Zeigt das fertig gefräste Material sofort": "Shows the finished carving at once",
+ "%{x}× (Echtzeit: 1×)": "%{x}× (real time: 1×)"
 }

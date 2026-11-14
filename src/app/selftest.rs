@@ -99,6 +99,7 @@ const STAGES: &[Stage] = &[
     stage("Form gewählt: genau die Werkzeugwege, die sie fräsen, leuchten in der Liste", toolpaths_of_selected_shape),
     stage("Ziehen an der Linie (ohne Wert, Form nicht gewählt) verschiebt das Maß", distance_line_drag),
     stage("Gewählte Form: ihre Maßlinie lässt sich an der Linie und am Wert herausziehen", shape_dim_line_drag),
+    stage("Simulation: in der Mitte des Reglers läuft sie in Echtzeit", simulation_in_real_time),
 ];
 
 /// Selecting a shape lights up the toolpaths that cut it in the list, and only those; with nothing
@@ -611,6 +612,30 @@ fn shape_dim_line_drag(app: &mut App) -> (Vec<Event>, Check) {
     let mut events = vec![Event::PointerMoved(idle), Event::PointerMoved(idle + Vec2::new(1.0, 0.0))];
     events.extend(drag(on_line, out * 40.0));
     (events, check)
+}
+
+/// With the speed slider in its middle (1×) the simulation takes as long as the milling does: the
+/// seconds the screen gives it add up to the machine time of the toolpaths, shown in the list.
+fn simulation_in_real_time(app: &mut App) -> (Vec<Event>, Check) {
+    app.sim_rate = 1.0;
+    app.preview_scope = super::PreviewScope::Visible;
+    app.start_preview(true);
+    let expected: f64 = app.preview_indices().iter().map(|&i| app.toolpaths[i].stats().minutes * 60.0).sum();
+    let (mut screen_seconds, dt) = (0.0, 0.2);
+    while app.sim.as_ref().is_some_and(|s| s.anim.is_some()) && screen_seconds < 1.0e5 {
+        app.step_animation(dt);
+        screen_seconds += dt;
+    }
+    app.sim = None;
+    let check: Check = Box::new(move |_| {
+        let msg = format!("Bildschirmzeit {screen_seconds:.1} s, Fräszeit {expected:.1} s");
+        if expected > 10.0 && (screen_seconds - expected).abs() <= 2.0 * dt {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
 }
 
 /// Two fresh rectangles; D, a click on the first one's upper-right corner and on the second one's

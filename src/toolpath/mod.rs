@@ -226,6 +226,25 @@ impl Toolpath {
         self.moves = out.moves;
     }
 
+    /// How long the machine takes for move `i`, in seconds, by the same estimates as `stats`: the
+    /// real time of the move at its feed rate (rapid moves at the estimated rapid rate).
+    pub fn move_seconds(&self, i: usize) -> f64 {
+        let (Some(m), Some(prev)) = (self.moves.get(i), i.checked_sub(1).and_then(|p| self.moves.get(p))) else { return 0.0 };
+        let (a, b) = (prev.to, m.to);
+        let d = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+        if m.rapid {
+            return d / RAPID_RATE * 60.0;
+        }
+        let plunging = (b[2] - a[2]).abs() > 1e-6 && (b[0] - a[0]).abs() < 1e-6 && (b[1] - a[1]).abs() < 1e-6;
+        let rate = if plunging { self.tool.plunge } else { self.tool.feed };
+        d / rate.max(1.0) * 60.0
+    }
+
+    /// The same toolpath with other moves (for carving a part of it).
+    pub fn with_moves(&self, moves: Vec<Move>) -> Toolpath {
+        Toolpath { name: self.name.clone(), strategy: self.strategy.clone(), tool: self.tool.clone(), start_depth: self.start_depth, cut_depth: self.cut_depth, start_expr: None, cut_expr: None, shape_ids: vec![], visible: self.visible, moves, warning: None }
+    }
+
     pub fn stats(&self) -> Stats {
         let mut s = Stats::default();
         let mut prev = self.moves.first().map(|m| m.to).unwrap_or([0.0; 3]);

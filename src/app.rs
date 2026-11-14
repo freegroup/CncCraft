@@ -28,7 +28,7 @@ use crate::geom::{dist, Item, Pt, Region};
 use crate::sheet;
 use crate::sim::{self, Camera, HeightMap};
 use crate::tools::{material_label, Tool, ToolKind, ToolLibrary, MATERIALS};
-use crate::toolpath::{default_toolpath, Datum, Job, Side, Strategy, Toolpath, ZZero};
+use crate::toolpath::{default_toolpath, Datum, Job, Move, Side, Strategy, Toolpath, ZZero};
 use crate::theme::{ink, muted, hairline, canvas, surface, panel, separator, ACCENT, ACCENT_DEEP, CONSTRAINT, INK, MUTED, PRIMARY, SELECT};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Stroke, Vec2};
 use shape_edit::{
@@ -252,10 +252,26 @@ impl Editor {
     }
 }
 
+/// The slowest and the fastest the simulation runs, as a multiple of real time (the slider's
+/// middle is exactly real time).
+pub(crate) const SIM_RATE_MIN: f64 = 1.0 / 60.0;
+pub(crate) const SIM_RATE_MAX: f64 = 60.0;
+
 struct Sim {
     hm: HeightMap,
     /// (toolpath index, moves done) while the animation runs
     anim: Option<(usize, usize)>,
+    /// Machine time (seconds) that has come due but was not yet spent on moves.
+    budget: f64,
+    /// How far into the move being cut the cutter is (0 to 1), and where it is.
+    frac: f64,
+    pos: Option<[f64; 3]>,
+}
+
+impl Sim {
+    fn new(hm: HeightMap, anim: Option<(usize, usize)>) -> Sim {
+        Sim { hm, anim, budget: 0.0, frac: 0.0, pos: None }
+    }
 }
 
 pub struct App {
@@ -278,7 +294,9 @@ pub struct App {
     mode: ViewMode,
     cam: Camera,
     sim: Option<Sim>,
-    sim_speed: usize,
+    /// How fast the simulation runs: 1 is real time (the machine's own pace), the slider's
+    /// middle; from a sixtieth of it to sixty times.
+    sim_rate: f64,
     /// Simulation quality in grid points per mm (the original's toolpath.simulation_quality).
     sim_quality: f64,
     start_page: bool,
@@ -479,7 +497,7 @@ impl App {
             mode: ViewMode::TwoD,
             cam: Camera::default(),
             sim: None,
-            sim_speed: cc.storage.and_then(|s| s.get_string("cnccraft_sim_speed")).and_then(|v| v.parse().ok()).unwrap_or(40),
+            sim_rate: cc.storage.and_then(|s| s.get_string("cnccraft_sim_rate")).and_then(|v| v.parse::<f64>().ok()).map_or(1.0, |v| v.clamp(SIM_RATE_MIN, SIM_RATE_MAX)),
             sim_quality: cc.storage.and_then(|s| s.get_string("cnccraft_sim_quality")).and_then(|v| v.parse().ok()).unwrap_or(sim::SIMULATION_QUALITY),
             start_page: true,
             job_dialog: None,
@@ -1488,12 +1506,12 @@ impl App {
         self.start_page = false;
         let mut hm = HeightMap::for_preview(&self.job, self.sim_quality);
         if animate {
-            self.sim = Some(Sim { hm, anim: Some((0, 0)) });
+            self.sim = Some(Sim::new(hm, Some((0, 0))));
         } else {
             for &i in &self.preview_indices() {
                 hm.carve(&self.toolpaths[i], None);
             }
-            self.sim = Some(Sim { hm, anim: None });
+            self.sim = Some(Sim::new(hm, None));
         }
     }
 
@@ -1530,9 +1548,12 @@ impl App {
         self.toolpaths.iter().any(|t| !t.visible && t.moves.iter().any(|m| !m.rapid))
     }
 
-    fn step_animation(&mut self) {
+    /// Advance the simulation by `dt` seconds of the screen's time: the machine's own time passes
+    /// `sim_rate` times as fast (1 is real time). Moves are cut as far as their time allows, so a
+    /// long cut is carved gradually, not all at once.
+    fn step_animation(&mut self, dt: f64) {
         let visible: Vec<usize> = self.preview_indices();
-        let speed = self.sim_speed;
+        let rate = self.sim_rate;
         let Some(sim) = &mut self.sim else { return };
         let Some((k, done)) = sim.anim else { return };
         let Some(&ti) = visible.get(k) else {
@@ -1540,13 +1561,39 @@ impl App {
             return;
         };
         let tp = &self.toolpaths[ti];
-        let to = (done + speed).min(tp.moves.len());
-        // carve only the new moves (including the one before for continuity)
-        let part = Toolpath { moves: tp.moves[done.saturating_sub(1)..to].to_vec(), ..tp.clone() };
-        sim.hm.carve(&part, None);
-        sim.anim = if to >= tp.moves.len() { Some((k + 1, 0)) } else { Some((k, to)) };
-        if k + 1 >= visible.len() && to >= tp.moves.len() {
-            sim.anim = None;
+        sim.budget += dt.min(0.25) * rate;
+        let start = sim.pos.unwrap_or_else(|| tp.moves.first().map_or([0.0; 3], |m| m.to));
+        let mut part = vec![Move { to: start, rapid: true }];
+        let (mut at, mut frac, mut pos) = (done, sim.frac, start);
+        while at < tp.moves.len() {
+            let m = tp.moves[at];
+            let secs = tp.move_seconds(at);
+            let left = secs * (1.0 - frac);
+            if left <= sim.budget {
+                sim.budget -= left;
+                part.push(m);
+                pos = m.to;
+                at += 1;
+                frac = 0.0;
+            } else {
+                // the time runs out inside this move: cut a part of it
+                frac = (frac + sim.budget / secs).min(1.0);
+                let from = if at == 0 { m.to } else { tp.moves[at - 1].to };
+                pos = [0, 1, 2].map(|i| from[i] + (m.to[i] - from[i]) * frac);
+                part.push(Move { to: pos, rapid: m.rapid });
+                sim.budget = 0.0;
+                break;
+            }
+        }
+        sim.hm.carve(&tp.with_moves(part), None);
+        if at >= tp.moves.len() {
+            sim.pos = None;
+            sim.frac = 0.0;
+            sim.anim = if k + 1 >= visible.len() { None } else { Some((k + 1, 0)) };
+        } else {
+            sim.pos = Some(pos);
+            sim.frac = frac;
+            sim.anim = Some((k, at));
         }
     }
 
@@ -2314,10 +2361,11 @@ impl App {
             self.cam.zoom = (self.cam.zoom * (s * 0.003).exp() * ui.input(|i| i.zoom_delta())).clamp(0.2, 20.0);
         }
         if self.sim.is_none() {
-            self.sim = Some(Sim { hm: HeightMap::for_preview(&self.job, self.sim_quality), anim: None });
+            self.sim = Some(Sim::new(HeightMap::for_preview(&self.job, self.sim_quality), None));
         }
         if self.sim.as_ref().is_some_and(|s| s.anim.is_some()) {
-            self.step_animation();
+            let dt = ui.input(|i| i.unstable_dt) as f64;
+            self.step_animation(dt);
             ui.ctx().request_repaint();
         }
         // the G-code overlay: the machine's moves as the post-processor writes them (not while the
@@ -2740,7 +2788,7 @@ impl eframe::App for App {
         storage.set_string("cnccraft_snap_radius", self.snap_radius_px.to_string());
         storage.set_string("cnccraft_show_dims", self.show_dims.to_string());
         storage.set_string("cnccraft_paths_open", self.paths_open.to_string());
-        storage.set_string("cnccraft_sim_speed", self.sim_speed.to_string());
+        storage.set_string("cnccraft_sim_rate", self.sim_rate.to_string());
         storage.set_string("cnccraft_sim_quality", self.sim_quality.to_string());
         storage.set_string("cnccraft_preview_scope", format!("{:?}", self.preview_scope));
         storage.set_string("cnccraft_output_scope", format!("{:?}", self.output_scope));
