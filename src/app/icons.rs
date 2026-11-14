@@ -414,15 +414,6 @@ impl Pen<'_> {
                 self.p.add(Shape::line(v.iter().map(|q| *q + Vec2::new(0.0, 0.2) * self.scale).collect(), Stroke::new(self.w(1.4), w.through)));
                 let _ = slab;
             }
-            Icon::Preview => {
-                self.solid(self.rrect(0.0, 4.0, 22.0, 11.0, 2.5));
-                self.hollow(vec![self.at(-3.0, -11.0), self.at(-3.0, -1.0), self.at(6.0, -6.0)]);
-            }
-            Icon::Save => {
-                self.hollow(self.rrect(0.0, 0.0, 20.0, 20.0, 3.5));
-                self.hollow(self.rrect(0.0, -6.5, 11.0, 6.5, 1.5));
-                self.solid(self.rrect(0.0, 5.5, 13.0, 9.5, 1.5));
-            }
             Icon::Transform => {
                 self.dashed_rect(Rect::from_center_size(self.c, Vec2::splat(11.0)));
                 for d in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {

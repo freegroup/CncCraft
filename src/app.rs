@@ -89,8 +89,6 @@ enum Icon {
     Drill,
     VCarve,
     Cutout,
-    Preview,
-    Save,
     Transform,
     Grid,
     Snap,

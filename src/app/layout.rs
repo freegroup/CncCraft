@@ -528,26 +528,13 @@ impl App {
             });
             return;
         }
-        egui::SidePanel::right("toolpaths").exact_width(320.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(10.0, 8.0)).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
+        egui::SidePanel::right("toolpaths").exact_width(360.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(10.0, 8.0)).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
             // the bottom container is laid out first, so it keeps its place; the top container
             // takes the room that is left
             egui::TopBottomPanel::bottom("toolpath_bottom").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 8.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                 group_container().show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     group_title(ui, &t!("Simulation & Export"), |_| {});
-                    ui.horizontal(|ui| {
-                        // the preview (the carved material in 3D), and the export, which asks in its own window
-                        ui.add_space(22.0);
-                        if icon_button(ui, Icon::Preview, self.mode == ViewMode::ThreeD, &t!("Werkzeugpfade-Vorschau")).clicked() {
-                            self.mode = ViewMode::ThreeD;
-                            self.start_page = false;
-                        }
-                        ui.add_space(22.0);
-                        if icon_button(ui, Icon::Save, self.export_dialog, &t!("Werkzeugpfade exportieren")).clicked() {
-                            self.export_dialog = true;
-                        }
-                    });
-                    ui.add_space(4.0);
                     self.preview_tab(ui);
                 });
             });
@@ -591,7 +578,7 @@ impl App {
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(Pos2::new((screen.right() - 320.0 - 380.0).max(40.0), 80.0))
+            .default_pos(Pos2::new((screen.right() - 360.0 - 380.0).max(40.0), 80.0))
             .default_width(340.0)
             .show(ctx, |ui| self.editor_ui(ui));
     }
@@ -644,18 +631,30 @@ impl App {
     }
 
     fn preview_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new(t!("Vorschau")).size(15.0).color(ink()));
+        // the three buttons in one row: the animated simulation, the finished carving at once, and
+        // the export (which asks in its own window); a reset only while there is something to reset
+        let gap = ui.spacing().item_spacing.x;
+        let width = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
         ui.horizontal(|ui| {
-            if ui.button(t!("▶ Simulieren")).clicked() {
+            let size = Vec2::new(width, 28.0);
+            if ui.add(egui::Button::new(t!("▶ Simulieren")).min_size(size)).clicked() {
                 self.start_preview(true);
             }
-            if ui.button(t!("⏭ Sofort")).clicked() {
+            if ui.add(egui::Button::new(t!("Vorschau")).min_size(size)).on_hover_text(t!("Zeigt das fertig gefräste Material sofort")).clicked() {
                 self.start_preview(false);
             }
-            if ui.button("↺").on_hover_text(t!("Material zurücksetzen")).clicked() {
-                self.sim = None;
+            if ui.add(egui::Button::new(t!("Exportieren…")).min_size(size)).on_hover_text(t!("Werkzeugpfade exportieren")).clicked() {
+                self.export_dialog = true;
             }
         });
+        if self.sim.is_some() {
+            ui.horizontal(|ui| {
+                if ui.button("↺").on_hover_text(t!("Material zurücksetzen")).clicked() {
+                    self.sim = None;
+                }
+                ui.label(egui::RichText::new(t!("Material zurücksetzen")).small().color(muted()));
+            });
+        }
         // "Preview Type" of the original: which toolpaths are simulated
         ui.horizontal_wrapped(|ui| {
             use super::PreviewScope;
