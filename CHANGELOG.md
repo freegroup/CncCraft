@@ -1,3 +1,20 @@
+# [1.3.0](https://github.com/freegroup/CncCraft/compare/v1.2.0...v1.3.0) (2026-11-14)
+
+
+### Bug Fixes
+
+* draw the unsaved-changes dot and the edit pencil instead of using glyphs ([c385bde](https://github.com/freegroup/CncCraft/commit/c385bdee69dce2d0c6514fdfd9d05bea021dde8b))
+
+
+### Features
+
+* describe the job in a header at the top of every G-code file ([b943dc9](https://github.com/freegroup/CncCraft/commit/b943dc9af55d5f318d94476b60bdb817487bc361))
+* drag dimension lines to move them ([16c494d](https://github.com/freegroup/CncCraft/commit/16c494de9be1ffb160e54e1408f359091e6e331a))
+* export window asks for the toolpaths only when it makes a difference ([d0f3353](https://github.com/freegroup/CncCraft/commit/d0f3353995b7101a4e03d611653b07abf2db3049))
+* give every dialog the same button row ([d1b7739](https://github.com/freegroup/CncCraft/commit/d1b7739f53c6484f5d1afb14bddab1c14fea364c))
+* one export window for the toolpaths ([2def6a2](https://github.com/freegroup/CncCraft/commit/2def6a28fc0b4600388ce3cfa2fc423b30cfb15b))
+* show the version and the GitHub link in the About window ([830b37d](https://github.com/freegroup/CncCraft/commit/830b37d950e3fc622fa4793ca2d508e2a89e3793))
+
 # [1.2.0](https://github.com/freegroup/CncCraft/compare/v1.1.0...v1.2.0) (2026-11-13)
 
 
