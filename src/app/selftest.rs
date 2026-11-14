@@ -97,6 +97,8 @@ const STAGES: &[Stage] = &[
     stage("Nach dem Auflösen: ein Klick auf den Kreis wählt nur den Kreis", dxf_click_one_after_ungroup),
     stage("DXF mit nur einer Form: eine Gruppe aus einem Mitglied, Auflösen ist möglich", dxf_single_shape),
     stage("Form gewählt: genau die Werkzeugwege, die sie fräsen, leuchten in der Liste", toolpaths_of_selected_shape),
+    stage("Ziehen an der Linie (ohne Wert, Form nicht gewählt) verschiebt das Maß", distance_line_drag),
+    stage("Gewählte Form: ihre Maßlinie lässt sich an der Linie und am Wert herausziehen", shape_dim_line_drag),
 ];
 
 /// Selecting a shape lights up the toolpaths that cut it in the list, and only those; with nothing
@@ -536,6 +538,79 @@ fn distance_label_drag(app: &mut App) -> (Vec<Event>, Check) {
         }
     });
     (drag(at, Vec2::new(0.0, 40.0)), check)
+}
+
+/// With the switch on and no shape chosen the dimension shows as a faint line without its value;
+/// dragging the line moves the dimension just the same.
+fn distance_line_drag(app: &mut App) -> (Vec<Event>, Check) {
+    // the middle of the first dimension line on the screen
+    let mut items = app.shapes.clone();
+    items.push(shape_edit::constraints::plate_item(app.job.width, app.job.height));
+    let Some(c) = app.distances.first().cloned() else { return (vec![], Box::new(|_| Err("kein Abstand vorhanden".into()))) };
+    let Some(m) = c.measure(&items) else { return (vec![], Box::new(|_| Err("Abstand nicht messbar".into()))) };
+    let n = [-m.dir[1], m.dir[0]];
+    let place = c.place_world(&m);
+    let off = |p: shape_edit::Pt| {
+        let t = (place[0] - p[0]) * n[0] + (place[1] - p[1]) * n[1];
+        [p[0] + n[0] * t, p[1] + n[1] * t]
+    };
+    let (ta, tb) = (app.to_screen(off(m.a)), app.to_screen(off(m.b)));
+    let middle = ta + (tb - ta) / 2.0;
+    app.cancel_dim_mode();
+    app.cancel_align_mode();
+    app.tool = DrawTool::Select;
+    app.show_dims = true;
+    app.edit.selection.clear();
+    let places_before: Vec<[f64; 2]> = app.distances.iter().map(|c| c.place).collect();
+    let shapes_before: Vec<_> = app.shapes.iter().map(|s| s.bounds()).collect();
+    let check: Check = Box::new(move |app| {
+        let moved = app.distances.iter().zip(&places_before).filter(|(c, b)| (c.place[1] - b[1]).abs() > 5.0).count();
+        let shapes_now: Vec<_> = app.shapes.iter().map(|s| s.bounds()).collect();
+        let msg = format!("{moved} Maß(e) verschoben, Formen blieben: {}, Linien ohne Wert: {}", shapes_now == shapes_before, app.distance_lines.len());
+        // only a dimension moved, not a shape it hangs on
+        if moved >= 1 && shapes_now == shapes_before && app.distance_edit.is_none() {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    // two idle frames first, so the dimension is drawn without its value when the drag starts
+    let idle = middle + Vec2::new(0.0, 160.0);
+    let mut events = vec![Event::PointerMoved(idle), Event::PointerMoved(idle + Vec2::new(1.0, 0.0))];
+    events.extend(drag(middle, Vec2::new(0.0, 40.0)));
+    (events, check)
+}
+
+/// A chosen shape shows its size as a dimension line; pulling the line (or its value) moves the
+/// line away from the shape, the shape stays.
+fn shape_dim_line_drag(app: &mut App) -> (Vec<Event>, Check) {
+    app.cancel_dim_mode();
+    app.cancel_align_mode();
+    app.tool = DrawTool::Select;
+    app.show_dims = true;
+    let id = app.add_shape(shape_edit::Circle::new([60.0, 40.0], 12.0));
+    app.edit.selection = vec![id];
+    let Some(line) = app.shapes.iter().find(|s| s.id == id).and_then(|s| s.shape.decoration().into_iter().next()) else { return (vec![], Box::new(|_| Err("keine Maßlinie".into()))) };
+    let out = app.dim_out(&line);
+    let (a, b) = (app.to_screen(line.from), app.to_screen(line.to));
+    // the line itself, a little beside its middle (the value sits on the middle)
+    let on_line = a + (b - a) * 0.2 + out * 16.0;
+    let bounds_before = app.shapes.iter().find(|s| s.id == id).and_then(|s| s.bounds());
+    let check: Check = Box::new(move |app| {
+        let it = app.shapes.iter().find(|s| s.id == id);
+        let pulled = it.map_or(0.0, |s| s.dim_offsets.iter().map(|(_, e)| *e).sum::<f64>());
+        let same = it.and_then(|s| s.bounds()) == bounds_before;
+        let msg = format!("Maßlinie um {pulled:.1} mm herausgezogen, Form blieb: {same}");
+        if pulled > 3.0 && same {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    let idle = on_line + Vec2::new(0.0, 160.0);
+    let mut events = vec![Event::PointerMoved(idle), Event::PointerMoved(idle + Vec2::new(1.0, 0.0))];
+    events.extend(drag(on_line, out * 40.0));
+    (events, check)
 }
 
 /// Two fresh rectangles; D, a click on the first one's upper-right corner and on the second one's

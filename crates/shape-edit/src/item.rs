@@ -39,6 +39,10 @@ pub struct Item {
     /// project files have none.
     #[serde(default)]
     pub bound: Vec<(Dim, String)>,
+    /// How far (mm) a size's dimension line was pulled out from where it starts, or pushed in
+    /// (negative), by dragging it. Old project files have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dim_offsets: Vec<(Dim, f64)>,
     /// Sides (across x, across y) whose size a distance constraint on the shape holds: set by the
     /// app before the editor looks at the shape, never saved. Their handles do nothing.
     #[serde(skip)]
@@ -129,7 +133,7 @@ impl Item {
     }
 
     pub fn new(id: u64, shape: impl Into<Shape>) -> Self {
-        Item { id, shape: shape.into(), source: None, groups: vec![], bound: vec![], locked: (false, false), layer: 1, hidden: false, frozen: false }
+        Item { id, shape: shape.into(), source: None, groups: vec![], bound: vec![], dim_offsets: vec![], locked: (false, false), layer: 1, hidden: false, frozen: false }
     }
 }
 

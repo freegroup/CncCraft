@@ -391,6 +391,9 @@ pub struct App {
     align_labels: Vec<(usize, Rect)>,
     distance_edit: Option<distance::DistanceEdit>,
     distance_labels: Vec<(usize, Rect)>,
+    /// The dimension lines of the distances shown without their value (the faint view): they can
+    /// be grabbed on the line itself.
+    distance_lines: Vec<(usize, [Pos2; 2])>,
     distances_pending: bool,
     /// Which tool cursor is drawn over the drawing this frame (for the self-test).
     custom_cursor_badge: Option<cursor::Badge>,
@@ -403,6 +406,8 @@ pub struct App {
     /// Where the shown dimension values were drawn last frame (shape, which size, place): a
     /// click on one opens it for editing.
     dim_labels: Vec<(u64, shape_edit::Dim, Rect)>,
+    /// The dimension lines of sizes shown without their value (the faint view), to grab them.
+    dim_lines: Vec<(u64, shape_edit::Dim, [Pos2; 2])>,
     /// The job's size (X, Y, Z) the variables were last worked out for.
     vars_job: [f64; 3],
     /// The open tab under the toolpath list, and whether that panel is unfolded.
@@ -551,6 +556,7 @@ impl App {
             align_labels: Vec::new(),
             distance_edit: None,
             distance_labels: Vec::new(),
+            distance_lines: Vec::new(),
             distances_pending: false,
             custom_cursor_badge: None,
             distance_conflicts: 0,
@@ -558,6 +564,7 @@ impl App {
             selected_constraint: None,
             label_press: None,
             dim_labels: Vec::new(),
+            dim_lines: Vec::new(),
             vars_job: [0.0; 3],
             toolpath_tab: ToolpathTab::Create,
             paths_open: cc.storage.and_then(|s| s.get_string("cnccraft_paths_open")).map_or(true, |v| v != "false"),

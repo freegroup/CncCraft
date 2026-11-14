@@ -120,24 +120,52 @@ pub(super) fn field(ctx: &egui::Context, key: Id, pos: Pos2, text: &mut String, 
 }
 
 impl App {
-    /// Draw one dimension line (offset outside the shape, with end ticks) and return where its
-    /// value or field goes.
-    fn draw_dim_line(&self, painter: &egui::Painter, line: &DimLine, tone: Color32) -> Pos2 {
+    /// Which way is "outside" for a dimension line on the screen (Y points down there); zero for a
+    /// radius, which has no line to move.
+    pub(super) fn dim_out(&self, line: &DimLine) -> Vec2 {
+        if line.outward == [0.0, 0.0] {
+            return Vec2::ZERO;
+        }
+        let a = self.to_screen(line.from);
+        let o = self.to_screen([line.from[0] + line.outward[0], line.from[1] + line.outward[1]]) - a;
+        if o.length() > 0.0 {
+            o.normalized()
+        } else {
+            Vec2::ZERO
+        }
+    }
+
+    /// The pull a dimension line of a shape has been given by dragging it, in mm.
+    fn dim_extra(it: &shape_edit::Item, dim: Dim) -> f64 {
+        it.dim_offsets.iter().find(|(d, _)| *d == dim).map_or(0.0, |(_, e)| *e)
+    }
+
+    /// Pull a shape's dimension line out or push it in by a pointer movement (screen px).
+    pub(super) fn nudge_dim_line(&mut self, id: u64, dim: Dim, delta: Vec2) {
+        let Some(idx) = self.shapes.iter().position(|s| s.id == id) else { return };
+        let Some(line) = self.shapes[idx].shape.decoration().into_iter().find(|l| l.dim == dim) else { return };
+        let out = self.dim_out(&line);
+        if out == Vec2::ZERO {
+            return;
+        }
+        let zoom = self.zoom as f64;
+        // never closer than a few px to the shape
+        let px = (Self::dim_extra(&self.shapes[idx], dim) * zoom + delta.dot(out) as f64).max((4.0 - LINE_GAP) as f64);
+        let it = &mut self.shapes[idx];
+        match it.dim_offsets.iter_mut().find(|(d, _)| *d == dim) {
+            Some((_, e)) => *e = px / zoom,
+            None => it.dim_offsets.push((dim, px / zoom)),
+        }
+    }
+
+    /// Draw one dimension line (offset outside the shape, with end ticks; `extra_mm` further out
+    /// when it was pulled) and return where its value or field goes, and the line's two ends.
+    fn draw_dim_line(&self, painter: &egui::Painter, line: &DimLine, tone: Color32, extra_mm: f64) -> (Pos2, [Pos2; 2]) {
         let (a, b) = (self.to_screen(line.from), self.to_screen(line.to));
         let along = (b - a).normalized();
         let across = Vec2::new(-along.y, along.x);
-        // which side is "outside" on screen (Y points down there)
-        let out = if line.outward == [0.0, 0.0] {
-            Vec2::ZERO
-        } else {
-            let o = self.to_screen([line.from[0] + line.outward[0], line.from[1] + line.outward[1]]) - a;
-            if o.length() > 0.0 {
-                o.normalized()
-            } else {
-                Vec2::ZERO
-            }
-        };
-        let shift = out * LINE_GAP;
+        let out = self.dim_out(line);
+        let shift = out * (LINE_GAP + (extra_mm * self.zoom as f64) as f32);
         let (a2, b2) = (a + shift, b + shift);
         // a size tied to a variable is drawn in the constraint colour, the others in ink
         let stroke = Stroke::new(if tone == INK { 1.0_f32 } else { 1.4 }, tone);
@@ -153,17 +181,14 @@ impl App {
         }
         let mid = a2 + (b2 - a2) / 2.0;
         // a radius: the value goes beyond its outer end, along it
-        if out == Vec2::ZERO {
-            b2 + along * RADIUS_FIELD_GAP
-        } else {
-            mid + out * FIELD_GAP
-        }
+        let at = if out == Vec2::ZERO { b2 + along * RADIUS_FIELD_GAP } else { mid + out * FIELD_GAP };
+        (at, [a2, b2])
     }
 
     /// While a shape is being dragged out: its dimension lines with their current values.
     pub(super) fn decoration_preview(&self, painter: &egui::Painter, shape: &Shape) {
         for line in shape.decoration() {
-            let at = self.draw_dim_line(painter, &line, INK);
+            let (at, _) = self.draw_dim_line(painter, &line, INK, 0.0);
             value_label(painter, at, format!("{} {}", fmt(shape.dimension_value(&line)), line.dim.unit()), INK);
         }
     }
@@ -173,6 +198,7 @@ impl App {
     /// blue with their formula, since they are constraints.
     pub(super) fn draw_dimensions(&mut self, painter: &egui::Painter) {
         self.dim_labels.clear();
+        self.dim_lines.clear();
         // the constraints (sizes that were set) decide by themselves how much shows (see
         // `Constrains::view`); the free sizes only show for a chosen shape with the switch on
         let all = self.show_dims;
@@ -180,6 +206,7 @@ impl App {
             return;
         }
         let mut labels = Vec::new();
+        let mut lines = Vec::new();
         for it in &self.shapes {
             let selected = self.edit.selection.contains(&it.id);
             let view = SizeConstraint { shape: it.id }.view(all, &self.edit.selection);
@@ -200,26 +227,30 @@ impl App {
                 match bound {
                     Some(_) if view == ConstraintView::Slim => {
                         // the faint view: just the line, no value
-                        self.draw_dim_line(painter, &line, CONSTRAINT.gamma_multiply(0.5));
+                        let (_, ends) = self.draw_dim_line(painter, &line, CONSTRAINT.gamma_multiply(0.5), Self::dim_extra(it, line.dim));
+                        lines.push((it.id, line.dim, ends));
                     }
                     Some(_) if view == ConstraintView::Hidden => {}
                     Some(expr) => {
                         // a chosen constraint is drawn in the selection colour
                         let chosen = matches!(self.selected_constraint, Some(super::distance::LabelTarget::ShapeDim(id, dim)) if id == it.id && dim == line.dim);
                         let tone = if chosen { SELECT } else { CONSTRAINT };
-                        let at = self.draw_dim_line(painter, &line, tone);
+                        let (at, ends) = self.draw_dim_line(painter, &line, tone, Self::dim_extra(it, line.dim));
                         // a plain number typed in is a constraint too, shown as just the value
                         let text = if calc::is_formula(expr) { format!("ƒ {expr} = {value}") } else { value.clone() };
                         labels.push((it.id, line.dim, value_label(painter, at, text, tone)));
+                        lines.push((it.id, line.dim, ends));
                     }
                     None => {
-                        let at = self.draw_dim_line(painter, &line, INK);
+                        let (at, ends) = self.draw_dim_line(painter, &line, INK, Self::dim_extra(it, line.dim));
                         labels.push((it.id, line.dim, value_label(painter, at, value, INK)));
+                        lines.push((it.id, line.dim, ends));
                     }
                 }
             }
         }
         self.dim_labels = labels;
+        self.dim_lines = lines;
     }
 
     /// Open the size fields of a shape with the cursor in one size (the shape is selected first
@@ -395,7 +426,7 @@ impl App {
         for (i, (dim, text)) in d.fields.iter_mut().enumerate() {
             let Some(line) = lines.iter().find(|l| l.dim == *dim) else { continue };
             let tone = if self.shapes[idx].bound.iter().any(|(b, _)| b == dim) { CONSTRAINT } else { INK };
-            let pos = self.draw_dim_line(painter, line, tone);
+            let (pos, _) = self.draw_dim_line(painter, line, tone, Self::dim_extra(&self.shapes[idx], *dim));
             if !matches!(dim, Dim::Width | Dim::Height) {
                 painter.text(pos - Vec2::new(44.0, 0.0), Align2::RIGHT_CENTER, label(*dim), FontId::proportional(11.0), MUTED);
             }
