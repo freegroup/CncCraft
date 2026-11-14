@@ -101,13 +101,15 @@ impl App {
                     egui::menu::bar(ui, |ui| self.menus(ui));
                 });
                 // the document's name at the right end
-                let mut name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
+                let name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
+                let right = full.right_center() - Vec2::new(38.0 + LANG_SLOT, 0.0);
+                // unsaved changes: a dot behind the name (drawn, the font has no such glyph)
+                let dot_room = if self.dirty_shown { 16.0 } else { 0.0 };
+                let label = ui.painter().text(right - Vec2::new(dot_room, 0.0), Align2::RIGHT_CENTER, name, FontId::proportional(14.0), muted());
                 if self.dirty_shown {
-                    name.push_str(" ●");
-                }
-                let label = ui.painter().text(full.right_center() - Vec2::new(38.0 + LANG_SLOT, 0.0), Align2::RIGHT_CENTER, name, FontId::proportional(14.0), muted());
-                if self.dirty_shown {
-                    ui.interact(label, egui::Id::new("dirty_mark"), Sense::hover()).on_hover_text(t!("Ungespeicherte Änderungen"));
+                    let dot = Rect::from_center_size(Pos2::new(right.x - 5.0, right.y), Vec2::splat(10.0));
+                    ui.painter().circle_filled(dot.center(), 3.5, muted());
+                    ui.interact(label.union(dot), egui::Id::new("dirty_mark"), Sense::hover()).on_hover_text(t!("Ungespeicherte Änderungen"));
                 }
             }
             // the switch for the dark theme, at the right end: a sun in the dark, a moon in the light
@@ -1287,20 +1289,11 @@ impl App {
                             if ui.small_button("🗑").on_hover_text(t!("Löschen")).clicked() {
                                 remove = Some(i);
                             }
-                            let edit_btn = ui.add(egui::Button::new("").small().min_size(Vec2::new(18.0, 18.0)));
+                            let edit_btn = ui.add(egui::Button::new("").small().min_size(Vec2::new(24.0, 20.0)));
                             if edit_btn.clicked() {
                                 edit = Some(i);
                             }
-                            {
-                                let r = edit_btn.rect.shrink(3.0);
-                                let c = if edit_btn.hovered() { ink() } else { muted() };
-                                let tip = r.left_bottom() + Vec2::new(1.0, -1.0);
-                                let top = r.right_top() + Vec2::new(-1.0, 1.0);
-                                let p = ui.painter();
-                                p.line_segment([tip, top], Stroke::new(1.5_f32, c));
-                                p.line_segment([tip + Vec2::new(3.0, 1.0), top + Vec2::new(1.0, -3.0)], Stroke::new(1.0_f32, c));
-                                p.line_segment([tip + Vec2::new(-1.0, 3.0), top + Vec2::new(-3.0, 1.0)], Stroke::new(1.0_f32, c));
-                            }
+                            draw_pencil(ui.painter(), edit_btn.rect.center(), if edit_btn.hovered() { ink() } else { muted() });
                             edit_btn.on_hover_text(t!("Bearbeiten"));
                         }
                         ui.label(egui::RichText::new(fmt_time(tp.stats().minutes)).small().color(muted()));
@@ -1397,6 +1390,22 @@ pub(super) fn eye(ui: &mut egui::Ui, open: bool, label: &str) -> egui::Response 
 }
 
 /// One group of toolbar buttons in a thin rounded box with its name centred under the buttons.
+/// A pencil lying at 45°, tip at the lower left: a body with an eraser band and a pointed tip
+/// (drawn, because the font has no pencil glyph).
+fn draw_pencil(painter: &egui::Painter, c: Pos2, tone: Color32) {
+    let d = Vec2::new(0.7071, -0.7071);
+    let n = Vec2::new(0.7071, 0.7071);
+    let h = 2.8;
+    let tip = c - d * 7.5;
+    let join = c - d * 3.0;
+    let end = c + d * 7.0;
+    let stroke = Stroke::new(1.3_f32, tone);
+    painter.add(egui::Shape::convex_polygon(vec![join + n * h, end + n * h, end - n * h, join - n * h], Color32::TRANSPARENT, stroke));
+    painter.add(egui::Shape::convex_polygon(vec![tip, join + n * h, join - n * h], tone.gamma_multiply(0.45), stroke));
+    let band = end - d * 2.4;
+    painter.line_segment([band + n * h, band - n * h], stroke);
+}
+
 /// The box round what belongs together in the toolpath panel.
 fn group_container() -> egui::Frame {
     egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(6.0).inner_margin(egui::Margin::same(8.0))
