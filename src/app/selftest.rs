@@ -1718,16 +1718,15 @@ fn origin_toggle(app: &mut App) -> (Vec<Event>, Check) {
 fn tool_changes(app: &mut App) -> (Vec<Event>, Check) {
     use super::OutputScope;
     app.output_scope = OutputScope::Visible;
-    app.export_ask = None;
     let tools: Vec<&crate::tools::Tool> = app.toolpaths.iter().map(|t| &t.tool).collect();
     let entries = crate::toolgroups::headers(&tools);
     let entry_count = entries.iter().filter(|&&e| e).count();
     let indices = app.output_indices();
     let groups = app.tool_groups(&indices).len();
-    app.export_gcode();
-    let asked = app.export_ask.take();
-    // one toolpath is one tool: no question (and no save window, which would block the test)
-    let asked_for_one = app.tool_groups(&indices[..1]).len() > 1;
+    // the export window asks for one file or one per tool only with more than one tool
+    let asked = app.export_choice(&indices).then(|| indices.clone());
+    // one toolpath is one tool: no question
+    let asked_for_one = app.export_choice(&indices[..1]);
     let per_tool = {
         let paths: Vec<&crate::toolpath::Toolpath> = indices.iter().map(|&i| &app.toolpaths[i]).collect();
         crate::toolgroups::files(&app.job, &paths, app.pp(), "schild")

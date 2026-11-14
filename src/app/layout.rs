@@ -26,14 +26,6 @@ pub(super) enum ToolForm {
     Offset,
 }
 
-/// The tabs under the toolpath list.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum ToolpathTab {
-    Create,
-    Preview,
-    Save,
-}
-
 /// The tool column's groups, top to bottom, as the original registers them (0x10011d034):
 /// `mode` (select, transform, node edit), `draw_line`, `draw_shape` (rectangle, circle,
 /// ellipse, polygon), `draw_text`, `edit_object`, `align` (align, mirror), `offset` and
@@ -539,30 +531,24 @@ impl App {
         egui::SidePanel::right("toolpaths").exact_width(320.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(10.0, 8.0)).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
             // the bottom container is laid out first, so it keeps its place; the top container
             // takes the room that is left
-            if self.toolpath_tab == ToolpathTab::Create {
-                self.toolpath_tab = ToolpathTab::Preview;
-            }
             egui::TopBottomPanel::bottom("toolpath_bottom").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 8.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                 group_container().show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     group_title(ui, &t!("Simulation & Export"), |_| {});
                     ui.horizontal(|ui| {
-                        for (tab, icon, hint) in [(ToolpathTab::Preview, Icon::Preview, t!("Werkzeugpfade-Vorschau")), (ToolpathTab::Save, Icon::Save, t!("Werkzeugpfade speichern"))] {
-                            ui.add_space(22.0);
-                            if icon_button(ui, icon, self.toolpath_tab == tab, &hint).clicked() {
-                                self.toolpath_tab = tab;
-                                if tab == ToolpathTab::Preview {
-                                    self.mode = ViewMode::ThreeD;
-                                    self.start_page = false;
-                                }
-                            }
+                        // the preview (the carved material in 3D), and the export, which asks in its own window
+                        ui.add_space(22.0);
+                        if icon_button(ui, Icon::Preview, self.mode == ViewMode::ThreeD, &t!("Werkzeugpfade-Vorschau")).clicked() {
+                            self.mode = ViewMode::ThreeD;
+                            self.start_page = false;
+                        }
+                        ui.add_space(22.0);
+                        if icon_button(ui, Icon::Save, self.export_dialog, &t!("Werkzeugpfade exportieren")).clicked() {
+                            self.export_dialog = true;
                         }
                     });
                     ui.add_space(4.0);
-                    match self.toolpath_tab {
-                        ToolpathTab::Preview | ToolpathTab::Create => self.preview_tab(ui),
-                        ToolpathTab::Save => self.save_tab(ui),
-                    }
+                    self.preview_tab(ui);
                 });
             });
             group_container().show(ui, |ui| {
@@ -727,50 +713,101 @@ impl App {
             .on_hover_text(t!("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb."));
     }
 
-    fn save_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new(t!("Export")).size(15.0).color(ink()));
-        // the three choices of the original's save form
+    /// The window every export of the toolpaths goes through (the menu and the disk icon): which
+    /// toolpaths, which post-processor, then the file.
+    pub(super) fn export_dialog_ui(&mut self, ctx: &egui::Context) {
+        if !self.export_dialog {
+            return;
+        }
         use super::OutputScope;
-        for (scope, name) in [
-            (OutputScope::All, t!("Alle Werkzeugwege")),
-            (OutputScope::Visible, t!("Sichtbare Werkzeugwege")),
-        ] {
-            ui.radio_value(&mut self.output_scope, scope, name);
-        }
-        let count = self.output_indices().len();
-        let tools = self.tool_groups(&self.output_indices()).len();
-        ui.label(egui::RichText::new(if tools > 1 {
-            t!("%{count} Werkzeugwege mit %{tools} Werkzeugwechseln: beim Speichern wählen Sie eine Datei oder je Werkzeug eine.", count = count, tools = tools)
+        let (mut go, mut cancel, mut manage) = (false, false, false);
+        let indices = self.output_indices();
+        let count = indices.len();
+        // with more than one tool the window also asks for one file or one for each tool
+        let tool_lines: Vec<String> = if self.export_choice(&indices) {
+            self.tool_groups(&indices)
+                .iter()
+                .enumerate()
+                .map(|(n, group)| {
+                    let tool = &self.toolpaths[indices[group[0]]].tool;
+                    let what = if group.len() == 1 { t!("1 Werkzeugweg") } else { t!("%{n} Werkzeugwege", n = group.len()) };
+                    format!("{}.  {} – {what}", n + 1, crate::tools::shown_name(&tool.name))
+                })
+                .collect()
         } else {
-            t!("%{count} Werkzeugwege kommen in eine Datei.", count = count)
-        }).color(muted()));
-        ui.add_space(4.0);
-        ui.label(t!("Postprozessor"));
-        let selected_label = self.pp().label();
-        let pp_manage;
-        {
-            let post_idx = &mut self.post_idx;
-            let postprocs = &self.postprocs;
-            pp_manage = combo_with_manage(ui, "post", 260.0, &selected_label, |ui| {
-                for (i, pp) in postprocs.iter().enumerate() {
-                    if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
-                        *post_idx = i;
-                    }
+            vec![]
+        };
+        egui::Window::new(t!("Werkzeugpfade exportieren")).id(egui::Id::new("export_dialog_win"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .frame(egui::Frame::window(&ctx.style()).fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
+            .show(ctx, |ui| {
+                ui.set_width(560.0);
+                // three groups: which toolpaths and the format they are written in side by side, and
+                // below them (only when the toolpaths need more than one tool) how the tools are
+                // split into files
+                ui.columns(2, |cols| {
+                    super::dialog_group(&mut cols[0], &t!("Werkzeugpfade"), |ui| {
+                        for (scope, name) in [(OutputScope::All, t!("Alle Werkzeugwege")), (OutputScope::Visible, t!("Sichtbare Werkzeugwege"))] {
+                            ui.radio_value(&mut self.output_scope, scope, name);
+                        }
+                        ui.label(egui::RichText::new(t!("%{n} Werkzeugwege", n = count)).color(muted()));
+                    });
+                    super::dialog_group(&mut cols[1], &t!("Exportformat"), |ui| {
+                        let selected_label = self.pp().label();
+                        let post_idx = &mut self.post_idx;
+                        let postprocs = &self.postprocs;
+                        manage = combo_with_manage(ui, "post", 200.0, &selected_label, |ui| {
+                            for (i, pp) in postprocs.iter().enumerate() {
+                                if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
+                                    *post_idx = i;
+                                }
+                            }
+                        });
+                    });
+                });
+                if !tool_lines.is_empty() {
+                    super::dialog_group(ui, &t!("Werkzeugwechsel"), |ui| {
+                        // several tools in one file only with a post-processor that can change tools
+                        let one_file_possible = self.pp().tool_change;
+                        let per_tool = self.export_per_tool || !one_file_possible;
+                        ui.columns(2, |cols| {
+                            cols[0].label(egui::RichText::new(t!("Die Werkzeugwege brauchen %{n} Werkzeuge nacheinander:", n = tool_lines.len())).color(ink()));
+                            for line in &tool_lines {
+                                cols[0].label(egui::RichText::new(line).color(muted()));
+                            }
+                            if cols[1].add_enabled(one_file_possible, egui::RadioButton::new(!per_tool, t!("Alles in eine Datei"))).on_disabled_hover_text(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).clicked() {
+                                self.export_per_tool = false;
+                            }
+                            if cols[1].add(egui::RadioButton::new(per_tool, t!("Je Werkzeug eine Datei (zusammen in einer ZIP-Datei)"))).clicked() {
+                                self.export_per_tool = true;
+                            }
+                            if !one_file_possible {
+                                cols[1].label(egui::RichText::new(t!("Die gewählte Ausgabe unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern.")).color(muted()));
+                            }
+                        });
+                    });
                 }
+                super::dialog_buttons(ui, |ui| {
+                    let export = egui::Button::new(egui::RichText::new(t!("Exportieren…")).strong().color(super::INK)).fill(super::ACCENT).min_size(Vec2::new(120.0, 30.0)).rounding(4.0);
+                    if ui.add_enabled(count > 0, export).clicked() {
+                        go = true;
+                    }
+                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
+                        cancel = true;
+                    }
+                });
             });
-        }
-        if pp_manage {
+        if manage {
             let idx = self.post_idx.min(self.postprocs.len().saturating_sub(1));
-            self.pp_dialog = Some(super::PpDialog {
-                editing: self.postprocs[idx].clone(),
-                index: Some(idx),
-                hook_tab: 0,
-            });
+            self.pp_dialog = Some(super::PpDialog { editing: self.postprocs[idx].clone(), index: Some(idx), hook_tab: 0 });
         }
-
-        ui.add_space(6.0);
-        if ui.add_enabled(count > 0, egui::Button::new(t!("Werkzeugpfade speichern…")).min_size(Vec2::new(200.0, 26.0))).clicked() {
+        if go {
+            self.export_dialog = false;
             self.export_gcode();
+        } else if cancel || (ctx.input(|i| i.key_pressed(egui::Key::Escape)) && self.pp_dialog.is_none()) {
+            self.export_dialog = false;
         }
     }
 

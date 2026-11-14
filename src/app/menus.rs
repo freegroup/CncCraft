@@ -32,7 +32,7 @@ impl App {
         self.menu_item(ui, &t!("Speichern"), Action::Save, true);
         self.menu_item(ui, &t!("Speichern unter…"), Action::SaveAs, true);
         if ui.button(t!("Werkzeugwege speichern…")).clicked() {
-            self.export_gcode();
+            self.export_dialog = true;
             ui.close_menu();
         }
         ui.separator();

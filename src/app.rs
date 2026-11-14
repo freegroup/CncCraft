@@ -19,7 +19,7 @@ mod shortcuts;
 mod variables;
 
 use icons::icon_button;
-use layout::{ToolForm, ToolpathTab};
+use layout::ToolForm;
 
 use shortcuts::Action;
 
@@ -321,7 +321,10 @@ pub struct App {
     /// Take the saved text again after the next frame: the first frame may settle values (variables, constraints).
     rebase: bool,
     /// The export is asking how to save toolpaths that need more than one tool: their positions.
-    export_ask: Option<Vec<usize>>,
+    /// With several tools: one file per tool (a ZIP) instead of everything in one file.
+    export_per_tool: bool,
+    /// The window for exporting the toolpaths (which ones, which post-processor) is open.
+    export_dialog: bool,
     tools_open: bool,
     /// Snapping switches (View menu) and what a drawing tool's pointer snapped to.
     snap_geometry: bool,
@@ -411,7 +414,6 @@ pub struct App {
     /// The job's size (X, Y, Z) the variables were last worked out for.
     vars_job: [f64; 3],
     /// The open tab under the toolpath list, and whether that panel is unfolded.
-    toolpath_tab: ToolpathTab,
     paths_open: bool,
     /// Where the drawing (or the 3D view) was laid out last frame.
     canvas_rect: Rect,
@@ -508,7 +510,8 @@ impl App {
             dirty_shown: false,
             dirty_checked: 0.0,
             rebase: false,
-            export_ask: None,
+            export_per_tool: cc.storage.and_then(|s| s.get_string("cnccraft_export_per_tool")).is_some_and(|v| v == "true"),
+            export_dialog: false,
             tools_open: cc.storage.and_then(|s| s.get_string("cnccraft_tools_open")).map_or(true, |v| v != "false"),
             snap_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_geometry")).map_or(true, |v| v != "false"),
             snap_grid: cc.storage.and_then(|s| s.get_string("cnccraft_snap_grid")).is_some_and(|v| v == "true"),
@@ -566,7 +569,6 @@ impl App {
             dim_labels: Vec::new(),
             dim_lines: Vec::new(),
             vars_job: [0.0; 3],
-            toolpath_tab: ToolpathTab::Create,
             paths_open: cc.storage.and_then(|s| s.get_string("cnccraft_paths_open")).map_or(true, |v| v != "false"),
             canvas_rect: Rect::NOTHING,
             swallow_press: false,
@@ -671,9 +673,9 @@ impl App {
                 app.tools_open = false;
                 app.flyout = Some((2, Pos2::ZERO));
             }
-            // the question that comes up when the toolpaths need more than one tool
+            // the export window (with the choice of files when the toolpaths need more than one tool)
             if std::env::var("CNCCRAFT_SHOW_EXPORT").is_ok() {
-                app.export_gcode();
+                app.export_dialog = true;
             }
             // and the finished carving in 3D, to review the preview
             if std::env::var("CNCCRAFT_SHOW_3D").is_ok() {
@@ -832,7 +834,7 @@ impl App {
 
     /// A window that asks something and must be answered first is open.
     pub(super) fn modal_open(&self) -> bool {
-        self.unsaved.is_some() || self.export_ask.is_some() || self.job_dialog.is_some() || self.about
+        self.unsaved.is_some() || self.export_dialog || self.job_dialog.is_some() || self.about
     }
 
     /// Drop everything that is being typed or drawn, and the pop-ups: the floating value fields and
@@ -987,8 +989,15 @@ impl App {
         }
     }
 
-    /// Save the toolpaths of the export scope. One tool: one file. More than one tool: ask first
-    /// whether everything goes into one file or each tool gets its own (in a ZIP).
+    /// Whether the toolpaths need more than one tool, so the export has to say whether
+    /// everything goes into one file or each tool gets its own.
+    pub(super) fn export_choice(&self, indices: &[usize]) -> bool {
+        self.tool_groups(indices).len() > 1
+    }
+
+    /// Save the toolpaths of the export scope, as the export window set it up: one machine file, or
+    /// (several tools) one file for each tool in a ZIP. One file with several tools only works with
+    /// a post-processor that can change tools.
     pub(super) fn export_gcode(&mut self) {
         let indices = self.output_indices();
         if indices.is_empty() {
@@ -998,11 +1007,8 @@ impl App {
             };
             return;
         }
-        if self.tool_groups(&indices).len() > 1 {
-            self.export_ask = Some(indices);
-        } else {
-            self.write_export(&indices, false);
-        }
+        let per_tool = self.export_choice(&indices) && (self.export_per_tool || !self.pp().tool_change);
+        self.write_export(&indices, per_tool);
     }
 
     /// The stretches of the same tool among the given toolpaths, as positions in `indices`.
@@ -1069,55 +1075,6 @@ impl App {
     }
 
     /// The question about more than one tool: everything in one file, or one file for each tool.
-    fn export_ask_ui(&mut self, ctx: &egui::Context) {
-        let Some(indices) = self.export_ask.clone() else { return };
-        let groups = self.tool_groups(&indices);
-        let mut choice: Option<Option<bool>> = None;
-        egui::Window::new(t!("Mehrere Werkzeuge")).id(egui::Id::new("Mehrere Werkzeuge"))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
-            .show(ctx, |ui| {
-                ui.set_width(380.0);
-                ui.label(egui::RichText::new(t!("Die Werkzeugwege brauchen %{n} Werkzeuge nacheinander:", n = groups.len())).color(ink()));
-                ui.add_space(4.0);
-                for (n, group) in groups.iter().enumerate() {
-                    let tool = &self.toolpaths[indices[group[0]]].tool;
-                    let what = if group.len() == 1 { t!("1 Werkzeugweg") } else { t!("%{n} Werkzeugwege", n = group.len()) };
-                    ui.label(egui::RichText::new(format!("{}.  {} – {what}", n + 1, crate::tools::shown_name(&tool.name))).color(muted()));
-                }
-                ui.add_space(8.0);
-                if self.pp().tool_change {
-                    ui.label(egui::RichText::new(t!("Alles in eine Datei oder für jedes Werkzeug eine eigene Datei (zusammen in einer ZIP-Datei)?")).color(ink()));
-                } else {
-                    ui.label(egui::RichText::new(t!("Die sichtbaren Werkzeugwege verwenden unterschiedliche Werkzeuge und die gewählte Ausgabe unterstützt keinen Werkzeugwechsel. Bitte für jedes Werkzeug eine eigene Datei speichern (zusammen in einer ZIP-Datei).")).color(ink()));
-                }
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new(t!("Je Werkzeug eine Datei")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(150.0, 30.0)).rounding(4.0)).clicked() {
-                        choice = Some(Some(true));
-                    }
-                    // the original's rule: several tools in one file only with a post-processor that can change tools
-                    let one_file = ui
-                        .add_enabled(self.pp().tool_change, egui::Button::new(t!("Alles in eine Datei")).min_size(Vec2::new(130.0, 30.0)).rounding(4.0))
-                        .on_disabled_hover_text(t!("Die gewählte Ausgabe (GRBL) unterstützt keinen Werkzeugwechsel: bitte in separate Dateien speichern."));
-                    if one_file.clicked() {
-                        choice = Some(Some(false));
-                    }
-                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(80.0, 30.0)).rounding(4.0)).clicked() {
-                        choice = Some(None);
-                    }
-                });
-            });
-        if let Some(c) = choice {
-            self.export_ask = None;
-            if let Some(per_tool) = c {
-                self.write_export(&indices, per_tool);
-            }
-        }
-    }
-
     fn delete_selection(&mut self) {
         if self.edit.selection.is_empty() {
             return;
@@ -2751,6 +2708,7 @@ impl eframe::App for App {
         storage.set_string("cnccraft_sim_quality", self.sim_quality.to_string());
         storage.set_string("cnccraft_preview_scope", format!("{:?}", self.preview_scope));
         storage.set_string("cnccraft_output_scope", format!("{:?}", self.output_scope));
+        storage.set_string("cnccraft_export_per_tool", self.export_per_tool.to_string());
         storage.set_string("cnccraft_cam_perspective", self.cam.perspective.to_string());
         storage.set_string("cnccraft_tools", self.lib.to_json());
     }
@@ -2833,7 +2791,7 @@ impl eframe::App for App {
         self.job_dialog_ui(ctx);
         self.variables_dialog(ctx);
         self.new_variable_dialog(ctx);
-        self.export_ask_ui(ctx);
+        self.export_dialog_ui(ctx);
         self.unsaved_ui(ctx);
         if self.about {
             egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
