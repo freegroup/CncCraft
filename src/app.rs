@@ -2795,7 +2795,9 @@ impl eframe::App for App {
         self.unsaved_ui(ctx);
         if self.about {
             egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+                ui.label(egui::RichText::new(t!("CncCraft %{version}", version = env!("CARGO_PKG_VERSION"))).strong());
                 ui.label(t!("CncCraft – Entwurf und Werkzeugwege für CNC-Fräsen."));
+                ui.hyperlink_to("https://github.com/freegroup/CncCraft", "https://github.com/freegroup/CncCraft");
                 ui.label(t!("Werkzeugdaten und Voreinstellungen nach dem Vorbild von Vectric Spark."));
                 dialog_buttons(ui, |ui| {
                     if ui.button(t!("Schließen")).clicked() {
