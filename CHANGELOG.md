@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/freegroup/CncCraft/compare/v1.3.0...v1.4.0) (2026-11-14)
+
+
+### Features
+
+* simulate, preview and export side by side in the toolpath panel ([aee51cf](https://github.com/freegroup/CncCraft/commit/aee51cfb0d2d82af66a87b3678c1b433b8117b04))
+
 # [1.3.0](https://github.com/freegroup/CncCraft/compare/v1.2.0...v1.3.0) (2026-11-14)
 
 
