@@ -24,6 +24,7 @@ mod app;
 mod appicon;
 mod gcode;
 mod layers;
+mod export;
 mod geom;
 mod import;
 mod lang;

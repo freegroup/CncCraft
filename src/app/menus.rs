@@ -35,6 +35,10 @@ impl App {
             self.export_dialog = true;
             ui.close_menu();
         }
+        if ui.button(t!("Exportieren…")).clicked() {
+            self.open_export_file();
+            ui.close_menu();
+        }
         ui.separator();
         if ui.button(t!("Startseite")).clicked() {
             self.start_page = true;

@@ -4,6 +4,7 @@
 mod align;
 mod cursor;
 mod distance;
+mod exporting;
 mod fields;
 mod gcode_highlight;
 mod gcode_overlay;
@@ -349,6 +350,12 @@ pub struct App {
     export_per_tool: bool,
     /// The window for exporting the toolpaths (which ones, which post-processor) is open.
     export_dialog: bool,
+    /// The window for exporting the drawing to another program's file is open, with the chosen
+    /// format, its settings and which shapes.
+    export_file: bool,
+    export_format: usize,
+    export_settings: crate::export::Settings,
+    export_scope: exporting::ExportScope,
     tools_open: bool,
     /// Snapping switches (View menu) and what a drawing tool's pointer snapped to.
     snap_geometry: bool,
@@ -538,6 +545,10 @@ impl App {
             rebase: false,
             export_per_tool: cc.storage.and_then(|s| s.get_string("cnccraft_export_per_tool")).is_some_and(|v| v == "true"),
             export_dialog: false,
+            export_file: false,
+            export_format: 0,
+            export_settings: crate::export::Settings::default(),
+            export_scope: exporting::ExportScope::All,
             tools_open: cc.storage.and_then(|s| s.get_string("cnccraft_tools_open")).map_or(true, |v| v != "false"),
             snap_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_geometry")).map_or(true, |v| v != "false"),
             snap_grid: cc.storage.and_then(|s| s.get_string("cnccraft_snap_grid")).is_some_and(|v| v == "true"),
@@ -703,6 +714,11 @@ impl App {
             if std::env::var("CNCCRAFT_SHOW_EXPORT").is_ok() {
                 app.export_dialog = true;
             }
+            // the window exporting the drawing, with the given format ("dxf" or "svg")
+            if let Ok(format) = std::env::var("CNCCRAFT_SHOW_EXPORT_FILE") {
+                app.export_format = crate::export::FORMATS.iter().position(|f| f.extension == format).unwrap_or(0);
+                app.open_export_file();
+            }
             // and the finished carving in 3D, to review the preview
             if std::env::var("CNCCRAFT_SHOW_3D").is_ok() {
                 app.start_preview(false);
@@ -860,7 +876,7 @@ impl App {
 
     /// A window that asks something and must be answered first is open.
     pub(super) fn modal_open(&self) -> bool {
-        self.unsaved.is_some() || self.after_thumb.is_some() || self.export_dialog || self.job_dialog.is_some() || self.about
+        self.unsaved.is_some() || self.after_thumb.is_some() || self.export_dialog || self.export_file || self.job_dialog.is_some() || self.about
     }
 
     /// Drop everything that is being typed or drawn, and the pop-ups: the floating value fields and
@@ -2895,6 +2911,7 @@ impl eframe::App for App {
         self.variables_dialog(ctx);
         self.new_variable_dialog(ctx);
         self.export_dialog_ui(ctx);
+        self.export_file_ui(ctx);
         self.unsaved_ui(ctx);
         if self.about {
             egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
