@@ -1,3 +1,11 @@
+# [1.7.0](https://github.com/freegroup/CncCraft/compare/v1.6.0...v1.7.0) (2026-11-15)
+
+
+### Features
+
+* export the drawing as DXF or SVG ([5833950](https://github.com/freegroup/CncCraft/commit/583395021c150227244f1aa4fdd359b54b83a815))
+* new app icon and logo ([01e289b](https://github.com/freegroup/CncCraft/commit/01e289b6d971dec5465eaa3baa6770d4ca950dbf))
+
 # [1.6.0](https://github.com/freegroup/CncCraft/compare/v1.5.0...v1.6.0) (2026-11-14)
 
 
