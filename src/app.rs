@@ -18,9 +18,11 @@ mod layers_ui;
 mod layout;
 mod menus;
 mod selftest;
+mod selftest_vector_ops;
 mod shortcuts;
 mod spline_deco;
 mod variables;
+mod vector_ops;
 
 use icons::icon_button;
 use layout::ToolForm;
@@ -41,6 +43,24 @@ use shape_edit::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+/// A toolpath computation running in the background: either one new/edited toolpath or all of them
+/// recomputed after a shape, layer or parameter change.
+enum BgResult {
+    One { tp: Toolpath, index: Option<usize> },
+    All { tps: Vec<Toolpath>, gen: u64 },
+}
+
+struct BgCompute {
+    rx: mpsc::Receiver<BgResult>,
+    /// Which toolpath indices are being computed: `None` means all of them.
+    computing: Option<usize>,
+    /// Set to `true` to tell the background thread to stop early.
+    cancel: Arc<AtomicBool>,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DrawTool {
@@ -53,9 +73,20 @@ pub enum DrawTool {
     Ellipse,
     Polygon,
     Text,
+    /// Vector operations (their own group in the tool column, see `vector_ops`).
+    Trim,
+    Erase,
+    Connect,
+    FilletOuter,
+    FilletInner,
 }
 
 impl DrawTool {
+    /// One of the vector operations (they work on vectors by clicking, see `vector_ops`).
+    fn is_vector_op(self) -> bool {
+        matches!(self, DrawTool::Trim | DrawTool::Erase | DrawTool::Connect | DrawTool::FilletOuter | DrawTool::FilletInner)
+    }
+
     fn tip(&self) -> String {
         match self {
             DrawTool::Select => t!("Auswählen und verschieben"),
@@ -67,6 +98,11 @@ impl DrawTool {
             DrawTool::Ellipse => t!("Ellipse zeichnen"),
             DrawTool::Polygon => t!("Polygon zeichnen"),
             DrawTool::Text => t!("Text einfügen"),
+            DrawTool::Trim => t!("Trennen: einen Vektor anklicken, er wird an jeder Kreuzung mit anderen Vektoren geteilt"),
+            DrawTool::Erase => t!("Löschen: einen Vektor anklicken, er wird gelöscht"),
+            DrawTool::Connect => t!("Verbinden: zwei Punkte nacheinander anklicken, sie werden mit einer Linie verbunden"),
+            DrawTool::FilletOuter => t!("Ohr: eine Ecke anklicken, sie bekommt einen Kreis um den Eckpunkt (Radius links, jederzeit änderbar)"),
+            DrawTool::FilletInner => t!("Abrunden: eine Ecke anklicken, sie wird abgerundet (Radius links, jederzeit änderbar)"),
         }
     }
 }
@@ -217,14 +253,6 @@ struct Drawing {
     end: Pt,
 }
 
-/// The ways two or more shapes can be combined.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Combine {
-    Union,
-    Subtract,
-    Intersect,
-}
-
 /// Arrow keys move the selection (or the picked node) by this much; with Shift by the larger step.
 const NUDGE_STEP: f64 = 1.0; // estimated
 const NUDGE_STEP_BIG: f64 = 10.0; // estimated
@@ -280,12 +308,26 @@ impl Sim {
     }
 }
 
+/// Inline editing of a fillet radius in the drawing.
+pub(super) struct CornerEdit {
+    pub id: u64,
+    pub path: usize,
+    pub node: usize,
+    pub text: String,
+    pub rect: Rect,
+    pub error: Option<String>,
+}
+
 pub struct App {
     job: Job,
     shapes: Vec<Item>,
     next_id: u64,
     toolpaths: Vec<Toolpath>,
     editor: Option<Editor>,
+    /// A toolpath being computed in a background thread.
+    bg_compute: Option<BgCompute>,
+    /// Incremented whenever toolpaths are added, removed or reordered; stale batches are dropped.
+    tp_gen: u64,
     lib: ToolLibrary,
     tool: DrawTool,
     drawing: Option<Drawing>,
@@ -389,6 +431,8 @@ pub struct App {
     paste_log: Vec<(Vec<u64>, usize)>,
     /// The form of the tool chosen in the tool column, beside it.
     tool_form: Option<ToolForm>,
+    /// What the vector operations remember between clicks (see `vector_ops`).
+    vops: vector_ops::VectorOps,
     /// Folded tool column: the tool last picked in each group, and the group whose tools are
     /// open beside it (with where).
     tool_choice: [usize; layout::GROUP_COUNT],
@@ -444,8 +488,16 @@ pub struct App {
     dim_labels: Vec<(u64, shape_edit::Dim, Rect)>,
     /// The dimension lines of sizes shown without their value (the faint view), to grab them.
     dim_lines: Vec<(u64, shape_edit::Dim, [Pos2; 2])>,
+    /// Fillet radius labels drawn in the canvas: (shape_id, path_index, node_index, screen rect).
+    corner_labels: Vec<(u64, usize, usize, Rect)>,
+    /// The fillet radius being edited inline: (shape_id, path_index, node_index, text, rect, error).
+    corner_edit: Option<CornerEdit>,
     /// The job's size (X, Y, Z) the variables were last worked out for.
     vars_job: [f64; 3],
+    /// The layer the toolpath editor window was drawn on last frame (for the self-test).
+    editor_layer: Option<egui::LayerId>,
+    /// Stored at the start of every frame so background work can wake the UI.
+    egui_ctx: Option<egui::Context>,
     /// The open tab under the toolpath list, and whether that panel is unfolded.
     paths_open: bool,
     /// Where the drawing (or the 3D view) was laid out last frame.
@@ -497,6 +549,8 @@ impl App {
             next_id: 1,
             toolpaths: vec![],
             editor: None,
+            bg_compute: None,
+            tp_gen: 0,
             lib: cc.storage.and_then(|s| s.get_string("cnccraft_tools")).map_or_else(ToolLibrary::load, |json| ToolLibrary::load_from(&json)),
             tool: DrawTool::Select,
             drawing: None,
@@ -568,6 +622,7 @@ impl App {
             clipboard: Clip::default(),
             paste_log: vec![],
             tool_form: None,
+            vops: vector_ops::VectorOps::new(),
             tool_choice: [0; layout::GROUP_COUNT],
             tp_drag: None,
             tp_selected: None,
@@ -607,7 +662,11 @@ impl App {
             label_press: None,
             dim_labels: Vec::new(),
             dim_lines: Vec::new(),
+            corner_labels: Vec::new(),
+            corner_edit: None,
             vars_job: [0.0; 3],
+            editor_layer: None,
+            egui_ctx: None,
             paths_open: cc.storage.and_then(|s| s.get_string("cnccraft_paths_open")).map_or(true, |v| v != "false"),
             canvas_rect: Rect::NOTHING,
             swallow_press: false,
@@ -774,6 +833,7 @@ impl App {
         self.job = Job { width: 300.0, height: 200.0, thickness: 18.0, ..Job::default() };
         self.shapes.clear();
         self.toolpaths.clear();
+        self.tp_gen += 1;
         self.layers = crate::layers::Layers::default();
         let frame = self.add_shape(RectShape { corner_radius: 12.0, ..RectShape::new([150.0, 100.0], 270.0, 170.0) });
         let text = self.add_shape(Text::new([150.0, 118.0], "CncCraft", 42.0));
@@ -791,10 +851,10 @@ impl App {
         d.tool = self.lib.pick(&job.material, ToolKind::Drill, 3.0, None);
         d.cut_depth = 8.0;
         let c = default_toolpath("cutout", &self.lib, &job, vec![frame]);
-        for mut tp in [v, p, d, c] {
-            tp.compute(&self.job, &self.shapes);
+        for tp in [v, p, d, c] {
             self.toolpaths.push(tp);
         }
+        self.recompute_all();
         self.edit = ShapeEditor::default();
         self.edit.selection = vec![hexagon];
         self.start_page = false;
@@ -807,6 +867,7 @@ impl App {
         self.job = job;
         self.shapes.clear();
         self.toolpaths.clear();
+        self.tp_gen += 1;
         self.layers = crate::layers::Layers::default();
         self.layer_dialog = None;
         self.vars = shape_edit::Variables::default();
@@ -959,9 +1020,6 @@ impl App {
                 self.vars_committed.clear();
                 self.var_events.clear();
                 self.vars_dirty = true;
-                for tp in &mut self.toolpaths {
-                    tp.compute(&self.job, &self.shapes);
-                }
                 self.add_recent(&path);
                 self.path = Some(path);
                 self.mark_clean();
@@ -1127,41 +1185,89 @@ impl App {
         self.status = if d > 0.0 { "Vergrößerte Kontur erzeugt".into() } else { "Verkleinerte Kontur erzeugt".into() };
     }
 
-    /// Replace the selected shapes by their union, difference or intersection.
-    fn combine(&mut self, op: Combine) {
-        let shapes = self.selected_shapes();
-        if shapes.len() < 2 {
-            self.status = "Dafür mindestens zwei Formen auswählen".into();
+    fn recompute_all(&mut self) {
+        if self.toolpaths.is_empty() {
             return;
         }
-        let result = match op {
-            Combine::Union => ops::union(&shapes),
-            Combine::Subtract => ops::subtract(&shapes[0], &shapes[1..]),
-            Combine::Intersect => ops::intersect(&shapes),
-        };
-        let Some(result) = result else {
-            self.status = "Das Ergebnis wäre leer".into();
-            return;
-        };
-        self.push_undo();
-        let sel = std::mem::take(&mut self.edit.selection);
-        self.shapes.retain(|s| !sel.contains(&s.id));
-        let id = self.add_shape(result);
-        self.edit.selection = vec![id];
-        self.edit.retain_existing(&self.shapes);
-        self.status = match op {
-            Combine::Union => "Formen vereint",
-            Combine::Subtract => "Formen abgezogen",
-            Combine::Intersect => "Schnittmenge gebildet",
+        if let Some(bg) = &self.bg_compute {
+            bg.cancel.store(true, Ordering::Relaxed);
         }
-        .into();
+        if let Some(ctx) = &self.egui_ctx {
+            let job = self.job.clone();
+            let shapes: Vec<Item> = self.shapes.clone();
+            let mut tps: Vec<Toolpath> = self.toolpaths.iter().map(|tp| tp.without_moves()).collect();
+            let gen = self.tp_gen;
+            let cancel = Arc::new(AtomicBool::new(false));
+            let cancel2 = cancel.clone();
+            let (tx, rx) = mpsc::channel();
+            let ctx2 = ctx.clone();
+            std::thread::spawn(move || {
+                for tp in &mut tps {
+                    if cancel2.load(Ordering::Relaxed) { return; }
+                    tp.compute(&job, &shapes);
+                }
+                let _ = tx.send(BgResult::All { tps, gen });
+                ctx2.request_repaint();
+            });
+            self.bg_compute = Some(BgCompute { rx, computing: None, cancel });
+            self.sim = None;
+        } else {
+            for tp in &mut self.toolpaths {
+                tp.compute(&self.job, &self.shapes);
+            }
+            self.sim = None;
+        }
     }
 
-    fn recompute_all(&mut self) {
-        for tp in &mut self.toolpaths {
-            tp.compute(&self.job, &self.shapes);
+    fn compute_in_background(&mut self, mut tp: Toolpath, index: Option<usize>, ctx: &egui::Context) {
+        self.tp_gen += 1;
+        if let Some(bg) = &self.bg_compute {
+            bg.cancel.store(true, Ordering::Relaxed);
         }
-        self.sim = None;
+        tp.moves.clear();
+        let job = self.job.clone();
+        let shapes: Vec<Item> = self.shapes.clone();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        let ctx2 = ctx.clone();
+        std::thread::spawn(move || {
+            tp.compute(&job, &shapes);
+            let _ = tx.send(BgResult::One { tp, index });
+            ctx2.request_repaint();
+        });
+        self.bg_compute = Some(BgCompute { rx, computing: index, cancel });
+        self.status = t!("Berechne Werkzeugweg…").into();
+    }
+
+    fn poll_bg_compute(&mut self) {
+        let Some(bg) = &self.bg_compute else { return };
+        match bg.rx.try_recv() {
+            Ok(BgResult::One { tp, index }) => {
+                let st = tp.stats();
+                self.status = format!("{} berechnet: {} Bewegungen, ca. {}", tp.name, tp.moves.len(), fmt_time(st.minutes));
+                self.bg_compute = None;
+                self.tp_gen += 1;
+                match index {
+                    Some(i) if i < self.toolpaths.len() => self.toolpaths[i] = tp,
+                    _ => self.toolpaths.push(tp),
+                }
+                self.sim = None;
+            }
+            Ok(BgResult::All { tps, gen }) => {
+                self.bg_compute = None;
+                if gen == self.tp_gen {
+                    self.toolpaths = tps;
+                    self.sim = None;
+                } else {
+                    self.recompute_all();
+                }
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.status = t!("Berechnung fehlgeschlagen").into();
+                self.bg_compute = None;
+            }
+        }
     }
 
     // ---------------- coordinates ----------------
@@ -1223,6 +1329,7 @@ impl App {
             while let Some((ids, before)) = self.paste_log.last() {
                 if ids.iter().all(|id| !self.shapes.iter().any(|s| s.id == *id)) {
                     self.toolpaths.truncate((*before).min(self.toolpaths.len()));
+                    self.tp_gen += 1;
                     self.tp_selected = None;
                     self.sim = None;
                     self.paste_log.pop();
@@ -1718,6 +1825,7 @@ impl App {
 
         // node handles on the selected curves (spline handles, path squares)
         self.draw_node_handles(&painter, mouse, view);
+        self.draw_vector_ops(&painter, mouse);
 
         // a click in the drawing while sizes are being typed takes them, like Enter; that press
         // does nothing else until the button is let go
@@ -1811,8 +1919,10 @@ impl App {
         self.draw_dimensions(&painter);
         self.draw_distances(&painter, resp.hover_pos());
         self.draw_aligns(&painter);
+        self.draw_corners(&painter);
         self.distance_edit_ui(ui.ctx(), &painter);
         self.dims_ui(ui.ctx(), &painter);
+        self.corner_edit_ui(ui.ctx(), &painter);
         self.angle_ui(ui.ctx(), &painter);
         // a tool cursor of our own over the drawing (hiding the system pointer)
         self.custom_cursor(ui.ctx(), &painter, rect, resp.hovered());
@@ -1961,6 +2071,7 @@ impl App {
                     }
                 }
             }
+            t if t.is_vector_op() => self.vector_op_input(resp, mouse),
             DrawTool::Text => {
                 let mouse = mouse.map(|m| self.snap(m));
                 if resp.clicked() {
@@ -2281,13 +2392,12 @@ impl App {
             if ids.is_empty() {
                 continue;
             }
-            let mut copy = Toolpath { shape_ids: ids, name: t!("%{name} (Kopie)", name = tp.name), ..tp.clone() };
-            copy.compute(&self.job, &self.shapes);
+            let copy = Toolpath { shape_ids: ids, name: t!("%{name} (Kopie)", name = tp.name), ..tp.clone() };
             self.toolpaths.push(copy);
         }
         if self.toolpaths.len() != before {
             self.paste_log.push((map.iter().map(|(_, n)| *n).collect(), before));
-            self.sim = None;
+            self.recompute_all();
         }
         self.vars_dirty = true;
     }
@@ -2499,6 +2609,7 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.egui_ctx = Some(ctx.clone());
         self.sync_theme(ctx);
         // a layer was switched on or off: what is on it joins or leaves the picking and the cutting
         if self.layers.sync(&mut self.shapes) {
@@ -2537,6 +2648,10 @@ impl eframe::App for App {
         }
         self.refresh_vars();
         self.apply_constraints();
+        self.poll_bg_compute();
+        if self.bg_compute.is_some() {
+            ctx.request_repaint();
+        }
         if self.rebase {
             self.rebase = false;
             self.saved_text = self.project_text();

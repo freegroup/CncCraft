@@ -33,6 +33,7 @@ pub mod ops;
 pub mod region;
 pub mod snap;
 pub mod vars;
+pub mod vector;
 
 pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, Orient, SizeConstraint};
 pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
@@ -43,6 +44,7 @@ pub use item::{can_group, group_items, ungroup_items, Item, Source};
 pub use region::{Region, Ring};
 pub use snap::{snap_angle, SnapKind, Snapping};
 pub use vars::{Resolved, VarEvent, Variable, Variables};
+pub use vector::{Corner, CornerKind};
 
 /// How a selected shape shows that it is selected, chosen by the shape's own class (its
 /// "selection feedback").

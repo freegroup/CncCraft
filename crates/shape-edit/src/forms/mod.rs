@@ -177,7 +177,7 @@ impl Shape {
     /// class: the centre moves round `about` and the rotation grows by `deg`.
     pub fn rotated(&self, about: Pt, deg: f64) -> Shape {
         let turn = |c: Pt| rotate(c, about, deg);
-        let path = |p: &Path| Path { points: p.points.iter().map(|q| turn(*q)).collect(), closed: p.closed };
+        let path = |p: &Path| p.with_points(p.points.iter().map(|q| turn(*q)).collect());
         match self {
             Shape::Rect(r) => Rect { center: turn(r.center), rotation: r.rotation + deg, ..r.clone() }.into(),
             Shape::Circle(c) => Circle { center: turn(c.center), ..*c }.into(),
@@ -360,9 +360,9 @@ pub(crate) fn ellipse_points(rx: f64, ry: f64) -> Vec<Pt> {
 pub(crate) fn curves_from(mut contours: Vec<Contour>) -> Shape {
     if contours.len() == 1 {
         let c = contours.remove(0);
-        Shape::Path(Path { points: c.pts, closed: c.closed })
+        Shape::Path(Path::new(c.pts, c.closed))
     } else {
-        Shape::Compound(Compound { paths: contours.into_iter().map(|c| Path { points: c.pts, closed: c.closed }).collect() })
+        Shape::Compound(Compound { paths: contours.into_iter().map(|c| Path::new(c.pts, c.closed)).collect() })
     }
 }
 

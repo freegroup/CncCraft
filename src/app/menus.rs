@@ -3,7 +3,7 @@
 //! shows them from the shortcut table.
 
 use super::shortcuts::{self, Action};
-use super::{App, DrawTool, SNAP_RADIUS_MAX_PX, SNAP_RADIUS_MIN_PX};
+use super::{App, DrawTool};
 
 impl App {
     /// The menus, one button each in the menu bar.
@@ -106,18 +106,6 @@ impl App {
         }
         ui.separator();
         ui.checkbox(&mut self.show_dims, t!("Maße anzeigen"));
-        ui.separator();
-        ui.label(egui::RichText::new(t!("Einrasten")).strong());
-        ui.checkbox(&mut self.snap_geometry, t!("An Geometrie (Knoten, Mitten)"));
-        ui.checkbox(&mut self.snap_job, t!("An Job-Ecken und -Mitte"));
-        ui.horizontal(|ui| {
-            ui.label(t!("Radius"));
-            ui.add(egui::Slider::new(&mut self.snap_radius_px, SNAP_RADIUS_MIN_PX..=SNAP_RADIUS_MAX_PX).step_by(1.0).suffix(" px"));
-        });
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut self.snap_grid, t!("Am Raster"));
-            ui.add(egui::DragValue::new(&mut self.grid_spacing).range(0.1..=500.0).speed(0.5).suffix(" mm"));
-        });
     }
 
     fn toolpath_menu(&mut self, ui: &mut egui::Ui) {

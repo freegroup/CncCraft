@@ -63,7 +63,7 @@ pub(in crate::app) fn header(ui: &mut egui::Ui, title: &str) -> bool {
 }
 
 /// The close button of the header: a drawn cross (the font has no "✕"), darker under the pointer.
-fn close_button(ui: &mut egui::Ui) -> egui::Response {
+pub(in crate::app) fn close_button(ui: &mut egui::Ui) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON), egui::Sense::click());
     if response.hovered() {
         ui.painter().rect_filled(rect, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);

@@ -148,7 +148,7 @@ pub fn write(drawing: &Drawing, o: &Options) -> String {
     out.pair(2, "ENTITIES");
     if o.frame {
         let [w, h] = drawing.plate;
-        let plate = Outline::Line { pts: vec![[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]], closed: true };
+        let plate = Outline::Line { pts: vec![[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]], closed: true, bulges: vec![] };
         entity(&mut out, &plate, if o.layers { FRAME_LAYER } else { "0" }, k, model.as_deref());
     }
     for piece in &drawing.pieces {
@@ -197,7 +197,9 @@ fn entity(out: &mut Out, outline: &Outline, layer: &str, k: f64, model: Option<&
             out.pair(30, 0);
             out.pair(40, num(radius * k));
         }
-        Outline::Line { pts, closed } => {
+        Outline::Line { pts, closed, bulges } => {
+            // the arc of each segment, on the point it starts from
+            let bulge = |i: usize| bulges.get(i).copied().filter(|b| b.abs() > 1e-12);
             // a closed outline whose last point repeats the first: the flag closes it
             let mut pts = pts.as_slice();
             if *closed && pts.len() > 2 && pts.first() == pts.last() {
@@ -207,9 +209,12 @@ fn entity(out: &mut Out, outline: &Outline, layer: &str, k: f64, model: Option<&
                 head(out, "LWPOLYLINE", "AcDbPolyline");
                 out.pair(90, pts.len());
                 out.pair(70, i32::from(*closed));
-                for p in pts {
+                for (i, p) in pts.iter().enumerate() {
                     out.pair(10, num(p[0] * k));
                     out.pair(20, num(p[1] * k));
+                    if let Some(b) = bulge(i) {
+                        out.pair(42, num(b));
+                    }
                 }
             } else {
                 head(out, "POLYLINE", "");
@@ -218,12 +223,15 @@ fn entity(out: &mut Out, outline: &Outline, layer: &str, k: f64, model: Option<&
                 out.pair(20, 0);
                 out.pair(30, 0);
                 out.pair(70, i32::from(*closed));
-                for p in pts {
+                for (i, p) in pts.iter().enumerate() {
                     out.pair(0, "VERTEX");
                     out.pair(8, layer);
                     out.pair(10, num(p[0] * k));
                     out.pair(20, num(p[1] * k));
                     out.pair(30, 0);
+                    if let Some(b) = bulge(i) {
+                        out.pair(42, num(b));
+                    }
                 }
                 out.pair(0, "SEQEND");
                 out.pair(8, layer);
@@ -410,6 +418,25 @@ mod tests {
             let imp = read_back(&text);
             assert_eq!(imp.shapes.len(), 3, "{}", version.name());
             assert!(imp.shapes.iter().filter_map(|s| s.bounds()).any(|(lo, hi)| lo == [0.0, 0.0] && hi == [200.0, 100.0]));
+        }
+    }
+
+    #[test]
+    fn rounded_corners_and_ears_are_written_as_true_arcs() {
+        let mut square = shape_edit::Path::new(vec![[0.0, 0.0], [40.0, 0.0], [40.0, 30.0], [0.0, 30.0]], true);
+        square.set_corner(1, Some((shape_edit::CornerKind::Round, 5.0, None)));
+        square.set_corner(3, Some((shape_edit::CornerKind::Ear, 3.0, None)));
+        let drawing = Drawing { pieces: vec![Piece { shape: Shape::Path(square.clone()), layer: "0".into(), groups: vec![] }], layers: vec!["0".into()], plate: [100.0, 100.0] };
+        for version in Version::ALL {
+            let text = write(&drawing, &Options { version, ..Options::default() });
+            // in the entities (the text style table has a code 42 of its own)
+            let entities = &text[text.find("ENTITIES").unwrap()..];
+            assert_eq!(entities.matches("\n 42\n").count(), 2, "{}: one bulge per arc", version.name());
+            // read back, it has the same outline as the drawing
+            let imp = read_back(&text);
+            let (lo, hi) = imp.shapes[0].bounds().unwrap();
+            let (elo, ehi) = Shape::Path(square.clone()).bounds().unwrap();
+            assert!((lo[0] - elo[0]).abs() < 0.05 && (hi[0] - ehi[0]).abs() < 0.05 && (lo[1] - elo[1]).abs() < 0.05 && (hi[1] - ehi[1]).abs() < 0.05, "{lo:?} {hi:?} / {elo:?} {ehi:?}");
         }
     }
 

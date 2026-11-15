@@ -88,7 +88,8 @@ impl App {
         for tp in &mut self.toolpaths {
             depth_changed |= tp.resolve_depths(&self.vars_resolved);
         }
-        if bound_changed || depth_changed {
+        let needs_initial = self.toolpaths.iter().any(|tp| tp.moves.is_empty() && !tp.shape_ids.is_empty());
+        if bound_changed || depth_changed || needs_initial {
             self.recompute_all();
         }
         self.var_log = events;
@@ -108,6 +109,8 @@ impl App {
     fn apply_bindings(&mut self) -> bool {
         let mut changed = false;
         for item in &mut self.shapes {
+            // corner radii typed as formulas follow the variables too
+            changed |= item.resolve_corners(&self.vars_resolved);
             for (dim, expr) in item.bound.clone() {
                 let Ok(value) = calc::eval(&expr, &self.vars_resolved) else { continue };
                 let next = item.shape.with_dimension_anchored(dim, value);

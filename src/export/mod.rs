@@ -32,18 +32,47 @@ impl Drawing {
     }
 }
 
-/// What a shape becomes in a file: a true circle, or one line through points per outline.
+/// What a shape becomes in a file: a true circle, or one line through points per outline. A
+/// segment of a line may be a true arc: `bulges[i]` belongs to the segment from point `i` to the
+/// next (0 straight, else tan(sweep/4), positive anticlockwise, as DXF has it); empty when every
+/// segment is straight.
 pub enum Outline {
     Circle { center: [f64; 2], radius: f64 },
-    Line { pts: Vec<[f64; 2]>, closed: bool },
+    Line { pts: Vec<[f64; 2]>, closed: bool, bulges: Vec<f64> },
 }
 
-/// The outlines of a shape; a circle always stays a circle.
-pub fn outlines(shape: &Shape) -> Vec<Outline> {
-    if let Shape::Circle(c) = shape {
-        return vec![Outline::Circle { center: c.center, radius: c.radius }];
+/// A path's outline with its rounded corners and ears as true arcs.
+fn path_outline(path: &shape_edit::Path) -> Option<Outline> {
+    use shape_edit::vector::Piece;
+    let pieces = path.pieces();
+    let first = match pieces.first()? {
+        Piece::Line { from, .. } => *from,
+        Piece::Arc(a) => a.from,
+    };
+    let (mut pts, mut bulges) = (vec![first], vec![]);
+    for piece in &pieces {
+        let (to, bulge) = match piece {
+            Piece::Line { to, .. } => (*to, 0.0),
+            Piece::Arc(a) => (a.to, a.bulge()),
+        };
+        pts.push(to);
+        bulges.push(bulge);
     }
-    shape.contours().into_iter().filter(|c| c.pts.len() > 1).map(|c| Outline::Line { pts: c.pts, closed: c.closed }).collect()
+    if path.closed && pts.len() > 2 && shape_edit::geometry::dist(pts[0], *pts.last().unwrap()) < 1e-9 {
+        pts.pop();
+    }
+    Some(Outline::Line { pts, closed: path.closed, bulges })
+}
+
+/// The outlines of a shape; a circle always stays a circle, rounded corners stay arcs.
+pub fn outlines(shape: &Shape) -> Vec<Outline> {
+    match shape {
+        Shape::Circle(c) => return vec![Outline::Circle { center: c.center, radius: c.radius }],
+        Shape::Path(p) if !p.corners.is_empty() => return path_outline(p).into_iter().collect(),
+        Shape::Compound(c) if c.paths.iter().any(|p| !p.corners.is_empty()) => return c.paths.iter().filter_map(path_outline).collect(),
+        _ => {}
+    }
+    shape.contours().into_iter().filter(|c| c.pts.len() > 1).map(|c| Outline::Line { pts: c.pts, closed: c.closed, bulges: vec![] }).collect()
 }
 
 /// The unit the file's numbers are in.

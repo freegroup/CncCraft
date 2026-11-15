@@ -12,6 +12,7 @@ impl App {
     /// on its row, or one of the operation buttons), so the list stays short.
     pub(in crate::app) fn editor_window(&mut self, ctx: &egui::Context) {
         if self.editor.is_none() {
+            self.editor_layer = None;
             return;
         }
         let screen = ctx.screen_rect();
@@ -24,8 +25,6 @@ impl App {
         let mut close = false;
         let shown = dialogs::window("toolpath_editor_window", ctx)
             .default_pos(Pos2::new((screen.right() - 360.0 - 800.0).max(40.0), 80.0))
-            // above the hints floating at the canvas's lower edge, which would cover its buttons
-            .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 // the width first, so the header's line ends where the contents do
                 ui.set_width(EDITOR_WIDTH);
@@ -38,6 +37,7 @@ impl App {
             return;
         }
         if let Some(shown) = shown {
+            self.editor_layer = Some(shown.response.layer_id);
             ctx.move_to_top(shown.response.layer_id);
         }
     }
@@ -288,14 +288,7 @@ impl App {
             if tp.shape_ids.is_empty() {
                 tp.shape_ids = self.edit.selection.clone();
             }
-            tp.compute(&self.job, &self.shapes);
-            let st = tp.stats();
-            self.status = format!("{} berechnet: {} Bewegungen, ca. {}", tp.name, tp.moves.len(), fmt_time(st.minutes));
-            match ed.index {
-                Some(i) if i < self.toolpaths.len() => self.toolpaths[i] = tp,
-                _ => self.toolpaths.push(tp),
-            }
-            self.sim = None;
+            self.compute_in_background(tp, ed.index, ui.ctx());
         }
         if open_tool_dlg && self.tool_dialog.is_none() {
             let mat = self.job.material.clone();

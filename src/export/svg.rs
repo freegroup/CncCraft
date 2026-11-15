@@ -92,6 +92,17 @@ impl Writer<'_> {
         format!("{},{}", num((p[0] - self.left) * self.k), num((self.top - p[1]) * self.k))
     }
 
+    /// An SVG arc from `a` to `b` for a segment with this DXF bulge. The picture's y points down,
+    /// so an anticlockwise arc (positive bulge) is drawn with the sweep flag set.
+    fn arc(&self, a: [f64; 2], b: [f64; 2], bulge: f64) -> String {
+        let sweep = 4.0 * bulge.atan();
+        let chord = shape_edit::geometry::dist(a, b);
+        let r = chord / (2.0 * (sweep.abs() / 2.0).sin());
+        let large = u8::from(sweep.abs() > std::f64::consts::PI);
+        let flag = u8::from(sweep > 0.0);
+        format!(" A{} {} 0 {large} {flag} {}", num(r * self.k), num(r * self.k), self.pt(b))
+    }
+
     fn shape(&mut self, piece: &Piece, indent: usize) {
         for outline in outlines(&piece.shape) {
             let pad = "  ".repeat(indent);
@@ -99,11 +110,19 @@ impl Writer<'_> {
                 Outline::Circle { center, radius } => {
                     let _ = writeln!(self.out, "{pad}<circle cx=\"{}\" cy=\"{}\" r=\"{}\"/>", num((center[0] - self.left) * self.k), num((self.top - center[1]) * self.k), num(radius * self.k));
                 }
-                Outline::Line { pts, closed } => {
+                Outline::Line { pts, closed, bulges } => {
                     let mut d = format!("M{}", self.pt(pts[0]));
-                    for p in &pts[1..] {
-                        d.push_str(" L");
-                        d.push_str(&self.pt(*p));
+                    let n = pts.len();
+                    let segs = if closed { n } else { n - 1 };
+                    for i in 0..segs {
+                        let (a, b) = (pts[i], pts[(i + 1) % n]);
+                        let bulge = bulges.get(i).copied().unwrap_or(0.0);
+                        if bulge.abs() > 1e-12 {
+                            d.push_str(&self.arc(a, b, bulge));
+                        } else if i + 1 < n {
+                            d.push_str(" L");
+                            d.push_str(&self.pt(b));
+                        }
                     }
                     if closed {
                         d.push_str(" Z");
@@ -242,6 +261,16 @@ mod tests {
         let svg = write(&drawing(), &Options { unit: Unit::Inch, ..Options::default() });
         assert!(svg.contains("viewBox=\"0 0 7.874 3.937\"") && svg.contains("width=\"7.874in\""), "{svg}");
         assert!(svg.contains("<circle cx=\"4.7244\" cy=\"0.7874\" r=\"0.3937\"/>"), "{svg}");
+    }
+
+    #[test]
+    fn rounded_corners_are_svg_arcs() {
+        let mut square = shape_edit::Path::new(vec![[0.0, 0.0], [40.0, 0.0], [40.0, 30.0], [0.0, 30.0]], true);
+        square.set_corner(1, Some((shape_edit::CornerKind::Round, 5.0, None)));
+        let d = Drawing { pieces: vec![piece(Shape::Path(square), "Ebene 1", vec![])], layers: vec!["Ebene 1".into()], plate: [100.0, 100.0] };
+        let svg = write(&d, &Options::default());
+        // a quarter circle of radius 5, anticlockwise in the drawing: clockwise in the picture
+        assert!(svg.contains(" A5 5 0 0 1 "), "{svg}");
     }
 
     #[test]

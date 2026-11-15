@@ -16,7 +16,6 @@ impl App {
         let mut open = true;
         let screen = ctx.screen_rect();
         super::window("tool_dialog_win", ctx)
-            .order(egui::Order::Foreground)
             .resizable(true)
             .default_width(520.0)
             .min_width(380.0)

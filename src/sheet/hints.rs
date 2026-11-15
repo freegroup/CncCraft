@@ -55,7 +55,7 @@ impl Decoration for Hints {
         // themselves catch the pointer (one area round all of them would block the drawing)
         let mut bottom = r.right_bottom() - Vec2::new(EDGE_RIGHT, EDGE_BOTTOM);
         let mut bar = |key: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
-            let shown = egui::Area::new(egui::Id::new(("sheet_hint", key))).order(egui::Order::Foreground).pivot(Align2::RIGHT_BOTTOM).fixed_pos(bottom).show(ctx, |ui| pill(ui, |ui| add(ui)));
+            let shown = egui::Area::new(egui::Id::new(("sheet_hint", key))).order(egui::Order::Middle).pivot(Align2::RIGHT_BOTTOM).fixed_pos(bottom).show(ctx, |ui| pill(ui, |ui| add(ui)));
             bottom.y = shown.response.rect.top() - GAP;
         };
         let mut action = None;

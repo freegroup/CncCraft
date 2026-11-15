@@ -20,6 +20,10 @@ pub(super) enum Badge {
     SplineBadge,
     Text,
     Node,
+    Trim,
+    Erase,
+    Connect,
+    Fillet,
 }
 
 impl App {
@@ -41,6 +45,10 @@ impl App {
             DrawTool::Ellipse => Some(Badge::Ellipse),
             DrawTool::Polygon => Some(Badge::Polygon),
             DrawTool::Text => Some(Badge::Text),
+            DrawTool::Trim => Some(Badge::Trim),
+            DrawTool::Erase => Some(Badge::Erase),
+            DrawTool::Connect => Some(Badge::Connect),
+            DrawTool::FilletOuter | DrawTool::FilletInner => Some(Badge::Fillet),
         }
     }
 
@@ -132,5 +140,19 @@ fn badge_shapes(badge: Badge, c: Pos2) -> Vec<Part> {
         Badge::Text => vec![],
         // a small square: a node
         Badge::Node => vec![Part::Poly(vec![p(-3.5, -3.5), p(3.5, -3.5), p(3.5, 3.5), p(-3.5, 3.5)], true)],
+        // a line broken where another crosses it
+        Badge::Trim => vec![Part::Line(p(-6.0, 4.0), p(-1.5, 1.0)), Part::Line(p(1.5, -1.0), p(6.0, -4.0)), Part::Line(p(0.0, -6.0), p(0.0, 6.0))],
+        // a cross
+        Badge::Erase => vec![Part::Line(p(-4.5, -4.5), p(4.5, 4.5)), Part::Line(p(4.5, -4.5), p(-4.5, 4.5))],
+        // two points and the line between them
+        Badge::Connect => vec![Part::Circle(p(-5.0, 4.0), 1.8), Part::Circle(p(5.0, -4.0), 1.8), Part::Line(p(-3.5, 2.8), p(3.5, -2.8))],
+        // a rounded corner
+        Badge::Fillet => {
+            let arc = (0..=6).map(|i| {
+                let a = std::f32::consts::PI - i as f32 / 6.0 * std::f32::consts::FRAC_PI_2;
+                p(1.0 + 6.0 * a.cos(), 6.0 * a.sin())
+            });
+            vec![Part::Poly(std::iter::once(p(-5.0, -6.0)).chain(arc).chain(std::iter::once(p(6.0, 6.0))).collect(), false)]
+        }
     }
 }

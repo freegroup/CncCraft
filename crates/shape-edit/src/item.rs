@@ -110,7 +110,37 @@ pub fn ungroup_items(items: &mut [Item], ids: &[u64]) -> bool {
 impl Item {
     /// Whether one of this shape's bound sizes uses the variable.
     pub fn uses_variable(&self, name: &str) -> bool {
-        self.bound.iter().any(|(_, e)| crate::calc::names_in(e).iter().any(|n| n == name))
+        let uses = |e: &str| crate::calc::names_in(e).iter().any(|n| n == name);
+        self.bound.iter().any(|(_, e)| uses(e)) || self.corner_exprs().any(|e| uses(e))
+    }
+
+    /// The formulas of the corner radii (rounded corners and ears).
+    fn corner_exprs(&self) -> impl Iterator<Item = &str> {
+        let paths: Vec<&Path> = paths(&self.shape).unwrap_or_default();
+        paths.into_iter().flat_map(|p| p.corners.iter().filter_map(|c| c.expr.as_deref()))
+    }
+
+    /// Change every corner of the shape's paths by `f`; returns whether one changed.
+    fn map_corners(&mut self, mut f: impl FnMut(&mut crate::vector::Corner) -> bool) -> bool {
+        let mut changed = false;
+        match &mut self.shape {
+            Shape::Path(p) => p.corners.iter_mut().for_each(|c| changed |= f(c)),
+            Shape::Compound(c) => c.paths.iter_mut().flat_map(|p| p.corners.iter_mut()).for_each(|c| changed |= f(c)),
+            _ => {}
+        }
+        changed
+    }
+
+    /// Work the corner radii out again from their formulas (one that can't be worked out keeps
+    /// its radius). Returns whether a radius changed.
+    pub fn resolve_corners(&mut self, lookup: &dyn crate::calc::Lookup) -> bool {
+        self.map_corners(|c| {
+            let Some(v) = c.expr.as_deref().and_then(|e| crate::calc::eval(e, lookup).ok()) else { return false };
+            let v = v.max(0.0);
+            let changed = (v - c.radius).abs() > 1e-9;
+            c.radius = v;
+            changed
+        })
     }
 
     /// A variable was renamed: bound sizes use the new name. Returns whether anything changed.
@@ -120,6 +150,12 @@ impl Item {
             for (_, e) in &mut self.bound {
                 *e = crate::calc::rename_in(e, from, to);
             }
+            self.map_corners(|c| {
+                if let Some(e) = &mut c.expr {
+                    *e = crate::calc::rename_in(e, from, to);
+                }
+                true
+            });
         }
         used
     }
@@ -129,7 +165,15 @@ impl Item {
     pub fn release_variable(&mut self, name: &str) -> bool {
         let before = self.bound.len();
         self.bound.retain(|(_, e)| !crate::calc::names_in(e).iter().any(|n| n == name));
-        self.bound.len() != before
+        // a corner keeps its radius, the formula goes
+        let corners = self.map_corners(|c| {
+            let uses = c.expr.as_deref().is_some_and(|e| crate::calc::names_in(e).iter().any(|n| n == name));
+            if uses {
+                c.expr = None;
+            }
+            uses
+        });
+        self.bound.len() != before || corners
     }
 
     pub fn new(id: u64, shape: impl Into<Shape>) -> Self {
@@ -505,6 +549,7 @@ impl Editable for Item {
         let shape = with_paths(&self.shape, |list| {
             let Some((pi, ni)) = Compound::new(list.clone()).locate(after) else { return false };
             list[pi].points.insert(ni + 1, p);
+            list[pi].node_inserted(ni);
             true
         });
         Item { shape: shape.unwrap_or_else(|| self.shape.clone()), ..self.clone() }
@@ -529,6 +574,7 @@ impl Editable for Item {
                 return false;
             }
             list[pi].points.remove(ni);
+            list[pi].node_removed(ni);
             true
         })?;
         Some(Item { shape, ..self.clone() })

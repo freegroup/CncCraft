@@ -8,7 +8,7 @@ use egui::{Event, Modifiers, PointerButton, Pos2, Vec2};
 use shape_edit::{handle_point, selection_bounds, Dim, Editable, Handle, Shape};
 use std::collections::VecDeque;
 
-type Check = Box<dyn Fn(&App) -> Result<String, String>>;
+pub(super) type Check = Box<dyn Fn(&App) -> Result<String, String>>;
 
 struct Stage {
     name: &'static str,
@@ -100,6 +100,14 @@ const STAGES: &[Stage] = &[
     stage("Ziehen an der Linie (ohne Wert, Form nicht gewählt) verschiebt das Maß", distance_line_drag),
     stage("Gewählte Form: ihre Maßlinie lässt sich an der Linie und am Wert herausziehen", shape_dim_line_drag),
     stage("Simulation: in der Mitte des Reglers läuft sie in Echtzeit", simulation_in_real_time),
+    stage("Trennen: eine gekreuzte Linie zerfällt an der Kreuzung in zwei Stücke", super::selftest_vector_ops::trim_splits_at_crossing),
+    stage("Löschen: der angeklickte Vektor ist weg", super::selftest_vector_ops::erase_deletes_the_vector_clicked),
+    stage("Verbinden: vom Ende eines Linienzugs zu einem freien Punkt verlängert ihn", super::selftest_vector_ops::connect_grows_the_polyline),
+    stage("Verbinden: zwischen beiden Enden schließt den Linienzug", super::selftest_vector_ops::connect_closes_the_polyline),
+    stage("Abrunden: die Ecke wird mit dem Radius aus dem Formular gerundet, der Eckpunkt bleibt", super::selftest_vector_ops::fillet_inner_rounds_the_corner),
+    stage("Ohr: eine andere Ecke bekommt ein Ohr, die gerundete bleibt", super::selftest_vector_ops::fillet_outer_gives_an_ear),
+    stage("Abrunden: Klick auf die gerundete Ecke wählt sie für ihren Radius", super::selftest_vector_ops::fillet_click_picks_the_corner),
+    stage("Werkzeugweg-Dialog: die ComboBox ist immer über dem Dialog", combobox_above_dialog),
 ];
 
 /// Selecting a shape lights up the toolpaths that cut it in the list, and only those; with nothing
@@ -1712,6 +1720,25 @@ fn cmd_c_cmd_v(app: &mut App) -> (Vec<Event>, Check) {
         }
     });
     (vec![Event::Copy, Event::Paste(String::new())], check)
+}
+
+/// The toolpath editor dialog sits at Order::Middle so that its ComboBox popup (Order::Foreground)
+/// renders on top.
+fn combobox_above_dialog(app: &mut App) -> (Vec<Event>, Check) {
+    app.open_editor("profile");
+    let check: Check = Box::new(|app| {
+        let layer = app.editor_layer;
+        let order = layer.map(|l| l.order);
+        let is_middle = order == Some(egui::Order::Middle);
+        let open = app.editor.is_some();
+        let msg = format!("Editor offen: {open}, Dialog-Ebene {:?}, Ordnung {:?} (ComboBox-Popup: Foreground)", layer, order);
+        if open && is_middle {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
 }
 
 /// The origin switch hides and shows both the sheet's axis cross and the 3D zero cross.

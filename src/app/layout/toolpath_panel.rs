@@ -271,6 +271,7 @@ impl App {
         // do in Fusion 360; the list scrolls to the first of them when the selection changed
         let related_rows = self.toolpaths_of_selection();
         let selection_changed = self.tp_scrolled_for != self.edit.selection;
+        let bg_computing = self.bg_compute.as_ref().map(|bg| bg.computing);
         let mut scrolled = false;
         for (i, tp) in self.toolpaths.iter_mut().enumerate() {
             if tool_entries[i] {
@@ -349,7 +350,23 @@ impl App {
                             draw_pencil(ui.painter(), edit_btn.rect.center(), if edit_btn.hovered() { ink() } else { muted() });
                             edit_btn.on_hover_text(t!("Bearbeiten"));
                         }
-                        ui.label(egui::RichText::new(fmt_time(tp.stats().minutes)).small().color(muted()));
+                        let computing_this = bg_computing.is_some_and(|idx| idx.is_none() || idx == Some(i));
+                        if computing_this {
+                            let (rect, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
+                            let c = rect.center();
+                            let r = 5.0;
+                            let t = ui.input(|inp| inp.time) as f32;
+                            let start = t * 4.0;
+                            let n = 12;
+                            for k in 0..n {
+                                let a = start + k as f32 * std::f32::consts::TAU / n as f32;
+                                let alpha = (k as f32 / n as f32).powi(2);
+                                let p = c + Vec2::new(a.cos(), -a.sin()) * r;
+                                ui.painter().circle_filled(p, 1.2, ACCENT.gamma_multiply(alpha));
+                            }
+                        } else {
+                            ui.label(egui::RichText::new(fmt_time(tp.stats().minutes)).small().color(muted()));
+                        }
                     });
                 });
                 if let Some(w) = &tp.warning {
@@ -383,6 +400,7 @@ impl App {
                 if target != from && from < self.toolpaths.len() {
                     let item = self.toolpaths.remove(from);
                     self.toolpaths.insert(target.min(self.toolpaths.len()), item);
+                    self.tp_gen += 1;
                     // an open editor keeps pointing at the same toolpath
                     if let Some(ed) = &mut self.editor {
                         if let Some(k) = ed.index {
@@ -412,6 +430,7 @@ impl App {
         if let Some(i) = remove {
             self.tp_selected = None;
             self.toolpaths.remove(i);
+            self.tp_gen += 1;
             self.editor = None;
             self.sim = None;
         }

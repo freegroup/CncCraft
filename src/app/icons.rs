@@ -292,6 +292,40 @@ impl Pen<'_> {
         }
     }
 
+    /// A corner of two edges with its arc: the edges end where the arc starts, the corner they
+    /// left behind shows faintly, the arc stands out in red. Rounded off (the arc cuts the corner)
+    /// or an ear (a circle round the corner point, open towards the edges).
+    fn corner_icon(&self, ear: bool) {
+        let v = (-9.0_f32, 0.0_f32);
+        let (u1, u2) = ((0.9138_f32, -0.4061_f32), (0.9138_f32, 0.4061_f32));
+        let along = |u: (f32, f32), t: f32| (v.0 + u.0 * t, v.1 + u.1 * t);
+        let (reach, arc): (f32, Vec<(f32, f32)>) = if ear {
+            // a circle about the corner: from one edge round the outside to the other
+            let r = 6.0;
+            let a0 = u2.1.atan2(u2.0);
+            let pts = (0..=20).map(|i| a0 + i as f32 / 20.0 * (std::f32::consts::TAU - 2.0 * a0)).map(|a| (v.0 + r * a.cos(), v.1 + r * a.sin())).collect();
+            (r, pts)
+        } else {
+            // a quarter-ish arc touching both edges, its centre inside the corner
+            let (r, t) = (4.0, 9.0);
+            let c = (v.0 + r / 0.4061, v.1);
+            let start = along(u2, t);
+            let a0 = (start.1 - c.1).atan2(start.0 - c.0);
+            let sweep = std::f32::consts::TAU - 2.0 * a0;
+            let pts = (0..=16).map(|i| a0 + i as f32 / 16.0 * sweep).map(|a| (c.0 + r * a.cos(), c.1 + r * a.sin())).collect();
+            (t, pts)
+        };
+        let faint = Stroke::new(1.2_f32, self.k.line.gamma_multiply(0.35));
+        let edge = Stroke::new(2.6_f32, self.k.line);
+        let red = Stroke::new(2.6_f32, Color32::from_rgb(0xe0, 0x4b, 0x3a));
+        for u in [u1, u2] {
+            let (a, b, end) = (along(u, 0.0), along(u, reach), along(u, 20.0));
+            self.p.line_segment([self.at(a.0, a.1), self.at(b.0, b.1)], faint);
+            self.p.line_segment([self.at(b.0, b.1), self.at(end.0, end.1)], edge);
+        }
+        self.p.add(Shape::line(arc.iter().map(|(x, y)| self.at(*x, *y)).collect(), red));
+    }
+
     fn draw(&self, icon: Icon) {
         match icon {
             Icon::Draw(DrawTool::Select) => self.solid(vec![self.at(-5.0, -10.0), self.at(-5.0, 7.0), self.at(-0.8, 3.2), self.at(2.6, 10.0), self.at(5.2, 8.8), self.at(1.9, 2.0), self.at(7.0, 1.4)]),
@@ -328,6 +362,38 @@ impl Pen<'_> {
             Icon::Draw(DrawTool::Circle) => self.solid(self.disc(0.0, 0.0, 9.5)),
             Icon::Draw(DrawTool::Ellipse) => self.solid(self.ellipse(0.0, 0.0, 11.0, 7.0)),
             Icon::Draw(DrawTool::Polygon) => self.solid(self.polygon(6, 10.5, None, 0.0, 0.5)),
+            Icon::Draw(DrawTool::Trim) => {
+                let red = Stroke::new(2.2_f32, Color32::from_rgb(0xe0, 0x4b, 0x3a));
+                let keep = Stroke::new(2.0_f32, self.k.line);
+                // a horizontal line split by a vertical one: left and right pieces stay (blue),
+                // the piece between the crossings is removed (red)
+                self.p.line_segment([self.at(-11.0, 0.0), self.at(-2.0, 0.0)], keep);
+                self.p.line_segment([self.at(-2.0, 0.0), self.at(2.0, 0.0)], red);
+                self.p.line_segment([self.at(2.0, 0.0), self.at(11.0, 0.0)], keep);
+                self.p.line_segment([self.at(0.0, -10.0), self.at(0.0, 10.0)], keep);
+                self.dot(-2.0, 0.0);
+                self.dot(2.0, 0.0);
+            }
+            Icon::Draw(DrawTool::Erase) => {
+                let red = Stroke::new(2.2_f32, Color32::from_rgb(0xe0, 0x4b, 0x3a));
+                let keep = Stroke::new(2.0_f32, self.k.line);
+                // a line with a gap: the removed segment is red, the rest stays (blue)
+                self.p.line_segment([self.at(-11.0, 0.0), self.at(-3.0, 0.0)], keep);
+                self.p.line_segment([self.at(-3.0, 0.0), self.at(3.0, 0.0)], red);
+                self.p.line_segment([self.at(3.0, 0.0), self.at(11.0, 0.0)], keep);
+                self.p.line_segment([self.at(-3.0, -5.0), self.at(-3.0, 5.0)], keep);
+                self.p.line_segment([self.at(3.0, -5.0), self.at(3.0, 5.0)], keep);
+            }
+            Icon::Draw(DrawTool::Connect) => {
+                let edge = Stroke::new(2.0_f32, self.k.line);
+                // two loose ends: existing segments, a new connecting segment (dashed)
+                self.p.line_segment([self.at(-11.0, 7.0), self.at(-4.0, 0.0)], edge);
+                self.p.line_segment([self.at(4.0, 0.0), self.at(11.0, -7.0)], edge);
+                self.dashed(&[self.at(-4.0, 0.0), self.at(4.0, 0.0)]);
+                self.dot(-4.0, 0.0);
+                self.dot(4.0, 0.0);
+            }
+            Icon::Draw(DrawTool::FilletInner) | Icon::Draw(DrawTool::FilletOuter) => self.corner_icon(icon == Icon::Draw(DrawTool::FilletOuter)),
             Icon::Draw(DrawTool::Text) => {
                 self.line(&[(-8.0, -8.0), (8.0, -8.0)]);
                 self.line(&[(0.0, -8.0), (0.0, 9.0)]);

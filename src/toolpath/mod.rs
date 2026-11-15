@@ -265,6 +265,11 @@ impl Toolpath {
         Toolpath { name: self.name.clone(), strategy: self.strategy.clone(), tool: self.tool.clone(), start_depth: self.start_depth, cut_depth: self.cut_depth, start_expr: None, cut_expr: None, shape_ids: vec![], visible: self.visible, ramp_angle: self.ramp_angle, moves, warning: None }
     }
 
+    /// A clone without the computed moves (cheap to send to a background thread).
+    pub fn without_moves(&self) -> Toolpath {
+        Toolpath { name: self.name.clone(), strategy: self.strategy.clone(), tool: self.tool.clone(), start_depth: self.start_depth, cut_depth: self.cut_depth, start_expr: self.start_expr.clone(), cut_expr: self.cut_expr.clone(), shape_ids: self.shape_ids.clone(), visible: self.visible, ramp_angle: self.ramp_angle, moves: vec![], warning: None }
+    }
+
     pub fn stats(&self) -> Stats {
         let mut s = Stats::default();
         let mut prev = self.moves.first().map(|m| m.to).unwrap_or([0.0; 3]);

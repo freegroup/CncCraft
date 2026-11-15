@@ -4,7 +4,7 @@
 use crate::forms::{Compound, Path, Shape};
 use crate::geometry::{point_in_ring, Contour};
 use crate::Pt;
-use geo::{Area, BooleanOps, Buffer, Contains, Coord, LineString, MultiPolygon, Polygon};
+use geo::{Area, BooleanOps, Buffer, Contains, Coord, LineString, MultiPolygon, Polygon, Simplify};
 
 /// One boundary of a region: an outer edge or the edge of a hole.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,7 +94,7 @@ impl Region {
         if d.abs() < 1e-12 {
             return self.clone();
         }
-        Region(self.0.buffer(d))
+        Region(self.0.buffer(d).simplify(d.abs() * 0.01))
     }
 
     pub fn is_empty(&self) -> bool {

@@ -1,6 +1,6 @@
 //! The tool column on the left, grouped like the original's, with the form a tool can open beside it.
 
-use crate::app::{icon_button, App, Combine, DrawTool, Icon, ViewMode};
+use crate::app::{icon_button, App, DrawTool, Icon, ViewMode};
 use crate::theme::{ink, muted};
 use egui::{Stroke, Vec2};
 use shape_edit::Flip;
@@ -12,6 +12,8 @@ pub(in crate::app) enum ToolForm {
     Transform,
     /// Offset (expand or shrink) the selected vectors.
     Offset,
+    /// The radius of the corner tools (rounded corners and ears); shown while one of them is on.
+    Corner,
 }
 
 /// The tool column's groups, top to bottom, as the original registers them (0x10011d034):
@@ -28,15 +30,16 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Delete, Icon::Curves],
     &[Icon::Center, Icon::MirrorH, Icon::MirrorV],
     &[Icon::Offset],
+    &[Icon::Draw(DrawTool::Trim), Icon::Draw(DrawTool::Erase), Icon::Draw(DrawTool::Connect), Icon::Draw(DrawTool::FilletOuter), Icon::Draw(DrawTool::FilletInner)],
     &[Icon::Union, Icon::Subtract, Icon::Intersect],
     &[Icon::Group, Icon::Ungroup],
 ];
 
 /// How many groups the tool column has (one remembered choice each when folded).
-pub(in crate::app) const GROUP_COUNT: usize = 9;
+pub(in crate::app) const GROUP_COUNT: usize = 10;
 
 /// What each group is, for the folded column's tooltips.
-const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Boolesche Operationen"), tr!("Gruppieren")];
+const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Vektoroperationen"), tr!("Boolesche Operationen"), tr!("Gruppieren")];
 
 /// Icons per row in the expanded column, and the size of one icon cell.
 const ROW: usize = 5;
@@ -231,6 +234,8 @@ impl App {
             Icon::Draw(t) => {
                 self.tool = t;
                 self.poly.clear();
+                self.vops.connect_from = None;
+                self.vops.picked = None;
                 self.mode = ViewMode::TwoD;
             }
             Icon::Transform | Icon::Offset => {
@@ -244,9 +249,9 @@ impl App {
             Icon::Center => self.center_on_job(),
             Icon::Curves => self.to_curves(),
             Icon::Delete => self.delete_selection(),
-            Icon::Union => self.combine(Combine::Union),
-            Icon::Subtract => self.combine(Combine::Subtract),
-            Icon::Intersect => self.combine(Combine::Intersect),
+            Icon::Union => self.join_selection(),
+            Icon::Subtract => self.subtract_selection(),
+            Icon::Intersect => self.intersect_selection(),
             Icon::Group => self.group_selection(),
             Icon::Ungroup => self.ungroup_selection(),
             Icon::Job => self.job_dialog = Some((self.job.clone(), false)),
@@ -258,22 +263,24 @@ impl App {
 
     /// The open tool's form, beside the tool column.
     pub(in crate::app) fn tool_form_panel(&mut self, ctx: &egui::Context) {
-        let Some(form) = self.tool_form else { return };
+        let Some(form) = self.tool_form.filter(|f| *f != ToolForm::Corner) else { return };
         egui::SidePanel::left("tool_form").exact_width(250.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(10.0).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let title = match form {
                     ToolForm::Transform => t!("Objekte transformieren"),
                     ToolForm::Offset => t!("Versatz"),
+                    ToolForm::Corner => t!("Abrunden"),
                 };
                 ui.label(egui::RichText::new(title).size(15.0).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("✕").on_hover_text(t!("Schließen")).clicked() {
+                    if crate::app::dialogs::close_button(ui).on_hover_text(t!("Schließen")).clicked() {
                         self.tool_form = None;
                     }
                 });
             });
             ui.separator();
             match form {
+                ToolForm::Corner => self.corner_form(ui),
                 ToolForm::Transform => self.properties(ui),
                 ToolForm::Offset => {
                     ui.horizontal(|ui| {
