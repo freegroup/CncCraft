@@ -18,7 +18,7 @@ impl App {
         let red = crate::theme::error();
         let chip = crate::theme::chip();
         crate::app::dialogs::window("variablen_dialog_v2", ctx).resizable(true).default_size([500.0, 470.0]).min_height(380.0).default_pos(egui::pos2(360.0, 110.0)).show(ctx, |ui| {
-            if crate::app::dialogs::header(ui, &t!("Variablen"), true) {
+            if crate::app::dialogs::header(ui, &t!("Variablen")) {
                 open = false;
             }
             ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);

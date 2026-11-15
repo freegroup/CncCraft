@@ -12,7 +12,9 @@ impl App {
         let (mut search, mut close) = (false, false);
         dialogs::window("Datei nicht gefunden", ctx).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
             ui.set_width(380.0);
-            dialogs::header(ui, &t!("Datei nicht gefunden"), false);
+            if dialogs::header(ui, &t!("Datei nicht gefunden")) {
+                close = true;
+            }
             ui.label(egui::RichText::new(t!("Die Originaldatei „%{name}“ wurde leider nicht gefunden.", name = name)).strong().color(ink()));
             ui.add_space(4.0);
             ui.label(t!("Sie wurde vielleicht verschoben, umbenannt oder gelöscht. Die importierten Formen bleiben unverändert in der Zeichnung."));

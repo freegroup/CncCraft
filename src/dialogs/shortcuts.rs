@@ -5,7 +5,7 @@ use crate::app::shortcuts::*;
 /// The "Tastenkürzel" window: every key in the table, then what keys do with the mouse.
 pub(in crate::app) fn window(ctx: &egui::Context, open: &mut bool) {
     super::window("Tastenkürzel", ctx).default_width(420.0).show(ctx, |ui| {
-        if super::header(ui, &t!("Tastenkürzel"), true) {
+        if super::header(ui, &t!("Tastenkürzel")) {
             *open = false;
         }
         egui::Grid::new("shortcut-keys").num_columns(2).spacing([18.0, 4.0]).striped(true).show(ui, |ui| {

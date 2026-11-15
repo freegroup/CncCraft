@@ -11,7 +11,9 @@ impl App {
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.set_width(380.0);
-                dialogs::header(ui, &t!("Änderungen speichern?"), false);
+                if dialogs::header(ui, &t!("Änderungen speichern?")) {
+                    answer = Some(2);
+                }
                 let name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
                 // the wording of the original's standard question (wxstd catalogue: "Do you want to save
                 // changes to %s [before closing it]?")

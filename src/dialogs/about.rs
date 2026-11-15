@@ -8,7 +8,7 @@ impl App {
             return;
         }
         dialogs::window("Über CncCraft", ctx).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-            if dialogs::header(ui, &t!("Über CncCraft"), true) {
+            if dialogs::header(ui, &t!("Über CncCraft")) {
                 self.about = false;
             }
             ui.label(egui::RichText::new(t!("CncCraft %{version}", version = env!("CARGO_PKG_VERSION"))).strong());

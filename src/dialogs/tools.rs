@@ -23,7 +23,7 @@ impl App {
             .default_height((screen.height() - 120.0).clamp(300.0, 520.0))
             .max_height(screen.height() - 60.0)
             .show(ctx, |ui| {
-                if super::header(ui, &t!("Werkzeug-Verwaltung"), true) {
+                if super::header(ui, &t!("Werkzeug-Verwaltung")) {
                     open = false;
                 }
                 egui::TopBottomPanel::bottom("tool_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {

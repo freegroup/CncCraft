@@ -4,6 +4,9 @@
 use crate::app::*;
 use egui::Pos2;
 
+/// The editor's width: wide rather than tall.
+const EDITOR_WIDTH: f32 = 760.0;
+
 impl App {
     /// The editor of a toolpath as its own small window (a double click on a path, or the pencil
     /// on its row, or one of the operation buttons), so the list stays short.
@@ -18,14 +21,22 @@ impl App {
             if ed.index.is_some() { t!("Werkzeugweg bearbeiten – %{kind}", kind = kind) } else { t!("Neuer Werkzeugweg – %{kind}", kind = kind) }
         });
         let title = title.unwrap_or_default();
+        let mut close = false;
         let shown = dialogs::window("toolpath_editor_window", ctx)
             .default_pos(Pos2::new((screen.right() - 360.0 - 800.0).max(40.0), 80.0))
             // above the hints floating at the canvas's lower edge, which would cover its buttons
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                dialogs::header(ui, &title, false);
+                // the width first, so the header's line ends where the contents do
+                ui.set_width(EDITOR_WIDTH);
+                close = dialogs::header(ui, &title);
                 self.editor_ui(ui);
             });
+        // the cross does what "Schließen" does: the window goes, nothing is computed
+        if close {
+            self.editor = None;
+            return;
+        }
         if let Some(shown) = shown {
             ctx.move_to_top(shown.response.layer_id);
         }
@@ -72,7 +83,6 @@ impl App {
             // the label column of every group the same width, so all fields line up (the groups'
             // frames indent their content by 13 px, the top rows have no frame)
             const LABELS: f32 = 104.0;
-            const EDITOR_WIDTH: f32 = 760.0;
             const COLUMN_GAP: f32 = 16.0;
             let column = (EDITOR_WIDTH - COLUMN_GAP) / 2.0;
             let gap = |ui: &mut egui::Ui| ui.add_space(COLUMN_GAP - ui.spacing().item_spacing.x);
@@ -243,7 +253,7 @@ impl App {
                 }
             });
             dialog_buttons(ui, |ui| {
-                let b = egui::Button::new(egui::RichText::new(t!("Berechnen")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
+                let b = egui::Button::new(egui::RichText::new(t!("Anwenden")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
                 if ui.add(b).clicked() {
                     close = true;
                 }

@@ -24,7 +24,7 @@ impl App {
             .default_height((screen.height() - 120.0).clamp(300.0, 520.0))
             .max_height(screen.height() - 60.0)
             .show(ctx, |ui| {
-                if super::header(ui, &title, true) {
+                if super::header(ui, &title) {
                     open = false;
                 }
                 // Bottom buttons first so they are always visible

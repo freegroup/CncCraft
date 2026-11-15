@@ -21,7 +21,9 @@ impl App {
         let mut expr_rect = egui::Rect::NOTHING;
         let mut expr_lost_focus = false;
         crate::app::dialogs::window("new_variable_dialog", ctx).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -40.0)).fixed_size([400.0, 0.0]).show(ctx, |ui| {
-            crate::app::dialogs::header(ui, &t!("Neue Variable"), false);
+            if crate::app::dialogs::header(ui, &t!("Neue Variable")) {
+                cancel = true;
+            }
             ui.spacing_mut().item_spacing = egui::vec2(10.0, 12.0);
             // visible outlines round the fields, as in the table
             ui.visuals_mut().extreme_bg_color = crate::theme::field_bg();

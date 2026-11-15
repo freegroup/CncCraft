@@ -12,7 +12,9 @@ impl App {
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.set_width(360.0);
-                dialogs::header(ui, &title, false);
+                if dialogs::header(ui, &title) {
+                    cancel = true;
+                }
                 let f = if job.inches { 1.0 / 25.4 } else { 1.0 };
                 let unit = if job.inches { "in" } else { "mm" };
 

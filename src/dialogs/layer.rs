@@ -42,7 +42,9 @@ impl App {
                 let name = self.layers.name(id).to_string();
                 let mut choice = None;
                 dialogs::window("Ebene löschen", ctx).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-                    dialogs::header(ui, &t!("Ebene löschen"), false);
+                    if dialogs::header(ui, &t!("Ebene löschen")) {
+                        choice = Some(None);
+                    }
                     ui.label(t!("Ebene „%{name}“ enthält %{count} Form(en).", name = name, count = count));
                     dialog_buttons(ui, |ui| {
                         if ui.button(t!("Formen auf andere Ebene verschieben")).clicked() {
@@ -71,7 +73,9 @@ impl App {
 fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool) -> (bool, bool) {
     let (mut ok, mut cancel) = (false, false);
     dialogs::window("name_window", ctx).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-        dialogs::header(ui, title, false);
+        if dialogs::header(ui, title) {
+            cancel = true;
+        }
         let resp = ui.add(egui::TextEdit::singleline(text).id(egui::Id::new("layer_name")).desired_width(240.0));
         if fresh {
             resp.request_focus();

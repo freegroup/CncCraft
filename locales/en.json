@@ -83,7 +83,6 @@
  "0 = nur durch den Fräserdurchmesser begrenzt": "0 = limited only by the cutter diameter",
  "Vektoren: %{n}": "Vectors: %{n}",
  "Auswahl übernehmen (%{n})": "Use selection (%{n})",
- "Berechnen": "Calculate",
  "Schließen": "Close",
  "Willkommen bei CncCraft": "Welcome to CncCraft",
  "Das komplette Werkzeugset für CNC-Einsteiger": "The complete toolset for CNC beginners",
@@ -590,5 +589,6 @@
  "Höhe am Anfang und Ende des Jobs; gilt für alle Werkzeugwege": "Height at the start and end of the job; applies to all toolpaths",
  "Start Z": "Start Z",
  "Werkzeugweg bearbeiten – %{kind}": "Edit toolpath – %{kind}",
- "Neuer Werkzeugweg – %{kind}": "New toolpath – %{kind}"
+ "Neuer Werkzeugweg – %{kind}": "New toolpath – %{kind}",
+ "Anwenden": "Apply"
 }

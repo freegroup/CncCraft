@@ -1,7 +1,7 @@
 //! Every dialog of the program, each in its own file here, and what they all share so they look
 //! alike: the window itself (no system title bar, the same frame and margins), the header at its
-//! top (the program's icon at the top left, the title beside it, left-aligned, a close button at
-//! the right where the dialog can be closed, a line below), the titled groups of fields and the
+//! top (the program's icon at the top left, the title beside it, left-aligned, the close button
+//! at the right, a line below), the titled groups of fields and the
 //! row of buttons that ends a dialog.
 //!
 //! The folder belongs to the `app` module (included from there), so the dialogs reach the
@@ -41,22 +41,20 @@ pub(in crate::app) fn window(id: impl Hash, ctx: &egui::Context) -> egui::Window
         .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 14.0)))
 }
 
-/// The header every dialog starts with. With `closable` it has a close button; returns whether
-/// that was clicked.
-pub(in crate::app) fn header(ui: &mut egui::Ui, title: &str, closable: bool) -> bool {
+/// The header every dialog starts with, always with its close button; returns whether that was
+/// clicked (the dialog then does what its cancel or close button does).
+pub(in crate::app) fn header(ui: &mut egui::Ui, title: &str) -> bool {
     let mut close = false;
     let icon = app_icon(ui.ctx());
     ui.horizontal(|ui| {
         ui.add(egui::Image::new((icon.id(), Vec2::splat(ICON))));
         ui.add_space(4.0);
         ui.label(egui::RichText::new(title).size(15.0).strong().color(ink()));
-        if closable {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if close_button(ui).on_hover_text(t!("Schließen")).clicked() {
-                    close = true;
-                }
-            });
-        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if close_button(ui).on_hover_text(t!("Schließen")).clicked() {
+                close = true;
+            }
+        });
     });
     ui.add_space(4.0);
     ui.separator();

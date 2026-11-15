@@ -21,7 +21,7 @@ PAGES = [
 <li>Wählen Sie die Vektoren aus, die bearbeitet werden sollen.</li>
 <li>Klicken Sie rechts auf den Knopf der gewünschten Art. Ein Formular öffnet sich.</li>
 <li>Wählen Sie das Werkzeug und tragen Sie die Tiefen ein ([[werkzeugauswahl]]).</li>
-<li>Klicken Sie auf <strong>Berechnen</strong>. Der Werkzeugweg erscheint in der Liste und als farbige Linien in der Zeichnung.</li>
+<li>Klicken Sie auf <strong>Anwenden</strong>. Der Werkzeugweg erscheint in der Liste und als farbige Linien in der Zeichnung.</li>
 </ol>
 {{img:tiefe.png|Das Formular für einen neuen Werkzeugweg}}
 <p>Danach verwalten Sie die Werkzeugwege in der [[werkzeugwegliste|Liste]], prüfen sie in der [[vorschau-werkzeugwege|Vorschau]] und geben sie mit [[werkzeugwege-speichern|Speichern]] aus.</p>

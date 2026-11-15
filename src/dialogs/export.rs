@@ -70,7 +70,9 @@ impl App {
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.set_width(620.0);
-                super::header(ui, &t!("Exportieren"), false);
+                if super::header(ui, &t!("Exportieren")) {
+                    cancel = true;
+                }
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width(160.0);

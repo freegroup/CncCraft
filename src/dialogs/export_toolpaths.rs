@@ -35,7 +35,9 @@ impl App {
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.set_width(460.0);
-                super::header(ui, &t!("Werkzeugpfade exportieren"), false);
+                if super::header(ui, &t!("Werkzeugpfade exportieren")) {
+                    cancel = true;
+                }
                 // the groups one under the other: which toolpaths (only when some are hidden, else
                 // "all" and "visible" are the same), the format, and (only when the toolpaths need
                 // more than one tool) how the tools are split into files
