@@ -81,6 +81,9 @@ pub struct ExportMeta {
     pub scope: Option<String>,
     /// This file is number `n` of `m` (one file for each tool).
     pub file: Option<(usize, usize)>,
+    /// The tool number of each toolpath, when the file is part of a bigger job (one file for each
+    /// tool); else they are counted in this file.
+    pub tool_numbers: Option<Vec<u32>>,
 }
 
 #[cfg(test)]
@@ -161,21 +164,22 @@ fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta)
         h.push_str(&row(String::new(), t!("Maße in diesem Kopf in mm")));
     }
 
-    // every tool once, in the order it is first used
-    let mut tools: Vec<&crate::tools::Tool> = vec![];
-    for tp in paths {
-        if !tools.contains(&&tp.tool) {
-            tools.push(&tp.tool);
+    // every tool once, in the order it is first used, with its number
+    let numbers = tool_numbers(paths, meta);
+    let mut tools: Vec<(u32, &crate::tools::Tool)> = vec![];
+    for (tp, &nr) in paths.iter().zip(&numbers) {
+        if !tools.iter().any(|(n, _)| *n == nr) {
+            tools.push((nr, &tp.tool));
         }
     }
     h.push_str(";\n");
     h.push_str(&format!(";   {}\n", t!("WERKZEUGE")));
     h.push_str(&thin);
-    for (n, tool) in tools.iter().enumerate() {
+    for (n, (nr, tool)) in tools.iter().enumerate() {
         if n > 0 {
             h.push_str(";\n");
         }
-        h.push_str(&format!(";     T{}  {}\n", tool.number, crate::tools::shown_name(&tool.name)));
+        h.push_str(&format!(";     T{nr}  {}\n", crate::tools::shown_name(&tool.name)));
         h.push_str(&sub(t!("Typ"), tool.kind.group()));
         h.push_str(&sub(t!("Durchmesser"), mm(tool.diameter)));
         if matches!(tool.kind, crate::tools::ToolKind::VBit | crate::tools::ToolKind::Drill) {
@@ -194,10 +198,10 @@ fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta)
     // a table: one line for each toolpath, the columns as wide as their longest entry
     let mut table: Vec<[String; 6]> = vec![[t!("Nr."), t!("Name"), t!("Strategie"), t!("Werkzeug"), t!("Tiefe (Start → Schnitt)"), t!("Zeit")]];
     let mut total = 0.0;
-    for (n, tp) in paths.iter().enumerate() {
+    for (n, (tp, nr)) in paths.iter().zip(&numbers).enumerate() {
         let minutes = tp.stats().minutes;
         total += minutes;
-        table.push([(n + 1).to_string(), tp.name.clone(), tp.strategy.label(), format!("T{}", tp.tool.number), format!("{:.1} → {:.1} mm", tp.start_depth, tp.cut_depth), minutes_text(minutes)]);
+        table.push([(n + 1).to_string(), tp.name.clone(), tp.strategy.label(), format!("T{nr}"), format!("{:.1} → {:.1} mm", tp.start_depth, tp.cut_depth), minutes_text(minutes)]);
     }
     let widths: Vec<usize> = (0..6).map(|c| table.iter().map(|r| r[c].chars().count()).max().unwrap_or(0)).collect();
     for (i, r) in table.iter().enumerate() {
@@ -213,7 +217,17 @@ fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta)
     h
 }
 
+/// The tool number of each toolpath: given by the caller, else every different tool numbered in
+/// the order it is first used.
+fn tool_numbers(paths: &[&Toolpath], meta: &ExportMeta) -> Vec<u32> {
+    match &meta.tool_numbers {
+        Some(n) if n.len() == paths.len() => n.clone(),
+        _ => crate::toolgroups::numbers(&paths.iter().map(|t| &t.tool).collect::<Vec<_>>()),
+    }
+}
+
 fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) -> (String, Vec<usize>) {
+    let numbers = tool_numbers(paths, meta);
     let (k, [dx, dy, dz]) = frame(job);
     let f = |v: f64| format!("{:.3}", v * k);
     let mut sections = Vec::with_capacity(paths.len());
@@ -224,7 +238,7 @@ fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) 
     s.push_str("G90 G17 G40 G49 G80 G94\n");
 
     if let Some(first) = paths.first() {
-        let ctx = HookCtx { tool_number: first.tool.number, rpm: first.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
+        let ctx = HookCtx { tool_number: numbers[0], rpm: first.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_start, &ctx);
         if !block.is_empty() {
             s.push_str(&t!("; -- Job Start --\n"));
@@ -233,8 +247,8 @@ fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) 
     }
 
     let mut first = true;
-    for tp in paths {
-        let ctx = HookCtx { tool_number: tp.tool.number, rpm: tp.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
+    for (tp, &nr) in paths.iter().zip(&numbers) {
+        let ctx = HookCtx { tool_number: nr, rpm: tp.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
 
         if !first && pp.tool_change {
             let block = expand(&pp.on_tool_change, &ctx);
@@ -243,10 +257,10 @@ fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) 
                 s.push_str(&block);
             } else {
                 s.push_str("M5\n");
-                s.push_str(&format!("T{} M6\n", tp.tool.number));
+                s.push_str(&format!("T{nr} M6\n"));
             }
         } else if first && pp.tool_change {
-            s.push_str(&format!("T{} M6\n", tp.tool.number));
+            s.push_str(&format!("T{nr} M6\n"));
         }
 
         sections.push(s.bytes().filter(|b| *b == b'\n').count());
@@ -292,7 +306,7 @@ fn build(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta) 
     }
 
     if let Some(last) = paths.last() {
-        let ctx = HookCtx { tool_number: last.tool.number, rpm: last.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
+        let ctx = HookCtx { tool_number: numbers[numbers.len() - 1], rpm: last.tool.rpm, safe_z: job.safe_z + dz, home_z: job.home_z + dz, k };
         let block = expand(&pp.job_end, &ctx);
         if !block.is_empty() {
             s.push_str(&t!("; -- Job Ende --\n"));
@@ -316,7 +330,7 @@ mod tests {
     }
 
     fn tool() -> Tool {
-        Tool { name: "Test".into(), kind: ToolKind::EndMill, diameter: 6.0, angle: 0.0, feed: 1000.0, plunge: 300.0, rpm: 18000, stepdown: 2.0, stepover: 2.4, number: 1 }
+        Tool { name: "Test".into(), kind: ToolKind::EndMill, diameter: 6.0, angle: 0.0, feed: 1000.0, plunge: 300.0, rpm: 18000, stepdown: 2.0, stepover: 2.4 }
     }
 
     fn simple_toolpath() -> Toolpath {
@@ -330,6 +344,7 @@ mod tests {
             cut_expr: None,
             shape_ids: vec![],
             visible: true,
+            ramp_angle: 0.0,
             moves: vec![
                 Move { to: [0.0, 0.0, 10.0], rapid: true },
                 Move { to: [0.0, 0.0, 5.0], rapid: true },
@@ -432,7 +447,7 @@ mod tests {
         let tp = simple_toolpath();
         let mut pp = builtins()[0].clone();
         pp.before_path = "( Vor dem Weg )\nM8 (Kühlung)".into();
-        let meta = ExportMeta { scope: Some("Sichtbare Werkzeugwege (1)".into()), file: Some((1, 2)) };
+        let meta = ExportMeta { scope: Some("Sichtbare Werkzeugwege (1)".into()), file: Some((1, 2)), tool_numbers: None };
         let code = write_with_meta(&j, &[&tp], &pp, &meta);
         println!("{code}");
         assert!(code.lines().all(|l| !l.contains('(') || l.trim_start().starts_with(';') || l.contains(" ; ")), "a parenthesis comment is left:\n{code}");

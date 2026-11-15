@@ -10,9 +10,8 @@
 
 use super::App;
 use crate::theme::{ink, muted};
-use super::input::{ConstraintInput, Keys};
-use shape_edit::vars;
-use egui::{Color32, Id, RichText};
+use super::input::ConstraintInput;
+use egui::Color32;
 
 /// The "Neue Variable" dialog while it is open.
 pub(super) struct NewVariable {
@@ -29,9 +28,8 @@ pub(super) struct NewVariable {
 use shape_edit::calc;
 use shape_edit::{Dim, VarEvent};
 
-
 /// Values from the job that formulas may use without defining them.
-const FROM_JOB: [(&str, crate::lang::Tr); 3] = [("platte_b", tr!("Breite der Platte (X)")), ("platte_l", tr!("Länge der Platte (Y)")), ("platte_d", tr!("Dicke der Platte (Z)"))];
+pub(in crate::app) const FROM_JOB: [(&str, crate::lang::Tr); 3] = [("platte_b", tr!("Breite der Platte (X)")), ("platte_l", tr!("Länge der Platte (Y)")), ("platte_d", tr!("Dicke der Platte (Z)"))];
 
 impl App {
     /// Work the variables out again when they or the job's size changed, then rebuild the bound
@@ -171,7 +169,7 @@ impl App {
     }
 
     /// Put the variable the dialog describes into the document.
-    fn add_variable(&mut self, name: &str, expr: &str, comment: &str) {
+    pub(in crate::app) fn add_variable(&mut self, name: &str, expr: &str, comment: &str) {
         self.vars.set(name, expr);
         if let Some(v) = self.vars.list.iter_mut().find(|v| v.name == name) {
             v.comment = comment.to_string();
@@ -181,225 +179,14 @@ impl App {
         self.vars_dirty = true;
     }
 
-    /// The "Neue Variable" dialog: Name, Ausdruck, Wert (worked out as it is typed), Kommentar,
-    /// OK and Abbrechen. OK is only possible with a valid name and an expression that works out;
-    /// Enter is OK, Esc is Abbrechen.
-    pub(super) fn new_variable_dialog(&mut self, ctx: &egui::Context) {
-        let Some(mut nv) = self.new_var.take() else { return };
-        let red = crate::theme::error();
-        let dup = self.vars.list.iter().any(|v| v.name == nv.name);
-        let name_problem = name_problem(&nv.name, dup);
-        let value = calc::eval(&nv.expr, &self.vars_resolved);
-        let valid = name_problem.is_none() && value.is_ok();
-        let (mut ok, mut cancel) = (false, false);
-        let mut expr_rect = egui::Rect::NOTHING;
-        let mut expr_lost_focus = false;
-        egui::Window::new(t!("Neue Variable")).id(egui::Id::new("new_variable_dialog")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -40.0)).fixed_size([400.0, 0.0]).show(ctx, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(10.0, 12.0);
-            // visible outlines round the fields, as in the table
-            ui.visuals_mut().extreme_bg_color = crate::theme::field_bg();
-            ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, crate::theme::field_stroke());
-            egui::Grid::new("new_variable_grid").num_columns(2).spacing([18.0, 12.0]).min_col_width(78.0).show(ui, |ui| {
-                ui.label(t!("Name"));
-                let name_id = egui::Id::new("new_variable_name");
-                ui.vertical(|ui| {
-                    let colour = if name_problem.is_some() { red } else { ink() };
-                    ui.add(egui::TextEdit::singleline(&mut nv.name).id(name_id).font(egui::TextStyle::Monospace).text_color(colour).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(8.0, 6.0)));
-                    if let Some((short, full)) = name_problem {
-                        ui.label(RichText::new(short).color(red).size(12.0)).on_hover_text(full);
-                    }
-                });
-                ui.end_row();
-
-                ui.label(t!("Ausdruck"));
-                let expr_resp = ui.add(egui::TextEdit::singleline(&mut nv.expr).id(egui::Id::new("new_variable_expr")).font(egui::TextStyle::Monospace).hint_text(t!("Zahl oder Formel, z. B. breite/2")).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(8.0, 6.0)));
-                expr_rect = expr_resp.rect;
-                expr_lost_focus = expr_resp.lost_focus();
-                ui.end_row();
-
-                ui.label(t!("Wert"));
-                match &value {
-                    Ok(v) => ui.label(RichText::new(fmt(*v)).monospace().color(ink())),
-                    Err(e) => ui.label(RichText::new(crate::lang::calc_message(&e)).color(red)),
-                };
-                ui.end_row();
-
-                ui.label(t!("Kommentar"));
-                ui.add(egui::TextEdit::multiline(&mut nv.comment).hint_text(t!("Kommentar eingeben")).desired_rows(4).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(8.0, 6.0)));
-                ui.end_row();
-            });
-            super::dialog_buttons(ui, |ui| {
-                if ui.add_enabled(valid, egui::Button::new(RichText::new(t!("OK")).color(ink())).min_size(egui::vec2(84.0, 30.0))).clicked() {
-                    ok = true;
-                }
-                if ui.add(egui::Button::new(RichText::new(t!("Abbrechen")).color(ink())).min_size(egui::vec2(84.0, 30.0))).clicked() {
-                    cancel = true;
-                }
-            });
-        });
-        // a click on one of last frame's suggestions takes that name into the expression
-        let expr_id = egui::Id::new("new_variable_expr");
-        if let Some((_, name)) = nv.input.click(ctx) {
-            nv.expr = vars::apply_completion(&nv.expr, &name);
-        }
-        let (enter, esc, tab) = ctx.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape), i.key_pressed(egui::Key::Tab)));
-        // Tab from the name into the expression: its text is selected, so typing replaces it
-        if tab && nv.name_had_focus {
-            nv.input.select = Some(1);
-        }
-        nv.name_had_focus = ctx.memory(|m| m.has_focus(egui::Id::new("new_variable_name")));
-        nv.input.cursor(ctx, 0, egui::Id::new("new_variable_name"), &nv.name);
-        nv.input.cursor(ctx, 1, expr_id, &nv.expr);
-        // suggestions under the expression (Enter takes the cursor out of a one-line field in the
-        // same frame, so that counts as having it)
-        let focused = ctx.memory(|m| m.has_focus(expr_id)) || expr_lost_focus;
-        let names = self.var_names();
-        let value = |n: &str| self.vars_resolved.value(n).ok();
-        let mut keys = Keys::read(ctx, tab);
-        let suggested = nv.input.suggest(ctx, 1, expr_id.with("list"), expr_rect, &mut nv.expr, &names, &value, &mut keys, focused, 4.0);
-        let (listing, taken) = (suggested.listing, suggested.taken);
-        if esc {
-            if listing {
-                // Esc closes the list first (by leaving the field), a second Esc cancels
-                ctx.memory_mut(|m| m.surrender_focus(expr_id));
-            } else {
-                cancel = true;
-            }
-        } else if enter && valid && !taken {
-            ok = true;
-        }
-        if ok && valid {
-            self.add_variable(&nv.name, &nv.expr, &nv.comment);
-            self.refresh_vars();
-        } else if !cancel {
-            self.new_var = Some(nv);
-        }
-    }
-
-    /// The variables dialog: the job's values on top, below them the person's own variables, one
-    /// row each (name = expression, with the result next to it) and a button to add one.
-    pub(super) fn variables_dialog(&mut self, ctx: &egui::Context) {
-        if !self.vars_open {
-            return;
-        }
-        let mut open = true;
-        let mut edited = false;
-        let mut close = false;
-        let red = crate::theme::error();
-        let chip = crate::theme::chip();
-        egui::Window::new(t!("Variablen")).id(egui::Id::new("variablen_dialog_v2")).open(&mut open).collapsible(false).default_size([500.0, 470.0]).min_height(380.0).default_pos(egui::pos2(360.0, 110.0)).show(ctx, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
-            ui.label(RichText::new(t!("Benannte Werte für die Maßfelder, z. B. „hoehe“ oder „breite/2 - rand“. Ändert man hier einen Wert, passen sich alle Formen an, die ihn benutzen.")).color(muted()).size(12.5));
-
-            super::dialog_group(ui, &t!("Aus dem Job"), |ui| {
-                for (name, what) in FROM_JOB {
-                    ui.horizontal(|ui| {
-                        ui.allocate_ui_with_layout(egui::vec2(110.0, 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| ui.label(RichText::new(name).monospace().color(ink())));
-                        ui.label(RichText::new(what.get()).color(muted()));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let value = self.vars_resolved.value(name).map_or_else(|_| "–".into(), fmt);
-                            value_chip(ui, &value, chip, ink());
-                        });
-                    });
-                }
-            });
-
-            super::dialog_group(ui, &t!("Eigene Variablen"), |ui| {
-                if self.vars.list.is_empty() {
-                    ui.label(RichText::new(t!("Noch keine Variable. Mit „Neue Variable“ legst du eine an.")).color(muted()));
-                }
-                // the names the document knows the variables by (reset after loading a file)
-                if self.vars_committed.len() != self.vars.list.len() {
-                    self.vars_committed = self.vars.list.iter().map(|v| v.name.clone()).collect();
-                }
-                let mut remove = None;
-                for i in 0..self.vars.list.len() {
-                    let dup = self.vars.list.iter().filter(|v| v.name == self.vars.list[i].name).count() > 1;
-                    let problem = name_problem(&self.vars.list[i].name, dup);
-                    let error = self.vars_resolved.error(&self.vars.list[i].name).map(|e| crate::lang::calc_message(&e));
-                    let value = self.vars_resolved.value(&self.vars.list[i].name).map_or_else(|_| "–".into(), fmt);
-                    let mut renamed = false;
-                    let comment = self.vars.list[i].comment.clone();
-                    let v = &mut self.vars.list[i];
-                    ui.horizontal(|ui| {
-                        // visible field outlines on the white card
-                        ui.visuals_mut().extreme_bg_color = crate::theme::field_bg();
-                        ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, crate::theme::field_stroke());
-                        let expr_w = (ui.available_width() - 120.0 - 86.0 - 26.0 - 12.0 - 4.0 * ui.spacing().item_spacing.x).max(90.0);
-                        let name_colour = if problem.is_some() { red } else { ink() };
-                        let name = egui::TextEdit::singleline(&mut v.name).id(Id::new(("variable_name", i))).font(egui::TextStyle::Monospace).text_color(name_colour).hint_text(t!("name")).margin(egui::Margin::symmetric(8.0, 4.0));
-                        let name_resp = ui.add_sized([120.0, 28.0], name);
-                        renamed = name_resp.changed();
-                        edited |= renamed;
-                        if !comment.is_empty() {
-                            name_resp.on_hover_text(comment.as_str());
-                        }
-                        ui.label(RichText::new("=").color(muted()));
-                        let expr = egui::TextEdit::singleline(&mut v.expr).font(egui::TextStyle::Monospace).hint_text(t!("Zahl oder Formel")).margin(egui::Margin::symmetric(8.0, 4.0));
-                        edited |= ui.add_sized([expr_w, 28.0], expr).changed();
-                        let failed = problem.is_some() || error.is_some();
-                        value_chip(ui, if failed { "–" } else { &value }, chip, if failed { red } else { ink() });
-                        if glyph_button(ui, Glyph::Cross).on_hover_text(t!("Variable löschen")).clicked() {
-                            remove = Some(i);
-                        }
-                    });
-                    // a valid new name is passed on to everything that used the old one
-                    if renamed {
-                        let new = self.vars.list[i].name.clone();
-                        let dup = self.vars.list.iter().filter(|v| v.name == new).count() > 1;
-                        let old = self.vars_committed[i].clone();
-                        if name_problem(&new, dup).is_none() && new != old {
-                            self.var_events.push(VarEvent::Renamed { from: old, to: new.clone() });
-                            self.vars_committed[i] = new;
-                        }
-                    }
-                    // what is wrong, under the row it belongs to (the original's full sentence on hover)
-                    match (problem, error) {
-                        (Some((short, full)), _) => {
-                            ui.label(RichText::new(short).color(red).size(12.0)).on_hover_text(full);
-                        }
-                        (None, Some(message)) => {
-                            ui.label(RichText::new(message).color(red).size(12.0));
-                        }
-                        (None, None) => {}
-                    }
-                }
-                if let Some(i) = remove {
-                    self.vars.list.remove(i);
-                    self.var_events.push(VarEvent::Removed(self.vars_committed.remove(i)));
-                    edited = true;
-                }
-                ui.add_space(4.0);
-                if add_button(ui, &t!("Neue Variable")).clicked() {
-                    self.open_new_variable();
-                }
-            });
-            // the original's dialog ends with a "Done" button (0x1001425d8): at the bottom edge
-            // and the right, however tall the window is made
-            ui.add_space((ui.available_height() - 30.0 - ui.spacing().item_spacing.y).max(8.0));
-            ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 30.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(t!("Fertig")).color(ink())).min_size(egui::vec2(90.0, 30.0))).clicked() {
-                    close = true;
-                }
-            });
-        });
-        if edited {
-            self.vars_dirty = true;
-            // react at once, so the table below already shows the new names and values
-            self.refresh_vars();
-        }
-        if !open || close {
-            self.vars_open = false;
-        }
-    }
 }
 
-enum Glyph {
+pub(in crate::app) enum Glyph {
     Cross,
 }
 
 /// A small square button with a drawn cross (the font may lack symbol glyphs).
-fn glyph_button(ui: &mut egui::Ui, glyph: Glyph) -> egui::Response {
+pub(in crate::app) fn glyph_button(ui: &mut egui::Ui, glyph: Glyph) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 26.0), egui::Sense::click());
     if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, crate::theme::chip());
@@ -417,7 +204,7 @@ fn glyph_button(ui: &mut egui::Ui, glyph: Glyph) -> egui::Response {
 }
 
 /// A button with a drawn plus and a text.
-fn add_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+pub(in crate::app) fn add_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(text.to_string(), egui::FontId::proportional(14.0), ink());
     let size = egui::vec2(34.0 + galley.size().x, 30.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -432,7 +219,7 @@ fn add_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
 }
 
 /// A result shown as a small grey, right-aligned chip of fixed width.
-fn value_chip(ui: &mut egui::Ui, text: &str, fill: Color32, colour: Color32) {
+pub(in crate::app) fn value_chip(ui: &mut egui::Ui, text: &str, fill: Color32, colour: Color32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(86.0, 28.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, 4.0, fill);
     ui.painter().text(rect.right_center() - egui::vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, text, egui::FontId::monospace(13.0), colour);
@@ -440,7 +227,7 @@ fn value_chip(ui: &mut egui::Ui, text: &str, fill: Color32, colour: Color32) {
 
 /// What is wrong with a variable's name, in the original's words (VfUi catalogue): a short text
 /// for the table and the full message for the tooltip. `dup` says another variable has the name.
-fn name_problem(name: &str, dup: bool) -> Option<(crate::lang::Tr, crate::lang::Tr)> {
+pub(in crate::app) fn name_problem(name: &str, dup: bool) -> Option<(crate::lang::Tr, crate::lang::Tr)> {
     if name.is_empty() {
         Some((tr!("Name fehlt"), tr!("Leerer Dokumentvariablenname")))
     } else if name.starts_with('_') {
@@ -455,7 +242,7 @@ fn name_problem(name: &str, dup: bool) -> Option<(crate::lang::Tr, crate::lang::
 }
 
 /// A value for display: up to three decimals, no trailing zeros.
-fn fmt(v: f64) -> String {
+pub(in crate::app) fn fmt(v: f64) -> String {
     let s = format!("{v:.3}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
@@ -501,7 +288,6 @@ mod tests {
         assert!(name_problem("breite", true).is_some(), "a second variable with the name");
         assert!(name_problem("platte_b", false).is_some(), "taken by the job");
     }
-
 
     #[test]
     fn bindings_and_variables_survive_saving_and_old_files_still_load() {

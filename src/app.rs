@@ -4,7 +4,9 @@
 mod align;
 mod cursor;
 mod distance;
-mod exporting;
+#[path = "dialogs/mod.rs"]
+mod dialogs;
+use dialogs::{dialog_buttons, dialog_group};
 mod fields;
 mod gcode_highlight;
 mod gcode_overlay;
@@ -31,7 +33,7 @@ use crate::sheet;
 use crate::sim::{self, Camera, HeightMap};
 use crate::tools::{material_label, Tool, ToolKind, ToolLibrary, MATERIALS};
 use crate::toolpath::{default_toolpath, Datum, Job, Move, Side, Strategy, Toolpath, ZZero};
-use crate::theme::{ink, muted, hairline, canvas, surface, panel, separator, ACCENT, ACCENT_DEEP, CONSTRAINT, INK, MUTED, PRIMARY, SELECT};
+use crate::theme::{ink, muted, canvas, separator, ACCENT, ACCENT_DEEP, CONSTRAINT, INK, MUTED, PRIMARY, SELECT};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Stroke, Vec2};
 use shape_edit::{
     handle_point, ops, selection_bounds, Circle, Draw, Editable, Editor as ShapeEditor, Ellipse, Flip, Gesture, Handle, Outcome, Path, Polygon,
@@ -355,7 +357,7 @@ pub struct App {
     export_file: bool,
     export_format: usize,
     export_settings: crate::export::Settings,
-    export_scope: exporting::ExportScope,
+    export_scope: dialogs::ExportScope,
     tools_open: bool,
     /// Snapping switches (View menu) and what a drawing tool's pointer snapped to.
     snap_geometry: bool,
@@ -548,7 +550,7 @@ impl App {
             export_file: false,
             export_format: 0,
             export_settings: crate::export::Settings::default(),
-            export_scope: exporting::ExportScope::All,
+            export_scope: dialogs::ExportScope::All,
             tools_open: cc.storage.and_then(|s| s.get_string("cnccraft_tools_open")).map_or(true, |v| v != "false"),
             snap_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_geometry")).map_or(true, |v| v != "false"),
             snap_grid: cc.storage.and_then(|s| s.get_string("cnccraft_snap_grid")).is_some_and(|v| v == "true"),
@@ -903,70 +905,6 @@ impl App {
         self.status = "Eingabe abgebrochen".into();
     }
 
-    /// The question "Save the changes?" when closing or replacing a document with changes.
-    fn unsaved_ui(&mut self, ctx: &egui::Context) {
-        let Some(what) = self.unsaved else { return };
-        let mut answer: Option<u8> = None;
-        egui::Window::new(t!("Änderungen speichern?")).id(egui::Id::new("Änderungen speichern?"))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
-            .show(ctx, |ui| {
-                ui.set_width(380.0);
-                let name = self.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| t!("Neu"), |s| s.to_string_lossy().into_owned());
-                // the wording of the original's standard question (wxstd catalogue: "Do you want to save
-                // changes to %s [before closing it]?")
-                let ask = match what {
-                    Pending::Close => t!("Möchten Sie die Änderungen vor dem Schließen nach „%{name}“ speichern?", name = name),
-                    _ => t!("Möchten Sie die Änderungen nach „%{name}“ speichern?", name = name),
-                };
-                let then = match what {
-                    Pending::Close => t!("Wenn Sie nicht speichern, gehen die Änderungen verloren."),
-                    Pending::NewJob => t!("Ein neuer Job ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
-                    Pending::Open => t!("Die andere Datei ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
-                    Pending::Example => t!("Das Beispiel ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
-                };
-                ui.label(egui::RichText::new(ask).strong().color(ink()));
-                ui.label(egui::RichText::new(then).color(muted()));
-                dialog_buttons(ui, |ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new(t!("Speichern")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
-                        answer = Some(0);
-                    }
-                    if ui.add(egui::Button::new(t!("Nicht speichern")).min_size(Vec2::new(120.0, 30.0)).rounding(4.0)).clicked() {
-                        answer = Some(1);
-                    }
-                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(90.0, 30.0)).rounding(4.0)).clicked() {
-                        answer = Some(2);
-                    }
-                });
-            });
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            answer = Some(2);
-        }
-        match answer {
-            Some(0) => {
-                self.save_project(false);
-                // a cancelled save window leaves the question open
-                if !self.is_dirty() {
-                    self.unsaved = None;
-                    if self.thumb_pending != 0 {
-                        self.after_thumb = Some(what);
-                    } else {
-                        self.run_pending(Some(ctx), what);
-                    }
-                }
-            }
-            Some(1) => {
-                self.unsaved = None;
-                self.discard = true;
-                self.run_pending(Some(ctx), what);
-            }
-            Some(_) => self.unsaved = None,
-            None => {}
-        }
-    }
-
     fn save_project(&mut self, ask: bool) {
         // the self-test must never open a native file window: nobody would close it
         if self.selftest.is_some() {
@@ -1114,7 +1052,7 @@ impl App {
         else {
             return;
         };
-        let meta = crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(indices.len())), file: None };
+        let meta = crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(indices.len())), file: None, tool_numbers: None };
         let text = crate::transform::to_gcode::write_with_meta(&self.job, &paths, &pp, &meta);
         match std::fs::write(&file, text) {
             Ok(()) => {}
@@ -1337,189 +1275,6 @@ impl App {
         self.editor = Some(Editor::new(tp, None, kind));
         if self.edit.selection.is_empty() {
             self.status = "Tipp: zuerst Vektoren auswählen, dann den Werkzeugweg berechnen".into();
-        }
-    }
-
-    fn editor_ui(&mut self, ui: &mut egui::Ui) {
-        let mut close = false;
-        let mut apply = false;
-        let mut open_tool_dlg = false;
-        let sel_count = self.edit.selection.len();
-        let tools: Vec<Tool> = self.lib.tools_for(&self.job.material).into_iter().cloned().collect();
-        let thickness = self.job.thickness;
-        // for the depth fields: the variables they may use, and their values
-        let names = self.var_names();
-        let resolved = self.vars_resolved.clone();
-        let Some(ed) = &mut self.editor else { return };
-        let title = if ed.index.is_some() { t!("Werkzeugweg bearbeiten") } else { t!("Neuer Werkzeugweg") };
-        section(ui, &title, |ui| {
-            let tp = &mut ed.tp;
-            let (depth_text, depth_input) = (&mut ed.depth_text, &mut ed.depth_input);
-            // a click on a suggestion of last frame's list goes into its field
-            if let Some((field, name)) = depth_input.click(ui.ctx()) {
-                depth_text[field] = shape_edit::vars::apply_completion(&depth_text[field], &name);
-            }
-            egui::Grid::new("tp_form").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                ui.label(t!("Name"));
-                ui.add(egui::TextEdit::singleline(&mut tp.name).desired_width(160.0));
-                ui.end_row();
-                ui.label(t!("Werkzeug"));
-                let allowed: Vec<&Tool> = tools
-                    .iter()
-                    .filter(|t| match tp.strategy {
-                        Strategy::Drill => t.kind == ToolKind::Drill,
-                        Strategy::VCarve { .. } => t.kind == ToolKind::VBit,
-                        _ => t.kind != ToolKind::Drill,
-                    })
-                    .collect();
-                let tool_label = crate::tools::shown_name(&tp.tool.name);
-                if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, |ui| {
-                    for t in &allowed {
-                        if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, crate::tools::shown_name(&t.name)).clicked() {
-                            let n = tp.tool.number;
-                            tp.tool = (*t).clone();
-                            tp.tool.number = n;
-                        }
-                    }
-                }) {
-                    open_tool_dlg = true;
-                }
-                ui.end_row();
-                fn mm(v: &mut f64, max: f64) -> egui::DragValue<'_> {
-                    egui::DragValue::new(v).speed(0.05).range(0.0..=max).max_decimals(3).suffix(" mm")
-                }
-                // the depths take a number, a formula or variables ("platte_d/2"): a formula is
-                // kept on the toolpath and follows the variables
-                let cut_label = if matches!(tp.strategy, Strategy::VCarve { .. }) { t!("Max. Tiefe") } else { t!("Schnitttiefe") };
-                depth_row(ui, &t!("Starttiefe"), 0, &mut tp.start_depth, &mut tp.start_expr, thickness, depth_text, depth_input, &names, &resolved);
-                depth_row(ui, &cut_label, 1, &mut tp.cut_depth, &mut tp.cut_expr, thickness + 5.0, depth_text, depth_input, &names, &resolved);
-                ui.label(t!("Zustellung"));
-                ui.add(mm(&mut tp.tool.stepdown, 50.0));
-                ui.end_row();
-                if !matches!(tp.strategy, Strategy::Drill) {
-                    ui.label(t!("Querzustellung"));
-                    let pct = if tp.tool.diameter > 0.0 { tp.tool.stepover / tp.tool.diameter * 100.0 } else { 0.0 };
-                    ui.horizontal(|ui| {
-                        ui.add(mm(&mut tp.tool.stepover, 50.0));
-                        ui.label(egui::RichText::new(format!("{pct:.0} %")).small().color(muted()));
-                    });
-                    ui.end_row();
-                }
-                ui.label(t!("Drehzahl"));
-                ui.add(egui::DragValue::new(&mut tp.tool.rpm).speed(100).range(0..=60000).suffix(t!(" U/min")));
-                ui.end_row();
-                ui.label(t!("Vorschub"));
-                ui.add(egui::DragValue::new(&mut tp.tool.feed).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
-                ui.end_row();
-                ui.label(t!("Eintauchen"));
-                ui.add(egui::DragValue::new(&mut tp.tool.plunge).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
-                ui.end_row();
-                ui.label(t!("Werkzeug-Nr."));
-                ui.add(egui::DragValue::new(&mut tp.tool.number).range(1..=99));
-                ui.end_row();
-            });
-            ui.separator();
-            match &mut tp.strategy {
-                Strategy::Profile { side, climb, tabs, tab_count } => {
-                    ui.label(egui::RichText::new(t!("Fräsen")).strong());
-                    ui.horizontal(|ui| {
-                        ui.radio_value(side, Side::Outside, t!("Außen"));
-                        ui.radio_value(side, Side::Inside, t!("Innen"));
-                        ui.radio_value(side, Side::On, t!("Auf der Linie"));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.radio_value(climb, true, t!("Gleichlauf"));
-                        ui.radio_value(climb, false, t!("Gegenlauf"));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.checkbox(tabs, t!("Haltestege"));
-                        ui.add_enabled(*tabs, egui::DragValue::new(tab_count).range(1..=12).suffix(t!(" Stück")));
-                    });
-                }
-                Strategy::Pocket { raster, climb, raster_angle } => {
-                    ui.label(egui::RichText::new(t!("Ausräumstrategie")).strong());
-                    ui.horizontal(|ui| {
-                        ui.radio_value(raster, false, t!("Versatz"));
-                        ui.radio_value(raster, true, t!("Raster"));
-                    });
-                    if *raster {
-                        ui.horizontal(|ui| {
-                            ui.label(t!("Rasterwinkel"));
-                            ui.add(egui::DragValue::new(raster_angle).speed(1.0).range(0.0..=180.0).suffix(" °"));
-                        });
-                    }
-                    ui.horizontal(|ui| {
-                        ui.radio_value(climb, true, t!("Gleichlauf"));
-                        ui.radio_value(climb, false, t!("Gegenlauf"));
-                    });
-                }
-                Strategy::Drill => {
-                    ui.label(egui::RichText::new(t!("Bohrt in der Mitte jeder gewählten Kontur, Zustellung = Peck-Tiefe.")).small().color(muted()));
-                }
-                Strategy::VCarve { max_depth } => {
-                    ui.horizontal(|ui| {
-                        ui.label(t!("Tiefenbegrenzung"));
-                        ui.add(egui::DragValue::new(max_depth).speed(0.1).range(0.0..=100.0).suffix(" mm"));
-                    });
-                    ui.label(egui::RichText::new(t!("0 = nur durch den Fräserdurchmesser begrenzt")).small().color(muted()));
-                }
-            }
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label(t!("Vektoren: %{n}", n = tp.shape_ids.len()));
-                if ui.button(t!("Auswahl übernehmen (%{n})", n = sel_count)).clicked() {
-                    apply = true;
-                }
-            });
-            dialog_buttons(ui, |ui| {
-                let b = egui::Button::new(egui::RichText::new(t!("Berechnen")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
-                if ui.add(b).clicked() {
-                    close = true;
-                }
-                if ui.add(egui::Button::new(t!("Schließen")).min_size(Vec2::new(90.0, 28.0))).clicked() {
-                    ed.index = None;
-                    ed.tp.shape_ids.clear();
-                    ed.tp.name.clear();
-                    ed.kind = "";
-                }
-            });
-        });
-        if apply {
-            if let Some(ed) = &mut self.editor {
-                ed.tp.shape_ids = self.edit.selection.clone();
-            }
-        }
-        if let Some(ed) = &self.editor {
-            if ed.kind.is_empty() {
-                self.editor = None;
-                return;
-            }
-        }
-        if close {
-            let ed = self.editor.take().unwrap();
-            let mut tp = ed.tp;
-            if tp.shape_ids.is_empty() {
-                tp.shape_ids = self.edit.selection.clone();
-            }
-            tp.compute(&self.job, &self.shapes);
-            let st = tp.stats();
-            self.status = format!("{} berechnet: {} Bewegungen, ca. {}", tp.name, tp.moves.len(), fmt_time(st.minutes));
-            match ed.index {
-                Some(i) if i < self.toolpaths.len() => self.toolpaths[i] = tp,
-                _ => self.toolpaths.push(tp),
-            }
-            self.sim = None;
-        }
-        if open_tool_dlg && self.tool_dialog.is_none() {
-            let mat = self.job.material.clone();
-            let entries = self.lib.entries.clone();
-            let original = entries.clone();
-            let first = entries.iter().position(|e| e.material == mat);
-            let (tool, idx) = match first {
-                Some(i) => (entries[i].tool.clone(), Some(i)),
-                None => (ToolLibrary::default_tool(ToolKind::EndMill), None),
-            };
-            self.tool_dialog = Some(ToolDialog { editing: tool, original, material: mat, index: idx, entries });
         }
     }
 
@@ -1751,100 +1506,6 @@ impl App {
                 self.open_path(path);
             }
         });
-    }
-
-    fn job_dialog_ui(&mut self, ctx: &egui::Context) {
-        let Some((job, is_new)) = &mut self.job_dialog else { return };
-        let mut ok = false;
-        let mut cancel = false;
-        egui::Window::new(if *is_new { t!("Job erstellen") } else { t!("Job einrichten") })
-            .id(egui::Id::new("job_dialog_win"))
-            .collapsible(false)
-            .resizable(false)
-            .title_bar(true)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .frame(egui::Frame::window(&ctx.style()).fill(panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
-            .show(ctx, |ui| {
-                ui.set_width(360.0);
-                let f = if job.inches { 1.0 / 25.4 } else { 1.0 };
-                let unit = if job.inches { "in" } else { "mm" };
-
-                dialog_group(ui, &t!("Auftragsgröße"), |ui| {
-                    // size fields on the left, a 3D block sketch on the right
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            for (label, v, max) in [(t!("Breite (X)"), &mut job.width, 5000.0), (t!("Länge (Y)"), &mut job.height, 5000.0), (t!("Dicke (Z)"), &mut job.thickness, 500.0)] {
-                                dim_row(ui, &label, v, f, unit, max);
-                            }
-                        });
-                        ui.add_space(10.0);
-                        block_sketch(ui);
-                    });
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Einheiten")).color(ink())));
-                        segmented(ui, &mut job.inches, [(true, t!("Zoll")), (false, "mm".to_string())]);
-                    });
-                    ui.add_space(4.0);
-                    ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Material")).color(ink())));
-                        egui::ComboBox::from_id_salt("mat").width(150.0).selected_text(material_label(&job.material)).show_ui(ui, |ui| {
-                            for m in MATERIALS {
-                                ui.selectable_value(&mut job.material, m.to_string(), material_label(m));
-                            }
-                        });
-                    });
-                });
-
-                dialog_group(ui, &t!("Nullpunkt"), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Z-Null")).color(ink())));
-                        let mut surf = job.z_zero == ZZero::MaterialSurface;
-                        if segmented(ui, &mut surf, [(true, t!("Oberfläche")), (false, t!("Tisch"))]) {
-                            job.z_zero = if surf { ZZero::MaterialSurface } else { ZZero::MachineBed };
-                        }
-                    });
-                    ui.add_space(4.0);
-                    ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("XY-Null")).color(ink())));
-                        let mut ll = job.datum == Datum::LowerLeft;
-                        if segmented(ui, &mut ll, [(true, t!("Ecke")), (false, t!("Mitte"))]) {
-                            job.datum = if ll { Datum::LowerLeft } else { Datum::Center };
-                        }
-                    });
-                    ui.add_space(4.0);
-                    ui.horizontal(|ui| {
-                        ui.add_sized(Vec2::new(78.0, 0.0), egui::Label::new(egui::RichText::new(t!("Sicher Z")).color(ink())));
-                        ui.add(egui::DragValue::new(&mut job.safe_z).speed(0.1).range(0.5..=100.0).suffix(" mm"));
-                        ui.add_space(10.0);
-                        ui.label(egui::RichText::new(t!("Start Z")).color(ink()));
-                        ui.add(egui::DragValue::new(&mut job.home_z).speed(0.1).range(0.5..=200.0).suffix(" mm"));
-                    });
-                });
-
-                dialog_buttons(ui, |ui| {
-                    let primary = if *is_new { t!("Erstellen") } else { t!("Übernehmen") };
-                    if ui.add(egui::Button::new(egui::RichText::new(primary).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
-                        ok = true;
-                    }
-                    ui.add_space(4.0);
-                    if ui.add(egui::Button::new(t!("Abbrechen")).min_size(Vec2::new(100.0, 30.0)).rounding(4.0)).clicked() {
-                        cancel = true;
-                    }
-                });
-            });
-        if ok {
-            let (job, is_new) = self.job_dialog.take().unwrap();
-            if is_new {
-                self.new_job(job);
-            } else {
-                self.job = job;
-                self.fitted = false;
-                self.recompute_all();
-            }
-        } else if cancel {
-            self.job_dialog = None;
-        }
     }
 
     fn canvas(&mut self, ui: &mut egui::Ui) {
@@ -2913,21 +2574,9 @@ impl eframe::App for App {
         self.export_dialog_ui(ctx);
         self.export_file_ui(ctx);
         self.unsaved_ui(ctx);
-        if self.about {
-            egui::Window::new(t!("Über CncCraft")).id(egui::Id::new("Über CncCraft")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-                ui.label(egui::RichText::new(t!("CncCraft %{version}", version = env!("CARGO_PKG_VERSION"))).strong());
-                ui.label(t!("CncCraft – Entwurf und Werkzeugwege für CNC-Fräsen."));
-                ui.hyperlink_to("https://github.com/freegroup/CncCraft", "https://github.com/freegroup/CncCraft");
-                ui.label(t!("Werkzeugdaten und Voreinstellungen nach dem Vorbild von Vectric Spark."));
-                dialog_buttons(ui, |ui| {
-                    if ui.button(t!("Schließen")).clicked() {
-                        self.about = false;
-                    }
-                });
-            });
-        }
+        self.about_ui(ctx);
         if self.shortcuts_open {
-            shortcuts::window(ctx, &mut self.shortcuts_open);
+            dialogs::shortcuts::window(ctx, &mut self.shortcuts_open);
         }
         self.import_missing_ui(ctx);
         self.pp_dialog_ui(ctx);
@@ -2948,87 +2597,6 @@ fn thumb_path(project: &std::path::Path) -> PathBuf {
     let mut p = project.as_os_str().to_owned();
     p.push(".thumb.png");
     PathBuf::from(p)
-}
-
-fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::none().fill(surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(4.0).inner_margin(8.0).outer_margin(egui::Margin::symmetric(6.0, 4.0)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.label(egui::RichText::new(title).strong().size(13.5).color(ink()));
-        ui.add_space(2.0);
-        add(ui);
-    });
-}
-
-/// A grouped box in a dialog: a titled white panel with a hairline border.
-/// The button row that ends every dialog: a line above it and the buttons at the right end, the
-/// main one outermost (so it is added first).
-fn dialog_buttons(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
-    ui.add_space(8.0);
-    ui.separator();
-    ui.add_space(2.0);
-    ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 30.0), egui::Layout::right_to_left(egui::Align::Center), add);
-}
-
-fn dialog_group(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.add_space(4.0);
-    ui.label(egui::RichText::new(title).strong().size(13.0).color(ink()));
-    ui.add_space(3.0);
-    egui::Frame::none().fill(surface()).stroke(Stroke::new(1.0_f32, hairline())).rounding(5.0).inner_margin(egui::Margin::symmetric(12.0, 10.0)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        add(ui);
-    });
-    ui.add_space(6.0);
-}
-
-/// A depth row of the toolpath form: the label, a text field taking a number, a formula or
-/// variables (with the suggestions every number field has), the result when it is a formula, and
-/// what is wrong with it when it can't be worked out.
-#[allow(clippy::too_many_arguments)]
-fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr: &mut Option<String>, max: f64, texts: &mut [String; 2], input: &mut input::ConstraintInput, names: &[String], resolved: &shape_edit::Resolved) {
-    ui.label(label);
-    ui.vertical(|ui| {
-      let mut error: Option<String> = None;
-      ui.horizontal(|ui| {
-        let id = egui::Id::new(("depth_field", field));
-        let resp = ui.add(egui::TextEdit::singleline(&mut texts[field]).id(id).font(egui::TextStyle::Monospace).desired_width(110.0));
-        let ctx = ui.ctx().clone();
-        let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
-        let tab = ctx.input(|i| i.key_pressed(egui::Key::Tab));
-        let focused = ctx.memory(|m| m.has_focus(id));
-        let mut keys = input::Keys::read(&ctx, tab && focused);
-        let lookup = |n: &str| resolved.value(n).ok();
-        let suggested = input.suggest(&ctx, field, id, resp.rect, &mut texts[field], names, &lookup, &mut keys, focused || (resp.lost_focus() && enter), 4.0);
-        input.cursor(&ctx, field, id, &texts[field]);
-        // a finished formula ("=") shows its result
-        let text = texts[field].clone();
-        let t = text.trim().trim_end_matches('=').trim().to_string();
-        if text.trim_end().ends_with('=') {
-            if let Ok(v) = shape_edit::calc::eval(&t, resolved) {
-                texts[field] = fields::fmt(v);
-            }
-        }
-        // the text is the source of truth: a plain number is a plain value, anything else a formula
-        let _ = suggested;
-        let plain = !t.is_empty() && !shape_edit::calc::is_formula(&t) && shape_edit::calc::names_in(&t).is_empty();
-        match shape_edit::calc::eval(&t, resolved) {
-            Ok(v) => {
-                *value = v.clamp(0.0, max);
-                *expr = if plain { None } else { Some(t.clone()) };
-                if expr.is_some() {
-                    ui.label(egui::RichText::new(format!("= {} mm", fields::fmt(*value))).monospace().color(muted()));
-                } else {
-                    ui.label(egui::RichText::new(t!("mm")).color(muted()));
-                }
-            }
-            Err(e) => error = Some(crate::lang::calc_message(&e)),
-        }
-      });
-      // what is wrong, under the field (a long text would run out of the panel beside it)
-      if let Some(e) = error {
-          ui.label(egui::RichText::new(e).small().color(input::ERROR));
-      }
-    });
-    ui.end_row();
 }
 
 /// One labelled dimension text field (value shown in the dialog's units).

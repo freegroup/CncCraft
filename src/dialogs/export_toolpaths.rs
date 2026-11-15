@@ -3,7 +3,7 @@
 use crate::app::App;
 use crate::theme::{ink, muted};
 use egui::{Align2, Vec2};
-use super::widgets::combo_with_manage;
+use crate::app::layout::combo_with_manage;
 
 impl App {
     /// The window every export of the toolpaths goes through (the menu and the disk icon): which
@@ -31,13 +31,11 @@ impl App {
         } else {
             vec![]
         };
-        egui::Window::new(t!("Werkzeugpfade exportieren")).id(egui::Id::new("export_dialog_win"))
-            .collapsible(false)
-            .resizable(false)
+        super::window("export_dialog_win", ctx)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .frame(egui::Frame::window(&ctx.style()).fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
             .show(ctx, |ui| {
                 ui.set_width(460.0);
+                super::header(ui, &t!("Werkzeugpfade exportieren"), false);
                 // the groups one under the other: which toolpaths (only when some are hidden, else
                 // "all" and "visible" are the same), the format, and (only when the toolpaths need
                 // more than one tool) how the tools are split into files

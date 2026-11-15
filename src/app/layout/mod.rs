@@ -8,16 +8,12 @@
 //! - prompts and help floating at the bottom right of the drawing;
 //! - the pointer position and the selection's size along the bottom;
 //! - the toolpath panel on the right: the list on top, then simulation and export;
-//! - the dialogs for exporting, post-processors and tools.
 //!
 //! Each part has its own file here; `widgets` holds the small pieces they share.
 
 mod canvas_bars;
-mod export_dialog;
-mod postprocessor_dialog;
 mod title_bar;
 mod tool_column;
-mod tool_dialog;
 mod toolpath_panel;
 mod widgets;
 

@@ -28,6 +28,13 @@ pub const RETRACT_GAP: f64 = 1.0; // estimated
 pub const RAPID_RATE: f64 = 5000.0; // estimated, mm/min
 /// Cut-out pass depth from ToolpathDefaults/CutOutMachine.default: 0.075 in.
 pub const CUT_OUT_PASS_DEPTH_IN: f64 = 0.075;
+/// How steeply the cutter ramps into the material along its path, in degrees (CncCraft's own
+/// default for hobby machines; 0 plunges straight down).
+pub const RAMP_ANGLE: f64 = 5.0;
+
+fn default_ramp_angle() -> f64 {
+    RAMP_ANGLE
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ZZero {
@@ -128,6 +135,15 @@ impl CutContext<'_> {
     pub fn depths(&self) -> Vec<f64> {
         pass_depths(self.start_depth, self.cut_depth, self.tool.stepdown)
     }
+    /// Where the material still stands above the pass at depth index `i`: the pass before, or
+    /// the start depth for the first.
+    pub fn top_of(&self, depths: &[f64], i: usize) -> f64 {
+        if i == 0 {
+            -self.start_depth
+        } else {
+            depths[i - 1]
+        }
+    }
 }
 
 /// One cutting strategy. Each tool class implements this; the big match is gone.
@@ -153,6 +169,10 @@ pub struct Toolpath {
     pub cut_expr: Option<String>,
     pub shape_ids: Vec<u64>,
     pub visible: bool,
+    /// How steeply the cutter ramps into the material (degrees, 0 = straight down). Old files get
+    /// the default.
+    #[serde(default = "default_ramp_angle")]
+    pub ramp_angle: f64,
     #[serde(skip)]
     pub moves: Vec<Move>,
     #[serde(skip)]
@@ -213,7 +233,7 @@ impl Toolpath {
         // visits home or 0/0: the way from home to the first toolpath, and from one toolpath to the
         // next, is the first move of the next one, at safe_z (the job's hooks put the machine at home
         // height at the start and at safe_z between toolpaths and tools).
-        let mut out = Out { moves: vec![], job };
+        let mut out = Out { moves: vec![], job, ramp_tan: self.ramp_angle.clamp(0.0, 89.0).to_radians().tan(), top: 0.0, ring_end: None };
         if contours.is_empty() {
             self.warning = Some(t!("Keine Vektoren gewählt").into());
         } else {
@@ -242,7 +262,7 @@ impl Toolpath {
 
     /// The same toolpath with other moves (for carving a part of it).
     pub fn with_moves(&self, moves: Vec<Move>) -> Toolpath {
-        Toolpath { name: self.name.clone(), strategy: self.strategy.clone(), tool: self.tool.clone(), start_depth: self.start_depth, cut_depth: self.cut_depth, start_expr: None, cut_expr: None, shape_ids: vec![], visible: self.visible, moves, warning: None }
+        Toolpath { name: self.name.clone(), strategy: self.strategy.clone(), tool: self.tool.clone(), start_depth: self.start_depth, cut_depth: self.cut_depth, start_expr: None, cut_expr: None, shape_ids: vec![], visible: self.visible, ramp_angle: self.ramp_angle, moves, warning: None }
     }
 
     pub fn stats(&self) -> Stats {
@@ -270,6 +290,13 @@ impl Toolpath {
 pub struct Out<'a> {
     moves: Vec<Move>,
     job: &'a Job,
+    /// Tangent of the ramp angle (0: plunge straight down).
+    ramp_tan: f64,
+    /// Where the material still stands above the coming cuts (set by the tool for each pass).
+    top: f64,
+    /// Where the last ring cut ended: its first point, its length, the position along it and
+    /// the point there, so the next pass on the same ring ramps on from there.
+    ring_end: Option<(Pt, f64, f64, Pt)>,
 }
 
 impl Out<'_> {
@@ -316,10 +343,41 @@ impl Out<'_> {
         }
     }
 
-    /// Cut one closed ring at depth `z`, optionally lifting to `tab_z` over the given spans.
+    /// The material above the coming cuts is cleared down to `z` (the pass before).
+    pub fn set_top(&mut self, z: f64) {
+        self.top = z;
+    }
+
+    /// Travel at safe height to `p` and come down to just over the material still standing there;
+    /// returns the height reached.
+    fn approach(&mut self, p: Pt) -> f64 {
+        let safe = self.job.safe_z;
+        match self.moves.last().map(|m| m.to) {
+            None => self.rapid([p[0], p[1], safe]),
+            Some(c) if (c[0] - p[0]).abs() > 1e-6 || (c[1] - p[1]).abs() > 1e-6 => {
+                if c[2] < safe {
+                    self.rapid([c[0], c[1], safe]);
+                }
+                self.rapid([p[0], p[1], c[2].max(safe)]);
+            }
+            _ => {}
+        }
+        let over = (self.top + 0.5).min(safe);
+        if (self.cur()[2] - over).abs() > 1e-6 {
+            self.rapid([p[0], p[1], over]);
+        }
+        over
+    }
+
+    /// Cut one closed ring at depth `z`, optionally lifting to `tab_z` over the given spans. With
+    /// a ramp angle the cutter goes down along the ring instead of straight, then cuts one whole
+    /// round at depth, which also cleans up the ramp.
     pub fn cut_ring(&mut self, pts: &[Pt], z: f64, tab_z: Option<(f64, &[(f64, f64)])>) {
         if pts.len() < 2 {
             return;
+        }
+        if self.ramp_tan > 1e-9 && perimeter(pts, true) > 1e-6 {
+            return self.ramp_ring(pts, z, tab_z);
         }
         let start = pts[0];
         let z_at = |s: f64| -> f64 {
@@ -359,6 +417,48 @@ impl Out<'_> {
         }
     }
 
+    fn ramp_ring(&mut self, pts: &[Pt], z: f64, tab_z: Option<(f64, &[(f64, f64)])>) {
+        let n = pts.len();
+        let mut cum = vec![0.0; n + 1];
+        for i in 0..n {
+            cum[i + 1] = cum[i] + dist(pts[i], pts[(i + 1) % n]);
+        }
+        let per = cum[n];
+        let tab_level = |t: f64| -> f64 {
+            let t = t.rem_euclid(per);
+            match tab_z {
+                Some((tz, tabs)) if tabs.iter().any(|(a, b)| t >= *a && t <= *b) => z.max(tz),
+                _ => z,
+            }
+        };
+        let breaks: Vec<f64> = tab_z.map(|(_, tabs)| tabs.iter().flat_map(|(a, b)| [a.rem_euclid(per), b.rem_euclid(per)]).collect()).unwrap_or_default();
+        // go on from where the same ring's last pass ended, else come down over its first point
+        let cur = self.cur();
+        let (start, z_from) = match self.ring_end {
+            Some((first, len, s, at)) if first == pts[0] && (len - per).abs() < 1e-9 && dist(at, [cur[0], cur[1]]) < 1e-6 && cur[2] > z + 1e-9 => (s, cur[2]),
+            _ => (0.0, self.approach(pts[0])),
+        };
+        let emit = |out: &mut Self, p: Pt, s: f64, level: f64| {
+            let (before, after) = (level.max(tab_level(s - 1e-6)), level.max(tab_level(s + 1e-6)));
+            out.feed([p[0], p[1], before]);
+            if (after - before).abs() > 1e-9 {
+                out.feed([p[0], p[1], after]);
+            }
+        };
+        let ramp_len = (z_from - z).max(0.0) / self.ramp_tan;
+        let mut s = start;
+        for (p, walked, at) in ring_walk(pts, &cum, s, ramp_len, &breaks) {
+            emit(self, p, at, (z_from - walked * self.ramp_tan).max(z));
+            s = at;
+        }
+        let s_end = s.rem_euclid(per);
+        for (p, _, at) in ring_walk(pts, &cum, s_end, per, &breaks) {
+            emit(self, p, at, z);
+        }
+        let end = self.cur();
+        self.ring_end = Some((pts[0], per, s_end, [end[0], end[1]]));
+    }
+
     /// Cut an open polyline at depth `z`.
     pub fn cut_open(&mut self, pts: &[Pt], z: f64) {
         if pts.is_empty() {
@@ -369,6 +469,41 @@ impl Out<'_> {
             self.feed([p[0], p[1], z]);
         }
     }
+}
+
+/// Walk `len` along a closed ring from position `from` (arc length from its first point; `cum`
+/// holds the arc length at each point and the total at the end), wrapping round as often as
+/// needed. Yields every corner passed, every position in `breaks` and the end: the point, the
+/// distance walked so far and the position along the ring.
+fn ring_walk(pts: &[Pt], cum: &[f64], from: f64, len: f64, breaks: &[f64]) -> Vec<(Pt, f64, f64)> {
+    let n = pts.len();
+    let per = cum[n];
+    let mut out = vec![];
+    let mut s = from.rem_euclid(per);
+    let mut i = (0..n).rev().find(|&k| cum[k] <= s).unwrap_or(0);
+    let mut walked = 0.0;
+    while walked < len - 1e-9 {
+        let mut next = cum[i + 1];
+        for &b in breaks {
+            if b > s + 1e-9 && b < next {
+                next = b;
+            }
+        }
+        next = next.min(s + (len - walked));
+        walked += next - s;
+        s = next;
+        let f = (s - cum[i]) / (cum[i + 1] - cum[i]).max(1e-12);
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        out.push(([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], walked, s));
+        if s >= cum[i + 1] - 1e-9 {
+            i += 1;
+            if i == n {
+                i = 0;
+                s = 0.0;
+            }
+        }
+    }
+    out
 }
 
 /// The depths of each pass: stepdown increments, last one exactly at `depth`.
@@ -461,7 +596,7 @@ pub fn default_toolpath(kind: &str, lib: &ToolLibrary, job: &Job, ids: Vec<u64>)
         "cutout" => t!("Ausschnitt").to_string(),
         _ => strategy.label(),
     };
-    Toolpath { name, strategy, tool, start_depth: 0.0, cut_depth: depth, start_expr: None, cut_expr: None, shape_ids: ids, visible: true, moves: vec![], warning: None }
+    Toolpath { name, strategy, tool, start_depth: 0.0, cut_depth: depth, start_expr: None, cut_expr: None, shape_ids: ids, visible: true, ramp_angle: RAMP_ANGLE, moves: vec![], warning: None }
 }
 
 #[cfg(test)]
@@ -518,5 +653,65 @@ mod depth_formula_tests {
         v.as_object_mut().unwrap().remove("cut_expr");
         let back: Toolpath = serde_json::from_value(v).unwrap();
         assert!(back.start_expr.is_none() && back.cut_expr.is_none());
+    }
+}
+
+#[cfg(test)]
+mod ramp_tests {
+    use super::*;
+    use shape_edit::{Rect, Shape};
+
+    fn cut(ramp_angle: f64, tabs: bool) -> (Toolpath, Job) {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("profile", &lib, &job, vec![1]);
+        tp.strategy = Strategy::Profile { side: Side::Outside, climb: true, tabs, tab_count: 2 };
+        tp.cut_depth = 6.0;
+        tp.tool.stepdown = 2.0;
+        tp.ramp_angle = ramp_angle;
+        tp.compute(&job, &[Item::new(1, Shape::Rect(Rect::new([100.0, 100.0], 60.0, 40.0)))]);
+        (tp, job)
+    }
+
+    /// Feed moves that go down without moving sideways.
+    fn straight_plunges_into_material(tp: &Toolpath) -> usize {
+        tp.moves.windows(2).filter(|w| !w[1].rapid && w[1].to[2] < w[0].to[2] - 1e-6 && w[1].to[2] < -1e-6 && dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]]) < 1e-6).count()
+    }
+
+    #[test]
+    fn with_a_ramp_the_cutter_never_plunges_straight_into_the_material() {
+        let (straight, _) = cut(0.0, false);
+        assert!(straight_plunges_into_material(&straight) >= 3, "without a ramp every pass plunges");
+        let (ramped, _) = cut(5.0, false);
+        assert_eq!(straight_plunges_into_material(&ramped), 0);
+        // no move goes down more steeply than the ramp angle
+        let tan = 5.0_f64.to_radians().tan();
+        for w in ramped.moves.windows(2).filter(|w| !w[1].rapid && w[1].to[2] < w[0].to[2] - 1e-9) {
+            let run = dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]]);
+            assert!(w[0].to[2] - w[1].to[2] <= run * tan + 1e-6, "{w:?}");
+        }
+        // it still reaches the full depth
+        let deepest = ramped.moves.iter().map(|m| m.to[2]).fold(0.0, f64::min);
+        assert!((deepest + 6.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_passes_follow_on_without_lifting_and_the_tabs_stay() {
+        let (tp, job) = cut(5.0, true);
+        // one lift to safe height at the end only: the passes on the same ring follow on
+        let lifts = tp.moves.iter().filter(|m| m.rapid && (m.to[2] - job.safe_z).abs() < 1e-9).count();
+        assert!(lifts <= 2, "{lifts} lifts");
+        // the tabs keep their height: some moves at the last pass stay at the tab top
+        let tab_top = -(6.0 - TAB_THICKNESS);
+        assert!(tp.moves.iter().any(|m| (m.to[2] - tab_top).abs() < 1e-9));
+    }
+
+    #[test]
+    fn old_files_get_the_default_ramp() {
+        let (tp, _) = cut(5.0, false);
+        let mut v = serde_json::to_value(&tp).unwrap();
+        v.as_object_mut().unwrap().remove("ramp_angle");
+        let back: Toolpath = serde_json::from_value(v).unwrap();
+        assert_eq!(back.ramp_angle, RAMP_ANGLE);
     }
 }

@@ -3,12 +3,10 @@
 
 use super::{App, ViewMode};
 use crate::import;
-use crate::theme::{ink, muted};
-use egui::{Align2, Vec2};
 use shape_edit::{Shape, Source};
 use std::path::{Path, PathBuf};
 
-fn file_dialog() -> rfd::FileDialog {
+pub(in crate::app) fn file_dialog() -> rfd::FileDialog {
     let mut dialog = rfd::FileDialog::new();
     for format in import::FORMATS {
         dialog = dialog.add_filter(t!(format.description), format.extensions);
@@ -169,36 +167,6 @@ impl App {
         }
     }
 
-    /// The friendly window shown when the original file of an import is not there any more.
-    pub(super) fn import_missing_ui(&mut self, ctx: &egui::Context) {
-        let Some(file) = self.import_missing.clone() else { return };
-        let name = Path::new(&file).file_name().map_or_else(|| file.clone(), |n| n.to_string_lossy().into_owned());
-        let (mut search, mut close) = (false, false);
-        egui::Window::new(t!("Datei nicht gefunden")).id(egui::Id::new("Datei nicht gefunden")).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
-            ui.set_width(380.0);
-            ui.label(egui::RichText::new(t!("Die Originaldatei „%{name}“ wurde leider nicht gefunden.", name = name)).strong().color(ink()));
-            ui.add_space(4.0);
-            ui.label(t!("Sie wurde vielleicht verschoben, umbenannt oder gelöscht. Die importierten Formen bleiben unverändert in der Zeichnung."));
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(&file).small().color(muted()));
-            super::dialog_buttons(ui, |ui| {
-                if ui.button(t!("Datei suchen…")).clicked() {
-                    search = true;
-                }
-                if ui.button(t!("Schließen")).clicked() {
-                    close = true;
-                }
-            });
-        });
-        if close {
-            self.import_missing = None;
-        }
-        if search {
-            if let Some(found) = file_dialog().pick_file() {
-                self.reload_import(&file, Some(found));
-            }
-        }
-    }
 }
 
 #[cfg(test)]

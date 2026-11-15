@@ -83,23 +83,6 @@ impl App {
         self.editor_window(ctx);
     }
 
-    /// The editor of a toolpath as its own small window (a double click on a path, or the pencil
-    /// on its row, or one of the operation buttons), so the list stays short.
-    fn editor_window(&mut self, ctx: &egui::Context) {
-        if self.editor.is_none() {
-            return;
-        }
-        let screen = ctx.screen_rect();
-        egui::Window::new(t!("Werkzeugweg"))
-            .id(egui::Id::new("toolpath_editor_window"))
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .default_pos(Pos2::new((screen.right() - 360.0 - 380.0).max(40.0), 80.0))
-            .default_width(340.0)
-            .show(ctx, |ui| self.editor_ui(ui));
-    }
-
     /// The first entry of the panel: the board (size and material), clickable to set it up.
     fn setup_row(&mut self, ui: &mut egui::Ui) {
         let valid = self.job.width > 0.0 && self.job.height > 0.0 && self.job.thickness > 0.0;

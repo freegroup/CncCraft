@@ -16,9 +16,7 @@ impl App {
 
         let mut open = true;
         let screen = ctx.screen_rect();
-        egui::Window::new(title)
-            .id(egui::Id::new("pp_dialog_win"))
-            .open(&mut open)
+        super::window("pp_dialog_win", ctx)
             .order(egui::Order::Foreground)
             .resizable(true)
             .default_width(560.0)
@@ -26,6 +24,9 @@ impl App {
             .default_height((screen.height() - 120.0).clamp(300.0, 520.0))
             .max_height(screen.height() - 60.0)
             .show(ctx, |ui| {
+                if super::header(ui, &title, true) {
+                    open = false;
+                }
                 // Bottom buttons first so they are always visible
                 egui::TopBottomPanel::bottom("pp_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 6.0, bottom: 4.0 })).show_separator_line(true).show_inside(ui, |ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

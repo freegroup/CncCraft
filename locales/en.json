@@ -575,5 +575,20 @@
  "Dieses Format kennt keine Gruppen.": "This format has no groups.",
  "Eine Einheit im Bild ist ein Millimeter oder ein Zoll.": "One unit in the picture is one millimetre or one inch.",
  "Werkstück": "Workpiece",
- "Außenrahmen der Formen": "Shape bounding box"
+ "Außenrahmen der Formen": "Shape bounding box",
+ "Seite": "Side",
+ "Fräsrichtung": "Cut direction",
+ "Ausräumen": "Clearing",
+ "Rampenwinkel": "Ramp angle",
+ "in der Mitte jeder Kontur, Zustellung = Peck-Tiefe": "in the middle of each contour, pass depth = peck depth",
+ "Der Fräser fährt schräg entlang der Kontur ins Material statt senkrecht. 0° = senkrecht eintauchen.": "The cutter ramps into the material along the contour instead of plunging straight down. 0° = plunge straight down.",
+ "Zieltiefe": "Target depth",
+ "Vektoren": "Vectors",
+ "Fräser": "Cutter",
+ "Eilgang": "Travel",
+ "Höhe über dem Material für die Fahrten zwischen den Schnitten; gilt für alle Werkzeugwege": "Height above the material for moves between cuts; applies to all toolpaths",
+ "Höhe am Anfang und Ende des Jobs; gilt für alle Werkzeugwege": "Height at the start and end of the job; applies to all toolpaths",
+ "Start Z": "Start Z",
+ "Werkzeugweg bearbeiten – %{kind}": "Edit toolpath – %{kind}",
+ "Neuer Werkzeugweg – %{kind}": "New toolpath – %{kind}"
 }

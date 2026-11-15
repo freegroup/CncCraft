@@ -29,7 +29,9 @@ impl ToolpathKind for PocketTool {
         if inset.is_empty() && !cx.contours.is_empty() {
             warning = Some(t!("Werkzeug zu groß für diese Tasche").into());
         }
-        for &z in &cx.depths() {
+        let depths = cx.depths();
+        for (i, &z) in depths.iter().enumerate() {
+            out.set_top(cx.top_of(&depths, i));
             if self.raster {
                 let rings = inset.rings();
                 // scan in a frame rotated by raster_angle, then rotate the segments back

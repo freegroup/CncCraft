@@ -34,7 +34,8 @@ impl ToolpathKind for ProfileTool {
         for ring in &rings {
             let pts = ring_dir(ring, self.climb);
             let spans = if self.tabs { tab_spans(&pts, self.tab_count, TAB_LENGTH + cx.tool.diameter) } else { vec![] };
-            for &z in &depths {
+            for (i, &z) in depths.iter().enumerate() {
+                out.set_top(cx.top_of(&depths, i));
                 let t = (!spans.is_empty() && z < tab_top).then_some((tab_top, spans.as_slice()));
                 out.cut_ring(&pts, z, t);
             }

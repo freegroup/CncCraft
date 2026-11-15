@@ -39,7 +39,7 @@ impl App {
         (&pp.job_start, &pp.job_end, &pp.on_tool_change, &pp.before_path, &pp.after_path, pp.tool_change).hash(&mut h);
         for &i in indices {
             let tp = &self.toolpaths[i];
-            (&tp.name, &tp.tool.name, tp.tool.number, tp.tool.rpm, tp.tool.feed.to_bits(), tp.tool.plunge.to_bits(), tp.strategy.label()).hash(&mut h);
+            (&tp.name, &tp.tool.name, tp.tool.rpm, tp.tool.feed.to_bits(), tp.tool.plunge.to_bits(), tp.strategy.label()).hash(&mut h);
             for m in &tp.moves {
                 m.rapid.hash(&mut h);
                 for c in m.to {

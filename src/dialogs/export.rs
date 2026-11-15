@@ -1,14 +1,14 @@
 //! Exporting the drawing to other programs' files (see `crate::export`): the window with the
 //! formats on the left and the chosen format's settings on the right.
 
-use super::{dialog_buttons, dialog_group, App, ACCENT, INK};
+use crate::app::{dialog_buttons, dialog_group, App, ACCENT, INK};
 use crate::export::{dxf, svg, Drawing, Piece, Unit, FORMATS};
 use crate::theme::muted;
 use egui::{Align2, RichText, Vec2};
 
 /// Which shapes go into the file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ExportScope {
+pub(in crate::app) enum ExportScope {
     All,
     Selected,
 }
@@ -60,20 +60,17 @@ impl App {
     }
 
     /// The export window, while it is open.
-    pub(super) fn export_file_ui(&mut self, ctx: &egui::Context) {
+    pub(in crate::app) fn export_file_ui(&mut self, ctx: &egui::Context) {
         if !self.export_file {
             return;
         }
         let (mut go, mut cancel) = (false, false);
         let count = self.export_drawing().pieces.len();
-        egui::Window::new(t!("Exportieren"))
-            .id(egui::Id::new("export_file_win"))
-            .collapsible(false)
-            .resizable(false)
+        super::window("export_file_win", ctx)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .frame(egui::Frame::window(&ctx.style()).fill(crate::theme::panel()).inner_margin(egui::Margin::symmetric(18.0, 16.0)))
             .show(ctx, |ui| {
                 ui.set_width(620.0);
+                super::header(ui, &t!("Exportieren"), false);
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width(160.0);
@@ -116,7 +113,7 @@ impl App {
     }
 
     /// Open the export window; "only selected" when something is selected.
-    pub(super) fn open_export_file(&mut self) {
+    pub(in crate::app) fn open_export_file(&mut self) {
         self.export_scope = if self.edit.selection.is_empty() { ExportScope::All } else { ExportScope::Selected };
         self.export_file = true;
     }

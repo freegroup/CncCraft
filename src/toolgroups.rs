@@ -9,7 +9,23 @@ use crate::transform::to_gcode;
 
 /// Whether two toolpaths are cut with the same tool, so no tool change is needed between them.
 pub fn same_tool(a: &Tool, b: &Tool) -> bool {
-    a.name == b.name && a.kind == b.kind && a.number == b.number && (a.diameter - b.diameter).abs() < 1e-9 && (a.angle - b.angle).abs() < 1e-9
+    a.name == b.name && a.kind == b.kind && (a.diameter - b.diameter).abs() < 1e-9 && (a.angle - b.angle).abs() < 1e-9
+}
+
+/// The tool number of each tool, in the given order: every different tool gets the next number
+/// (from 1) where it is first used, so nobody has to number tools by hand.
+pub fn numbers(tools: &[&Tool]) -> Vec<u32> {
+    let mut seen: Vec<&Tool> = vec![];
+    tools
+        .iter()
+        .map(|t| match seen.iter().position(|s| same_tool(s, t)) {
+            Some(i) => i as u32 + 1,
+            None => {
+                seen.push(t);
+                seen.len() as u32
+            }
+        })
+        .collect()
 }
 
 /// For each toolpath in list order: whether the list shows a tool entry above it, which is the case
@@ -60,6 +76,7 @@ pub fn file_part(name: &str) -> String {
 pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, scope: Option<&str>) -> Vec<(String, String)> {
     let tools: Vec<&Tool> = paths.iter().map(|t| &t.tool).collect();
     let all = groups(&tools);
+    let numbers = numbers(&tools);
     let count = all.len();
     let width = all.len().to_string().len().max(2);
     all
@@ -68,7 +85,7 @@ pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, sco
         .map(|(n, group)| {
             let part: Vec<&Toolpath> = group.iter().map(|&i| paths[i]).collect();
             let name = format!("{stem}_{:0width$}_{}.{}", n + 1, file_part(&paths[group[0]].tool.name), pp.ext);
-            let meta = to_gcode::ExportMeta { scope: scope.map(str::to_string), file: Some((n + 1, count)) };
+            let meta = to_gcode::ExportMeta { scope: scope.map(str::to_string), file: Some((n + 1, count)), tool_numbers: Some(group.iter().map(|&i| numbers[i]).collect()) };
             (name, to_gcode::write_with_meta(job, &part, pp, &meta))
         })
         .collect()

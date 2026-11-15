@@ -328,7 +328,7 @@ mod tests {
     }
 
     fn tool(kind: ToolKind, diameter: f64, angle: f64) -> Tool {
-        Tool { name: "test".into(), kind, diameter, angle, feed: 1000.0, plunge: 300.0, rpm: 18000, stepdown: 1.0, stepover: 1.0, number: 1 }
+        Tool { name: "test".into(), kind, diameter, angle, feed: 1000.0, plunge: 300.0, rpm: 18000, stepdown: 1.0, stepover: 1.0 }
     }
 
     /// A single straight cut along Y = 30 from X = 20 to X = 80 at depth `z`.
@@ -343,6 +343,7 @@ mod tests {
             cut_expr: None,
             shape_ids: vec![],
             visible: true,
+            ramp_angle: 0.0,
             moves: vec![
                 Move { to: [20.0, 30.0, 5.0], rapid: true },
                 Move { to: [20.0, 30.0, z], rapid: false },
@@ -401,7 +402,7 @@ mod tests {
             let a = k as f64 / 72.0 * std::f64::consts::TAU;
             moves.push(Move { to: [cx + rad * a.cos(), cy + rad * a.sin(), -2.0], rapid: false });
         }
-        let tp = Toolpath { name: "ring".into(), strategy: Strategy::Drill, tool: tool(ToolKind::EndMill, 3.0, 0.0), start_depth: 0.0, cut_depth: 2.0, start_expr: None, cut_expr: None, shape_ids: vec![], visible: true, moves, warning: None };
+        let tp = Toolpath { name: "ring".into(), strategy: Strategy::Drill, tool: tool(ToolKind::EndMill, 3.0, 0.0), start_depth: 0.0, cut_depth: 2.0, start_expr: None, cut_expr: None, shape_ids: vec![], visible: true, ramp_angle: 0.0, moves, warning: None };
         let mut hm = HeightMap::for_preview(&job(), SIMULATION_QUALITY);
         hm.carve(&tp, None);
         // all the way round, the groove's floor is cut and just past its walls nothing is:
@@ -440,6 +441,7 @@ mod tests {
             cut_expr: None,
             shape_ids: vec![],
             visible: true,
+            ramp_angle: 0.0,
             moves: vec![Move { to: [30.0, 30.0, 2.0], rapid: true }, Move { to: [30.0, 30.0, -5.0], rapid: false }, Move { to: [30.0, 30.0, 2.0], rapid: false }],
             warning: None,
         };

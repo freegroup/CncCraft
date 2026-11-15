@@ -181,34 +181,6 @@ pub(super) fn keys_for(action: Action) -> String {
     SHORTCUTS.iter().find(|s| s.action == action).map(Shortcut::keys).unwrap_or_default()
 }
 
-/// The "Tastenkürzel" window: every key in the table, then what keys do with the mouse.
-pub(super) fn window(ctx: &egui::Context, open: &mut bool) {
-    egui::Window::new(t!("Tastenkürzel")).id(egui::Id::new("Tastenkürzel")).open(open).collapsible(false).resizable(false).default_width(420.0).show(ctx, |ui| {
-        egui::Grid::new("shortcut-keys").num_columns(2).spacing([18.0, 4.0]).striped(true).show(ui, |ui| {
-            let mut seen = vec![];
-            for s in SHORTCUTS {
-                if seen.contains(&s.action) {
-                    continue;
-                }
-                seen.push(s.action);
-                let keys: Vec<String> = SHORTCUTS.iter().filter(|o| o.action == s.action).map(Shortcut::keys).collect();
-                ui.label(egui::RichText::new(keys.join("  ")).monospace().strong());
-                ui.label(s.what.get()).on_hover_text(s.source.get());
-                ui.end_row();
-            }
-        });
-        ui.add_space(8.0);
-        ui.label(egui::RichText::new(t!("Mit der Maus")).strong());
-        egui::Grid::new("shortcut-mouse").num_columns(2).spacing([18.0, 4.0]).show(ui, |ui| {
-            for (keys, what) in WITH_MOUSE {
-                ui.label(egui::RichText::new(keys.get()).monospace());
-                ui.label(what.get());
-                ui.end_row();
-            }
-        });
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

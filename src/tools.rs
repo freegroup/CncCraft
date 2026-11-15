@@ -58,7 +58,6 @@ pub struct Tool {
     pub stepdown: f64,
     /// mm
     pub stepover: f64,
-    pub number: u32,
 }
 
 #[derive(Deserialize)]
@@ -131,7 +130,6 @@ impl ToolLibrary {
                         rpm: r.rpm,
                         stepdown: r.stepdown,
                         stepover: r.stepover,
-                        number: 1,
                     },
                 })
             })
@@ -184,7 +182,6 @@ impl ToolLibrary {
             rpm: 16000,
             stepdown: dia / 3.0,
             stepover: dia * 0.4,
-            number: 1,
         })
     }
 
@@ -205,7 +202,6 @@ impl ToolLibrary {
             rpm: 16000,
             stepdown: dia / 3.0,
             stepover: dia * 0.4,
-            number: 1,
         }
     }
 }
