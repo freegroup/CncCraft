@@ -4,6 +4,8 @@
 
 **From idea to chips in minutes.** CncCraft is free, open-source CNC design software for makers: draw your part, add toolpaths, watch it mill in 3D, and send the G-Code to your machine — all in one fast, native app for macOS, Linux and Windows.
 
+> **Clean-room implementation.** CncCraft is an independent reimplementation built from scratch by observing the *behaviour* of the original software. **No source code was taken from Vectric Spark, and the original application was never decompiled, disassembled, or reverse-engineered.** Every line of code here is original work. CncCraft is not affiliated with, endorsed by, or connected to Vectric Ltd. "Vectric" and "Spark" are trademarks of their respective owners.
+
 <table>
 <tr>
 <td><img src="docs/assets/img/oberflaeche.png" alt="2D design canvas" width="480"/></td>
@@ -46,7 +48,5 @@ cargo run --release
 Releases are automated with [semantic-release](https://semantic-release.gitbook.io/): `fix:` commits cut a patch, `feat:` a minor and `feat!:` a major version. See [BUILD.md](BUILD.md) for packaging details.
 
 ---
-
-> **Clean-room implementation.** CncCraft is an independent program, inspired by how [Vectric Spark](https://www.vectric.com/products/spark) works. No source code was taken from it, and it was never decompiled, disassembled or reverse-engineered. CncCraft is not affiliated with Vectric Ltd.; "Vectric" and "Spark" are trademarks of their respective owners.
 
 Crafted with **CraftAnything** — more Craft Apps on the [freegroup GitHub profile](https://github.com/freegroup). Licensed under [MIT](LICENSE).
