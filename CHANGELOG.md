@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/freegroup/CncCraft/compare/v1.8.0...v1.9.0) (2026-11-15)
+
+
+### Features
+
+* a close button on every dialog, and "Apply" instead of "Calculate" ([e53ea6a](https://github.com/freegroup/CncCraft/commit/e53ea6ab5c589737f2c8127274c0b1879de174fe))
+
 # [1.8.0](https://github.com/freegroup/CncCraft/compare/v1.7.0...v1.8.0) (2026-11-15)
 
 
