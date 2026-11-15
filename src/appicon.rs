@@ -1,12 +1,25 @@
 //! The program's icon, drawn in code (so there is no picture file to ship): a teal rounded square
-//! with a white hub – a centre node with six arms that end in smaller nodes – after the picture the
-//! person chose.
+//! with a white mark of eight rounded petals around the centre – four straight ones and four that
+//! reach into the corners – after the picture the person chose.
 
 const TEAL_TOP: [f32; 3] = [0.20, 0.78, 0.75];
 const TEAL_BOTTOM: [f32; 3] = [0.10, 0.62, 0.62];
 
-/// The arms: their direction in degrees (0 = right, 90 = down) and length, in parts of the icon's width.
-const ARMS: [(f32, f32); 6] = [(-135.0, 0.31), (-75.0, 0.33), (-15.0, 0.32), (45.0, 0.30), (105.0, 0.32), (165.0, 0.33)];
+/// Half the width of the mark, in parts of the icon's width.
+const HALF: f32 = 0.31;
+/// How round the petals' corners are, in parts of `HALF`.
+const ROUND: f32 = 0.05;
+
+/// The straight petal pointing up, without its rounding (in parts of `HALF`, centre at 0, y down).
+const STRAIGHT: [[f32; 2]; 5] = [[-0.15, -0.95], [0.15, -0.95], [0.215, -0.75], [0.0, -0.19], [-0.215, -0.75]];
+/// The petal reaching into the upper left corner, without its rounding.
+const DIAGONAL: [[f32; 2]; 5] = [[-0.95, -0.95], [-0.72, -0.95], [-0.27, -0.33], [-0.33, -0.27], [-0.95, -0.72]];
+
+/// All eight petals: each base petal turned by 0°, 90°, 180° and 270°.
+fn petals() -> Vec<Vec<[f32; 2]>> {
+    let turn = |p: [f32; 2], k: usize| (0..k).fold(p, |q, _| [-q[1], q[0]]);
+    (0..4).flat_map(|k| [STRAIGHT, DIAGONAL].map(|base| base.iter().map(|&p| turn(p, k)).collect())).collect()
+}
 
 fn dist_to_segment(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     let (ab, ap) = ([b[0] - a[0], b[1] - a[1]], [p[0] - a[0], p[1] - a[1]]);
@@ -14,20 +27,21 @@ fn dist_to_segment(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     ((p[0] - a[0] - ab[0] * t).powi(2) + (p[1] - a[1] - ab[1] * t).powi(2)).sqrt()
 }
 
-/// Whether the point (0..1, 0..1) lies in the white hub.
-fn in_hub(p: [f32; 2]) -> bool {
-    let c = [0.5, 0.5];
-    if ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt() < 0.125 {
-        return true;
+fn inside_polygon(p: [f32; 2], poly: &[[f32; 2]]) -> bool {
+    let mut inside = false;
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]) {
+            inside = !inside;
+        }
     }
-    ARMS.iter().any(|&(deg, len)| {
-        let (s, k) = (deg.to_radians().sin(), deg.to_radians().cos());
-        let end = [c[0] + k * len, c[1] + s * len];
-        // the arm is thicker at the centre and thinner at its node
-        let along = dist_to_segment(p, c, end);
-        let width = 0.045 - 0.012 * (((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt() / len).min(1.0);
-        along < width || ((p[0] - end[0]).powi(2) + (p[1] - end[1]).powi(2)).sqrt() < 0.075
-    })
+    inside
+}
+
+/// Whether the point (0..1, 0..1) lies in the white mark.
+fn in_mark(p: [f32; 2], petals: &[Vec<[f32; 2]>]) -> bool {
+    let q = [(p[0] - 0.5) / HALF, (p[1] - 0.5) / HALF];
+    petals.iter().any(|poly| inside_polygon(q, poly) || (0..poly.len()).any(|i| dist_to_segment(q, poly[i], poly[(i + 1) % poly.len()]) < ROUND))
 }
 
 /// Whether the point lies in the rounded square.
@@ -41,6 +55,7 @@ fn in_square(p: [f32; 2]) -> bool {
 /// The icon as RGBA pixels, `size` × `size`.
 pub fn rgba(size: u32) -> Vec<u8> {
     const SAMPLES: u32 = 3;
+    let petals = petals();
     let mut out = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
@@ -52,7 +67,7 @@ pub fn rgba(size: u32) -> Vec<u8> {
                         continue;
                     }
                     cover += 1.0;
-                    if in_hub(p) {
+                    if in_mark(p, &petals) {
                         white += 1.0;
                         continue;
                     }
@@ -83,13 +98,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_corners_are_clear_and_the_middle_is_white() {
+    fn the_corners_are_clear_the_petals_white_and_the_centre_open() {
         let n = 128;
         let px = rgba(n);
         let at = |x: u32, y: u32| &px[((y * n + x) * 4) as usize..((y * n + x) * 4 + 4) as usize];
         assert_eq!(at(0, 0)[3], 0, "a corner of the rounded square is transparent");
-        let mid = at(n / 2, n / 2);
-        assert!(mid[0] > 240 && mid[1] > 240 && mid[2] > 240 && mid[3] == 255, "the hub is white");
+        let centre = at(n / 2, n / 2);
+        assert!(centre[3] == 255 && centre[0] < 120, "the petals leave the centre teal");
+        let top_petal = at(n / 2, (n as f32 * (0.5 - 0.6 * HALF)) as u32);
+        assert!(top_petal[0] > 240 && top_petal[1] > 240 && top_petal[2] > 240, "the upper petal is white");
+        let corner_petal = at((n as f32 * (0.5 - 0.85 * HALF)) as u32, (n as f32 * (0.5 - 0.85 * HALF)) as u32);
+        assert!(corner_petal[0] > 240, "the corner petal is white");
         let edge = at(n / 2, 6);
         assert!(edge[3] == 255 && edge[0] < 120 && edge[1] > 120, "the square is teal");
     }
