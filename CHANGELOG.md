@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/freegroup/CncCraft/compare/v1.9.0...v1.9.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* Code-Änderungen ohne feat:/fix: automatisch als Patch freigegeben ([5bfafaa](https://github.com/freegroup/CncCraft/commit/5bfafaabccf6f88712892c34a930851102dc8194))
+
 # [1.9.0](https://github.com/freegroup/CncCraft/compare/v1.8.0...v1.9.0) (2026-11-15)
 
 
