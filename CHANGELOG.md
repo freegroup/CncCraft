@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/freegroup/CncCraft/compare/v1.7.0...v1.8.0) (2026-11-15)
+
+
+### Features
+
+* ramp into the material, number tools per job, give all dialogs one look ([b749774](https://github.com/freegroup/CncCraft/commit/b749774fcaab02ab6b27c02efef87bc784cbb69b))
+
 # [1.7.0](https://github.com/freegroup/CncCraft/compare/v1.6.0...v1.7.0) (2026-11-15)
 
 
