@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/freegroup/CncCraft/compare/v1.9.1...v1.10.0) (2026-11-16)
+
+
+### Features
+
+* add spiral pocket clearing and refactor strategies into sub-module ([534bbec](https://github.com/freegroup/CncCraft/commit/534bbecc2958079b08ee445b646438b77cb21f7d))
+
 ## [1.9.1](https://github.com/freegroup/CncCraft/compare/v1.9.0...v1.9.1) (2026-11-15)
 
 
