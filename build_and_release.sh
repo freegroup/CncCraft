@@ -25,7 +25,7 @@ die() { echo "FEHLER: $*" >&2; exit 1; }
 # -------------------------------------------------- Voraussetzungen
 [ "$(uname -s)" = "Darwin" ] || die "Dieses Skript baut macOS-Pakete und läuft nur auf einem Mac."
 command -v gh >/dev/null 2>&1 || die "GitHub-CLI 'gh' nicht gefunden (brew install gh)."
-gh auth status >/dev/null 2>&1 || die "Bitte zuerst mit 'gh auth login' anmelden."
+gh auth status --hostname github.com >/dev/null 2>&1 || die "Bitte zuerst mit 'gh auth login' anmelden."
 
 REPO="freegroup/$NAME"
 GH_USER="${REPO%%/*}"   # Konto, das dieses Repo beschreiben darf (= Repo-Owner)
