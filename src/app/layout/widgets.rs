@@ -69,12 +69,14 @@ pub(super) fn toolbar_group(ui: &mut egui::Ui, name: &str, add: impl FnOnce(&mut
 }
 
 /// A ComboBox whose popup has a scrollable item list and a pinned "Verwalten…" button below it.
-/// `items` draws the selectable rows; returns `true` when "Verwalten…" was clicked.
+/// `items` draws the selectable rows; returns `true` when "Verwalten…" was clicked. `tip` shows
+/// while the list is closed.
 pub(in crate::app) fn combo_with_manage(
     ui: &mut egui::Ui,
     id: &str,
     width: f32,
     selected: &str,
+    tip: Option<&crate::app::Tip>,
     items: impl FnOnce(&mut egui::Ui),
 ) -> bool {
     let widget_id = ui.make_persistent_id(id);
@@ -90,7 +92,11 @@ pub(in crate::app) fn combo_with_manage(
         ui.visuals().text_color(),
     );
     let desired = Vec2::new(total_w, galley.size().y.max(icon_size.y) + 2.0 * margin.y);
-    let (rect, button) = ui.allocate_exact_size(desired, Sense::click());
+    let (rect, mut button) = ui.allocate_exact_size(desired, Sense::click());
+    if let (Some(tip), false) = (tip, is_open) {
+        use crate::app::WithTip;
+        button = button.tip(tip);
+    }
 
     if ui.is_rect_visible(rect) {
         let visuals = if is_open {

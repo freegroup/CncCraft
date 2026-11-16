@@ -2,7 +2,7 @@
 //! by tan(half the tip angle). Approximated by cutting inward-offset rings, each at its depth,
 //! down to the cutter's reach or an optional flat-depth limit.
 
-use super::{ring_dir, CutContext, Out, ToolpathKind};
+use crate::toolpath::{ring_dir, CutContext, Out, ToolpathKind};
 use crate::geom::{Region, Ring};
 
 pub struct VCarveTool {

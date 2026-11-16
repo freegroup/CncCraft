@@ -21,10 +21,12 @@ mod selftest;
 mod selftest_vector_ops;
 mod shortcuts;
 mod spline_deco;
+mod tooltip;
 mod variables;
 mod vector_ops;
 
-use icons::icon_button;
+use icons::{icon_button, icon_button_tip};
+use tooltip::{Tip, WithTip};
 use layout::ToolForm;
 
 use shortcuts::Action;
@@ -34,7 +36,7 @@ use crate::geom::{dist, Item, Pt, Region};
 use crate::sheet;
 use crate::sim::{self, Camera, HeightMap};
 use crate::tools::{material_label, Tool, ToolKind, ToolLibrary, MATERIALS};
-use crate::toolpath::{default_toolpath, Datum, Job, Move, Side, Strategy, Toolpath, ZZero};
+use crate::toolpath::{default_toolpath, Clearing, Datum, Job, Move, Side, Strategy, Toolpath, ZZero};
 use crate::theme::{ink, muted, canvas, separator, ACCENT, ACCENT_DEEP, CONSTRAINT, INK, MUTED, PRIMARY, SELECT};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Stroke, Vec2};
 use shape_edit::{
@@ -2666,6 +2668,19 @@ impl eframe::App for App {
             self.tool_column(ctx);
             self.tool_form_panel(ctx);
             self.toolpath_panel(ctx);
+        }
+        // a tooltip with an icon and one without, held on screen to review their look
+        if self.shot.is_some() && std::env::var("CNCCRAFT_SHOW_TIP").is_ok() {
+            let tips = [
+                (Pos2::new(320.0, 110.0), Tip::new(t!("Tasche"), t!("Räumt die Fläche innerhalb geschlossener Vektoren bis zur Zieltiefe aus: als Ringe von innen nach außen, hin und her im Raster oder als eine durchgehende Spirale. Flächen innerhalb der Tasche bleiben als Inseln stehen.")).icon(Icon::Pocket).big(), false),
+                (Pos2::new(320.0, 260.0), layout::tool_tip(Icon::Union), true),
+                (Pos2::new(320.0, 380.0), Tip::new(t!("Zustellung"), t!("So tief schneidet der Fräser je Durchgang. Die Zieltiefe wird in gleich große Durchgänge geteilt.")), false),
+            ];
+            for (i, (at, tip, disabled)) in tips.iter().enumerate() {
+                egui::Area::new(egui::Id::new(("review_tip", i))).order(egui::Order::Tooltip).fixed_pos(*at).show(ctx, |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| if *disabled { tip.show_disabled(ui) } else { tip.show(ui) });
+                });
+            }
         }
         egui::CentralPanel::default().frame(egui::Frame::none()).show(ctx, |ui| {
             if self.start_page {

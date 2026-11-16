@@ -2,7 +2,7 @@
 //! hints floating on it.
 
 use crate::app::shortcuts::Action;
-use crate::app::{icon_button, App, Icon, ViewMode};
+use crate::app::{icon_button, icon_button_tip, App, Icon, Tip, ViewMode};
 use crate::theme::{hairline, ink};
 use egui::{Pos2, Sense, Stroke, Vec2};
 use shape_edit::selection_bounds;
@@ -25,24 +25,26 @@ impl App {
                 // the last entry of its tool list, 0x10011d034)
                 toolbar_group(ui, &t!("Dekoration"), |ui| {
                     let shown = self.origin_shown();
-                    if icon_button(ui, Icon::Origin, shown, &t!("Nullpunkt anzeigen / ausblenden (Achsenkreuz im Blatt und in der 3D-Ansicht)")).clicked() {
+                    if icon_button_tip(ui, Icon::Origin, shown, Tip::new(t!("Nullpunkt"), t!("Zeigt oder versteckt das Achsenkreuz im Blatt und in der 3D-Ansicht."))).clicked() {
                         self.set_origin_shown(!shown);
                     }
-                    if icon_button(ui, Icon::Grid, self.snap_grid, &t!("Am Raster einrasten")).clicked() {
+                    let grid = icon_button_tip(ui, Icon::Grid, self.snap_grid, Tip::new(t!("Am Raster einrasten"), t!("Punkte springen beim Zeichnen und Verschieben auf das nächste Rasterkreuz.")));
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("cnccraft_grid_button"), grid.rect));
+                    if grid.clicked() {
                         self.snap_grid = !self.snap_grid;
                     }
-                    if icon_button(ui, Icon::Snap, self.snap_geometry, &t!("An Geometrie einrasten")).clicked() {
+                    if icon_button_tip(ui, Icon::Snap, self.snap_geometry, Tip::new(t!("An Geometrie einrasten"), t!("Punkte springen auf Ecken, Mitten und Linien vorhandener Formen."))).clicked() {
                         self.snap_geometry = !self.snap_geometry;
                     }
-                    if icon_button(ui, Icon::Dimensions, self.show_dims, &t!("Maße anzeigen / ausblenden (Maße blau = Constraint; Linien sind immer blau = frei, schwarz = Länge festgelegt)")).clicked() {
+                    if icon_button_tip(ui, Icon::Dimensions, self.show_dims, Tip::new(t!("Maße anzeigen"), t!("Blaue Maße sind Constraints. Linien: blau = frei, schwarz = Länge festgelegt."))).clicked() {
                         self.show_dims = !self.show_dims;
                     }
                 });
                 toolbar_group(ui, &t!("Constraints"), |ui| {
-                    if icon_button(ui, Icon::Distance, self.dim_mode.is_some(), &t!("Abstand bemaßen (D): zwei Punkte oder Punkt und Linie wählen, dann den Abstand eingeben")).clicked() {
+                    if icon_button_tip(ui, Icon::Distance, self.dim_mode.is_some(), Tip::new(t!("Abstand bemaßen"), t!("Zwei Punkte oder einen Punkt und eine Linie wählen, dann den Abstand eingeben.")).shortcut("D")).clicked() {
                         self.toggle_dim_mode();
                     }
-                    if icon_button(ui, Icon::Align, self.align_mode.is_some(), &t!("Waagrecht/Senkrecht (H): eine Linie oder zwei Punkte wählen, CncCraft legt sie waagrecht oder senkrecht fest")).clicked() {
+                    if icon_button_tip(ui, Icon::Align, self.align_mode.is_some(), Tip::new(t!("Waagrecht / Senkrecht"), t!("Eine Linie oder zwei Punkte wählen; CncCraft legt sie waagrecht oder senkrecht fest.")).shortcut("H")).clicked() {
                         self.toggle_align_mode();
                     }
                 });

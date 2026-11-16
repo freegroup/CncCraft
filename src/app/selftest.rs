@@ -108,7 +108,49 @@ const STAGES: &[Stage] = &[
     stage("Ohr: eine andere Ecke bekommt ein Ohr, die gerundete bleibt", super::selftest_vector_ops::fillet_outer_gives_an_ear),
     stage("Abrunden: Klick auf die gerundete Ecke wählt sie für ihren Radius", super::selftest_vector_ops::fillet_click_picks_the_corner),
     stage("Werkzeugweg-Dialog: die ComboBox ist immer über dem Dialog", combobox_above_dialog),
+    stage("Tooltip: über dem Raster-Knopf erscheinen Überschrift, Text und links das Icon", tooltip_with_icon),
+    stage("Tooltip: ein ausgegrautes Werkzeug zeigt seinen Tooltip und darunter den Grund", tooltip_on_disabled_tool),
 ];
+
+/// Resting the pointer on "Vereinen" with nothing selected: the same tip, and the reason below it.
+fn tooltip_on_disabled_tool(app: &mut App) -> (Vec<Event>, Check) {
+    app.edit.selection.clear();
+    app.tools_open = true;
+    let ctx = app.egui_ctx.clone().expect("the window has drawn a frame");
+    ctx.data_mut(|d| d.remove::<super::tooltip::Shown>(super::tooltip::shown_id()));
+    let at = ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("cnccraft_union_button"))).map(|r| r.center()).unwrap_or_default();
+    let mut events: Vec<Event> = vec![Event::PointerMoved(at + Vec2::new(0.0, 60.0))];
+    events.extend((0..60).map(|_| Event::PointerMoved(at)));
+    let check: Check = Box::new(move |app| {
+        let shown = app.egui_ctx.as_ref().and_then(|c| c.data(|d| d.get_temp::<super::tooltip::Shown>(super::tooltip::shown_id())));
+        let msg = format!("Knopf bei {at:?}, gezeigter Tooltip {shown:?}");
+        if shown.as_ref().is_some_and(|(h, icon, _shortcut, reason)| h == "Vereinen" && *icon && reason.as_deref() == Some("Erst mindestens zwei Formen auswählen.")) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (events, check)
+}
+
+/// Resting the pointer on a toolbar button shows its tip: the header, and the button's icon on the left.
+fn tooltip_with_icon(app: &mut App) -> (Vec<Event>, Check) {
+    let ctx = app.egui_ctx.clone().expect("the window has drawn a frame");
+    ctx.data_mut(|d| d.remove::<super::tooltip::Shown>(super::tooltip::shown_id()));
+    let at = ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("cnccraft_grid_button"))).map(|r| r.center()).unwrap_or_default();
+    // rest there for a second (60 frames): egui shows a tip once the pointer has stood still
+    let events = (0..60).map(|_| Event::PointerMoved(at)).collect();
+    let check: Check = Box::new(move |app| {
+        let shown = app.egui_ctx.as_ref().and_then(|c| c.data(|d| d.get_temp::<super::tooltip::Shown>(super::tooltip::shown_id())));
+        let msg = format!("Knopf bei {at:?}, gezeigter Tooltip {shown:?}");
+        if shown == Some(("Am Raster einrasten".to_string(), true, None, None)) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (events, check)
+}
 
 /// Selecting a shape lights up the toolpaths that cut it in the list, and only those; with nothing
 /// selected nothing lights up.

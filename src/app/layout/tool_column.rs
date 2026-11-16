@@ -1,6 +1,6 @@
 //! The tool column on the left, grouped like the original's, with the form a tool can open beside it.
 
-use crate::app::{icon_button, App, DrawTool, Icon, ViewMode};
+use crate::app::{icon_button_tip, App, DrawTool, Icon, Tip, ViewMode};
 use crate::theme::{ink, muted};
 use egui::{Stroke, Vec2};
 use shape_edit::Flip;
@@ -48,26 +48,49 @@ const CELL: f32 = 38.0;
 
 pub(super) const GAP: f32 = 4.0;
 
-pub(in crate::app) fn tip(icon: Icon) -> String {
-    match icon {
-        Icon::Draw(t) => t.tip(),
-        Icon::Transform => t!("Objekte transformieren (Lage und Größe eingeben)"),
-        Icon::Offset => t!("Vektoren versetzen"),
-        Icon::MirrorH => t!("Waagrecht spiegeln"),
-        Icon::MirrorV => t!("Senkrecht spiegeln"),
-        Icon::Center => t!("Auf dem Material zentrieren"),
-        Icon::Curves => t!("In Kurven umwandeln"),
-        Icon::Delete => t!("Löschen"),
-        Icon::Union => t!("Vereinen (mindestens zwei Formen)"),
-        Icon::Subtract => t!("Abziehen: die zuerst gewählte Form minus die anderen"),
-        Icon::Intersect => t!("Schnittmenge (mindestens zwei Formen)"),
-        Icon::Job => t!("Job einrichten (Größe, Material, Nullpunkt)"),
-        Icon::Group => t!("Gruppieren (⌘G): die Auswahl wird eine Gruppe; auch Gruppen lassen sich gruppieren"),
-        Icon::Ungroup => t!("Gruppe auflösen (⌘⇧G): löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick"),
-        Icon::ImportDxf => t!("DXF-Zeichnung importieren (R12, R14 und neuer); Rechtsklick auf eine importierte Form: neu von Platte laden"),
-        Icon::Variables => t!("Variablen (f(x): benannte Werte für die Maße)"),
-        _ => String::new(),
-    }
+/// The command key as the person's keyboard writes it.
+fn cmd(key: &str) -> String {
+    if cfg!(target_os = "macos") { format!("⌘{key}") } else { format!("Strg+{key}") }
+}
+
+/// The tip of a tool column icon: what it is called (with its key), what it does in one or two
+/// short sentences, and, while it can't be used, what it needs first.
+pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
+    let pick_one = t!("Erst eine oder mehrere Formen auswählen.");
+    let pick_two = t!("Erst mindestens zwei Formen auswählen.");
+    let tip = match icon {
+        Icon::Draw(DrawTool::Select) => Tip::new(t!("Auswählen"), t!("Formen anklicken oder mit einem Rahmen wählen und verschieben. Mit Umschalt kommen weitere dazu.")).shortcut("S"),
+        Icon::Draw(DrawTool::NodeEdit) => Tip::new(t!("Knoten bearbeiten"), t!("Die Punkte eines Vektors ziehen. Doppelklick auf eine Linie fügt einen Punkt ein, Entf löscht ihn.")).shortcut("N"),
+        Icon::Draw(DrawTool::Polyline) => Tip::new(t!("Linie"), t!("Gerade Linien Punkt für Punkt. Doppelklick oder Enter beendet, Tab schließt den Linienzug.")).shortcut("L"),
+        Icon::Draw(DrawTool::Spline) => Tip::new(t!("Spline"), t!("Eine weiche Kurve durch die geklickten Punkte. Doppelklick oder Enter beendet, ein Klick auf den Anfang schließt sie.")).shortcut("P"),
+        Icon::Draw(DrawTool::Rect) => Tip::new(t!("Rechteck"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe lassen sich danach genau eintippen.")).shortcut("R"),
+        Icon::Draw(DrawTool::Circle) => Tip::new(t!("Kreis"), t!("Vom Mittelpunkt aus aufziehen. Den Durchmesser danach genau eintippen.")).shortcut("C"),
+        Icon::Draw(DrawTool::Ellipse) => Tip::new(t!("Ellipse"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe danach genau eintippen.")),
+        Icon::Draw(DrawTool::Polygon) => Tip::new(t!("Polygon"), t!("Ein regelmäßiges Vieleck vom Mittelpunkt aus aufziehen. Die Zahl der Ecken unter „Eigenschaften“ ändern.")),
+        Icon::Draw(DrawTool::Text) => Tip::new(t!("Text"), t!("Ein Klick setzt einen Text; den Inhalt unter „Eigenschaften“ ändern. Die Buchstaben lassen sich fräsen oder gravieren.")),
+        Icon::Draw(DrawTool::Trim) => Tip::new(t!("Trennen"), t!("Einen Vektor anklicken: Er wird an jeder Kreuzung mit anderen Vektoren geteilt.")).shortcut("T"),
+        Icon::Draw(DrawTool::Erase) => Tip::new(t!("Vektor löschen"), t!("Einen Vektor oder ein getrenntes Stück anklicken: Es wird gelöscht.")),
+        Icon::Draw(DrawTool::Connect) => Tip::new(t!("Verbinden"), t!("Zwei Punkte nacheinander anklicken: Sie werden mit einer Linie verbunden. Beide Enden eines Linienzugs schließen ihn.")),
+        Icon::Draw(DrawTool::FilletOuter) => Tip::new(t!("Ohr"), t!("Eine Ecke anklicken: Sie bekommt einen Kreis um den Eckpunkt, damit ein runder Fräser ganz in die Ecke kommt. Radius im Formular links.")),
+        Icon::Draw(DrawTool::FilletInner) => Tip::new(t!("Abrunden"), t!("Eine Ecke anklicken: Sie wird mit dem Radius aus dem Formular links abgerundet. Der Radius bleibt jederzeit änderbar.")),
+        Icon::Transform => Tip::new(t!("Transformieren"), t!("Lage und Größe der Auswahl genau eintippen.")),
+        Icon::Offset => Tip::new(t!("Versetzen"), t!("Eine neue Kontur im festen Abstand außen oder innen um die Auswahl.")).shortcut("O"),
+        Icon::MirrorH => Tip::new(t!("Waagrecht spiegeln"), t!("Spiegelt die Auswahl an ihrer senkrechten Mitte (links wird rechts).")).when_disabled(pick_one),
+        Icon::MirrorV => Tip::new(t!("Senkrecht spiegeln"), t!("Spiegelt die Auswahl an ihrer waagrechten Mitte (oben wird unten).")).when_disabled(pick_one),
+        Icon::Center => Tip::new(t!("Auf dem Material zentrieren"), t!("Schiebt die Auswahl in die Mitte der Platte.")).when_disabled(pick_one),
+        Icon::Curves => Tip::new(t!("In Kurven umwandeln"), t!("Macht aus Rechteck, Kreis, Text und Co. frei bearbeitbare Vektoren. Ihre Maße lassen sich danach nicht mehr eintippen.")).when_disabled(pick_one),
+        Icon::Delete => Tip::new(t!("Löschen"), t!("Entfernt die ausgewählten Formen.")).shortcut("Entf").when_disabled(pick_one),
+        Icon::Union => Tip::new(t!("Vereinen"), t!("Macht aus sich überlappenden Formen eine gemeinsame Umrissform.")).when_disabled(pick_two),
+        Icon::Subtract => Tip::new(t!("Abziehen"), t!("Die zuerst gewählte Form minus alle anderen.")).when_disabled(pick_two),
+        Icon::Intersect => Tip::new(t!("Schnittmenge"), t!("Behält nur die Fläche, die alle gewählten Formen gemeinsam haben.")).when_disabled(pick_two),
+        Icon::Group => Tip::new(t!("Gruppieren"), t!("Die Auswahl wird eine Gruppe: Ein Klick wählt dann alles. Gruppen lassen sich wieder gruppieren.")).shortcut(cmd("G")).when_disabled(pick_two),
+        Icon::Ungroup => Tip::new(t!("Gruppe auflösen"), t!("Löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick.")).shortcut(cmd("⇧G")).when_disabled(t!("Erst eine Gruppe auswählen.")),
+        Icon::ImportDxf => Tip::new(t!("DXF importieren"), t!("Holt eine Zeichnung aus einer DXF-Datei (R12, R14 und neuer) als eine Gruppe. Rechtsklick auf die Form lädt sie neu von der Platte.")),
+        Icon::Job => Tip::new(t!("Job einrichten"), t!("Größe und Dicke der Platte, Material und wo der Nullpunkt liegt.")),
+        Icon::Variables => Tip::new(t!("Variablen"), t!("Benannte Werte wie „breite“, die Maße, Tiefen und Abstände verwenden. Ändert man den Wert, folgt alles.")),
+        _ => Tip::new(String::new(), String::new()),
+    };
+    tip.icon(icon)
 }
 
 impl App {
@@ -132,7 +155,6 @@ impl App {
                                 *at = resp.rect.right_top() + Vec2::new(6.0, 0.0);
                             }
                         }
-                        let resp = resp.on_hover_text(GROUP_NAMES[g].get());
                         if resp.clicked() {
                             if group.len() == 1 {
                                 clicked = Some(shown);
@@ -225,7 +247,11 @@ impl App {
 
     fn column_icon(&self, ui: &mut egui::Ui, icon: Icon) -> egui::Response {
         let (selected, enabled) = self.icon_state(icon);
-        ui.add_enabled_ui(enabled, |ui| icon_button(ui, icon, selected, &tip(icon))).inner
+        let resp = ui.add_enabled_ui(enabled, |ui| icon_button_tip(ui, icon, selected, tool_tip(icon))).inner;
+        if icon == Icon::Union {
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("cnccraft_union_button"), resp.rect));
+        }
+        resp
     }
 
     pub(in crate::app) fn column_click(&mut self, icon: Icon) {

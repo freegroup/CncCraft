@@ -17,5 +17,5 @@ mod tool_column;
 mod toolpath_panel;
 mod widgets;
 
-pub(in crate::app) use tool_column::{ToolForm, GROUP_COUNT};
+pub(in crate::app) use tool_column::{tool_tip, ToolForm, GROUP_COUNT};
 pub(in crate::app) use widgets::combo_with_manage;

@@ -1,7 +1,7 @@
 //! The toolpath panel on the right: the list of toolpaths with their operations on top, the
 //! simulation and export below, and the editor window of one toolpath.
 
-use crate::app::{fmt_time, icon_button, tp_color, App, Editor, Icon};
+use crate::app::{fmt_time, icon_button_tip, tp_color, App, Editor, Icon, Tip};
 use crate::sim;
 use crate::theme::{ACCENT, hairline, ink, muted};
 use crate::toolpath::Strategy;
@@ -115,15 +115,16 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(GAP);
             // in the original's order (0x10052b5f4): cutout, profile, pocket, drilling, V-carve
-            for (icon, kind, hint) in [
-                (Icon::Cutout, "cutout", t!("Ausschnitt (Teil heraustrennen)")),
-                (Icon::Profile, "profile", t!("Profil-Werkzeugweg")),
-                (Icon::Pocket, "pocket", t!("Taschen-Werkzeugweg")),
-                (Icon::Drill, "drill", t!("Bohr-Werkzeugweg")),
-                (Icon::VCarve, "vcarve", t!("V-Carving-Werkzeugweg")),
+            for (icon, kind, header, text) in [
+                (Icon::Cutout, "cutout", t!("Ausschnitt"), t!("Trennt das Teil aus der Platte heraus: Der Fräser läuft außen um die Kontur und schneidet in mehreren Durchgängen ganz durch. Haltestege halten das Teil fest, bis alles fertig ist; danach werden sie von Hand durchtrennt.")),
+                (Icon::Profile, "profile", t!("Profil"), t!("Fräst entlang der gewählten Vektoren bis zur Zieltiefe – außen, innen oder genau auf der Linie. Für Konturen, Nuten und Kanten. Offene Linien werden hin und her gefräst, Tiefe für Tiefe.")),
+                (Icon::Pocket, "pocket", t!("Tasche"), t!("Räumt die Fläche innerhalb geschlossener Vektoren bis zur Zieltiefe aus: als Ringe von innen nach außen, hin und her im Raster oder als eine durchgehende Spirale. Flächen innerhalb der Tasche bleiben als Inseln stehen.")),
+                (Icon::Drill, "drill", t!("Bohren"), t!("Bohrt in der Mitte jedes gewählten Kreises bzw. jeder geschlossenen Kontur ein Loch bis zur Zieltiefe. Gebohrt wird in gleich großen Hüben; nach jedem Hub fährt der Bohrer ganz heraus, damit die Späne abgeführt werden.")),
+                (Icon::VCarve, "vcarve", t!("V-Carving"), t!("Graviert mit einem V-Fräser: Die Tiefe folgt der Breite der Form – schmale Stellen bleiben flach, breite werden tief. So entstehen scharfe Kanten und Ecken, ideal für Schrift und Ornamente.")),
             ] {
                 let on = self.editor.as_ref().is_some_and(|e| e.kind == kind && e.index.is_none());
-                if icon_button(ui, icon, on, &hint).clicked() {
+                let tip = Tip::new(header, text).big();
+                if icon_button_tip(ui, icon, on, tip).clicked() {
                     self.open_editor(kind);
                 }
             }

@@ -129,7 +129,8 @@ impl App {
                 ui.vertical(|ui| {
                     ui.set_width(column);
                     group_down_to(ui, &t!("Werkzeug"), "tp_tool", right_bottom.map(|b| b - 6.0 - 10.0 - 1.0 - 5.0), |ui| {
-                        ui.label(t!("Fräser"));
+                        let tool_tip = Tip::new(t!("Fräser"), t!("Das Werkzeug aus der Bibliothek für das gewählte Material. Verwalten… öffnet die Werkzeugbibliothek."));
+                        ui.label(t!("Fräser")).tip(&tool_tip);
                         let allowed: Vec<&Tool> = tools
                             .iter()
                             .filter(|t| match tp.strategy {
@@ -139,7 +140,7 @@ impl App {
                             })
                             .collect();
                         let tool_label = crate::tools::shown_name(&tp.tool.name);
-                        if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, |ui| {
+                        if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, Some(&tool_tip), |ui| {
                             for t in &allowed {
                                 if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, crate::tools::shown_name(&t.name)).clicked() {
                                     tp.tool = (*t).clone();
@@ -149,8 +150,15 @@ impl App {
                             open_tool_dlg = true;
                         }
                         ui.end_row();
-                        ui.label(t!("Zustellung"));
-                        ui.add(mm(&mut tp.tool.stepdown, 50.0));
+                        if matches!(tp.strategy, Strategy::Drill) {
+                            let tip = Tip::new(t!("Bohrtiefe je Hub"), t!("So tief bohrt der Bohrer auf einmal, dann fährt er ganz aus dem Loch, damit die Späne herauskommen. Die Tiefe wird in gleich große Hübe geteilt.")).icon(Icon::Drill);
+                            ui.label(t!("Bohrtiefe je Hub")).tip(&tip);
+                            ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                        } else {
+                            let tip = Tip::new(t!("Zustellung"), t!("So tief schneidet der Fräser je Durchgang. Die Zieltiefe wird in gleich große Durchgänge geteilt."));
+                            ui.label(t!("Zustellung")).tip(&tip);
+                            ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                        }
                         ui.end_row();
                         if !matches!(tp.strategy, Strategy::Drill) {
                             ui.label(t!("Querzustellung"));
@@ -190,22 +198,26 @@ impl App {
                                 ui.label(t!("Haltestege"));
                                 ui.horizontal(|ui| {
                                     ui.checkbox(tabs, "");
-                                    ui.add_enabled(*tabs, egui::DragValue::new(tab_count).range(1..=12).suffix(t!(" Stück")));
+                                    let tip = Tip::new(t!("Haltestege"), t!("So viele Stege bleiben stehen und halten das Teil, gleichmäßig um die Kontur verteilt.")).when_disabled(t!("Erst das Häkchen bei Haltestege setzen."));
+                                    ui.add_enabled(*tabs, egui::DragValue::new(tab_count).range(1..=12).suffix(t!(" Stück"))).tip(&tip);
                                 });
                                 ui.end_row();
                                 ui.label(t!("Fräsrichtung"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(climb, true, t!("Gleichlauf"));
-                                    ui.radio_value(climb, false, t!("Gegenlauf"));
+                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")));
+                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")));
                                 });
                                 ui.end_row();
                             }
-                            Strategy::Pocket { raster, climb, raster_angle } => {
+                            Strategy::Pocket { raster, climb, raster_angle, spiral } => {
                                 ui.label(t!("Ausräumen"));
+                                let mut clearing = Clearing::of(*raster, *spiral);
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(raster, false, t!("Versatz"));
-                                    ui.radio_value(raster, true, t!("Raster"));
+                                    ui.radio_value(&mut clearing, Clearing::Offset, t!("Versatz")).tip(&Tip::new(t!("Versatz"), t!("Ringe von innen nach außen. Zwischen benachbarten Ringen bleibt der Fräser unten.")).icon(Icon::Pocket));
+                                    ui.radio_value(&mut clearing, Clearing::Raster, t!("Raster")).tip(&Tip::new(t!("Raster"), t!("Hin und her in Bahnen im Rasterwinkel, danach eine Runde an der Wand entlang.")).icon(Icon::Pocket));
+                                    ui.radio_value(&mut clearing, Clearing::Spiral, t!("Spirale")).tip(&Tip::new(t!("Spirale"), t!("Eine durchgehende Spirale von innen nach außen: kein neuer Ansatz, jede Runde geht stufenlos in die nächste über.")).icon(Icon::Pocket));
                                 });
+                                (*raster, *spiral) = clearing.switches();
                                 ui.end_row();
                                 if *raster {
                                     ui.label(t!("Rasterwinkel"));
@@ -214,14 +226,14 @@ impl App {
                                 }
                                 ui.label(t!("Fräsrichtung"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(climb, true, t!("Gleichlauf"));
-                                    ui.radio_value(climb, false, t!("Gegenlauf"));
+                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")));
+                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")));
                                 });
                                 ui.end_row();
                             }
                             Strategy::Drill => {
                                 ui.label(t!("Bohren"));
-                                ui.label(egui::RichText::new(t!("in der Mitte jeder Kontur, Zustellung = Peck-Tiefe")).small().color(muted()));
+                                ui.label(egui::RichText::new(t!("in der Mitte jeder Kontur, in Hüben bis zur Zieltiefe; nach jedem Hub fährt der Bohrer ganz aus dem Loch, damit die Späne herauskommen")).small().color(muted()));
                                 ui.end_row();
                             }
                             Strategy::VCarve { max_depth } => {
@@ -231,8 +243,9 @@ impl App {
                             }
                         }
                         if !matches!(tp.strategy, Strategy::Drill) {
-                            ui.label(t!("Rampenwinkel"));
-                            ui.add(egui::DragValue::new(&mut tp.ramp_angle).speed(0.5).range(0.0..=45.0).max_decimals(1).suffix(" °")).on_hover_text(t!("Der Fräser fährt schräg entlang der Kontur ins Material statt senkrecht. 0° = senkrecht eintauchen."));
+                            let tip = Tip::new(t!("Rampenwinkel"), t!("Beim Eintauchen fährt der Fräser schräg ins Material statt senkrecht: auf Ringen höchstens eine Runde lang, auf Linien im Zickzack hin und zurück. 0° = senkrecht."));
+                            ui.label(t!("Rampenwinkel")).tip(&tip);
+                            ui.add(egui::DragValue::new(&mut tp.ramp_angle).speed(0.5).range(0.0..=45.0).max_decimals(1).suffix(" °")).tip(&tip);
                             ui.end_row();
                         }
                     });

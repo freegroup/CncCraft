@@ -1,7 +1,7 @@
 //! Profile tool: cut along a contour, offset to one side by the tool radius, with optional
 //! holding tabs. Open vectors are cut as a zig-zag.
 
-use super::{ring_dir, tab_spans, CutContext, Out, Side, ToolpathKind, TAB_LENGTH, TAB_THICKNESS};
+use crate::toolpath::{ring_dir, tab_spans, CutContext, Out, Side, ToolpathKind, TAB_LENGTH, TAB_THICKNESS};
 use crate::geom::{Pt, Region};
 
 pub struct ProfileTool {
@@ -44,6 +44,7 @@ impl ToolpathKind for ProfileTool {
         // open vectors: cut as a back-and-forth so the tool doesn't fly back each pass
         for c in cx.contours.iter().filter(|c| !c.closed) {
             for (i, &z) in depths.iter().enumerate() {
+                out.set_top(cx.top_of(&depths, i));
                 if i % 2 == 0 {
                     out.cut_open(&c.pts, z);
                 } else {

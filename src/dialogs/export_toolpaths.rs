@@ -1,6 +1,6 @@
 //! The window every export of the toolpaths goes through.
 
-use crate::app::App;
+use crate::app::{App, Tip};
 use crate::theme::{ink, muted};
 use egui::{Align2, Vec2};
 use crate::app::layout::combo_with_manage;
@@ -53,7 +53,7 @@ impl App {
                     let selected_label = self.pp().label();
                     let post_idx = &mut self.post_idx;
                     let postprocs = &self.postprocs;
-                    manage = combo_with_manage(ui, "post", 260.0, &selected_label, |ui| {
+                    manage = combo_with_manage(ui, "post", 260.0, &selected_label, Some(&Tip::new(t!("Postprozessor"), t!("Übersetzt die Werkzeugwege in die G-Code-Sprache deiner Maschine. Verwalten… legt eigene an oder ändert sie."))), |ui| {
                         for (i, pp) in postprocs.iter().enumerate() {
                             if ui.selectable_label(*post_idx == i, pp.label()).clicked() {
                                 *post_idx = i;

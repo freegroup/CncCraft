@@ -1,23 +1,17 @@
-//! Toolpath tools. Each cutting strategy (profile, pocket, drill, V-carve) lives in its own
-//! module and implements [`ToolpathKind`], so the geometry for one tool is isolated and a new
-//! tool is added by writing one file and registering it in [`make_kind`].
+//! Toolpath tools. Each cutting strategy (profile, pocket, drill, V-carve) lives in its own file
+//! under `strategies/` and implements [`ToolpathKind`]; a new one is added by writing one file
+//! there and registering it in [`Strategy::kind`].
 //!
 //! Z is 0 at the material surface and negative into the material. All shared helpers the tools
 //! use to emit cutter moves (retract/plunge, ring cutting, tabs, raster fill) live here.
 
-mod drill;
-mod pocket;
-mod profile;
-mod vcarve;
+mod strategies;
 
 use crate::geom::{bounds_of, dist, perimeter, signed_area, Contour, Item, Pt, Ring};
 use crate::tools::{Tool, ToolKind, ToolLibrary};
 use serde::{Deserialize, Serialize};
 
-pub use drill::DrillTool;
-pub use pocket::PocketTool;
-pub use profile::ProfileTool;
-pub use vcarve::VCarveTool;
+pub use strategies::{Clearing, DrillTool, PocketTool, ProfileTool, VCarveTool};
 
 // Values from MECHANICS.md
 pub const SAFE_Z: f64 = 5.0; // estimated
@@ -31,6 +25,13 @@ pub const CUT_OUT_PASS_DEPTH_IN: f64 = 0.075;
 /// How steeply the cutter ramps into the material along its path, in degrees (CncCraft's own
 /// default for hobby machines; 0 plunges straight down).
 pub const RAMP_ANGLE: f64 = 5.0;
+/// Below this contour or line length the cutter plunges straight instead of ramping (Spark
+/// `0x1012971e4`: 1 mm, or its inch equivalent).
+pub const RAMP_MIN_LENGTH: f64 = 1.0;
+/// Below this depth to go the cutter plunges straight (Spark `0x1012971e8`: 0.01 × 1 mm).
+pub const RAMP_MIN_DEPTH: f64 = 0.01;
+/// A zig-zag ramp gets one more cycle when more than this share of a cycle is left (Spark `0x1012973f4`).
+pub const RAMP_ZIGZAG_REST: f64 = 0.1;
 
 fn default_ramp_angle() -> f64 {
     RAMP_ANGLE
@@ -89,7 +90,8 @@ pub enum Side {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Strategy {
     Profile { side: Side, climb: bool, tabs: bool, tab_count: u32 },
-    Pocket { raster: bool, climb: bool, #[serde(default)] raster_angle: f64 },
+    /// `raster` wins over `spiral`; neither is concentric offset rings. Old files have no spiral.
+    Pocket { raster: bool, climb: bool, #[serde(default)] raster_angle: f64, #[serde(default)] spiral: bool },
     Drill,
     VCarve { max_depth: f64 },
 }
@@ -103,7 +105,7 @@ impl Strategy {
     pub fn kind(&self) -> Box<dyn ToolpathKind> {
         match *self {
             Strategy::Profile { side, climb, tabs, tab_count } => Box::new(ProfileTool { side, climb, tabs, tab_count }),
-            Strategy::Pocket { raster, climb, raster_angle } => Box::new(PocketTool { raster, climb, raster_angle }),
+            Strategy::Pocket { raster, climb, raster_angle, spiral } => Box::new(PocketTool { clearing: Clearing::of(raster, spiral), climb, raster_angle }),
             Strategy::Drill => Box::new(DrillTool),
             Strategy::VCarve { max_depth } => Box::new(VCarveTool { max_depth }),
         }
@@ -305,6 +307,9 @@ pub struct Out<'a> {
 }
 
 impl Out<'_> {
+    pub fn safe_z(&self) -> f64 {
+        self.job.safe_z
+    }
     pub fn cur(&self) -> [f64; 3] {
         self.moves.last().map(|m| m.to).unwrap_or([0.0, 0.0, self.job.home_z])
     }
@@ -334,11 +339,50 @@ impl Out<'_> {
     }
 
     fn come_down_and_plunge(&mut self, p: [f64; 3]) {
-        let safe = self.job.safe_z;
-        if (self.cur()[2] - 0.5_f64.min(safe)).abs() > 1e-6 {
-            self.rapid([p[0], p[1], 0.5_f64.min(safe)]);
+        let over = 0.5_f64.min(self.job.safe_z);
+        // only ever rapid down to just over the material, never up: a cutter already down there
+        // goes on down from where it is
+        if self.cur()[2] > over + 1e-6 {
+            self.rapid([p[0], p[1], over]);
         }
         self.feed(p);
+    }
+
+    /// Come in to depth `z` at `a` with the original's zig-zag ramp (Spark `0x1012970f8`): one leg
+    /// is (depth / 2) / tan(angle) along the line towards `b`, no longer than the line; the cutter
+    /// goes out and back, n times, each leg going down the same share, and ends at `a` at depth
+    /// (n = depth / (2·tan·leg), one more when over 10 % of a cycle is left). No ramp, straight down,
+    /// when the line is shorter than 1 mm or less than 0.01 mm is to go. A cutter already down at
+    /// `a` goes on down from there without lifting.
+    pub fn enter_along(&mut self, a: Pt, b: Pt, z: f64) {
+        let cur = self.cur();
+        let here = !self.moves.is_empty() && dist([cur[0], cur[1]], a) < 1e-6 && cur[2] <= self.top + 0.5 + 1e-6;
+        let h = if here { cur[2] } else { self.approach(a) };
+        let dz = h - z;
+        if dz <= 1e-9 {
+            return;
+        }
+        let len = dist(a, b);
+        if self.ramp_tan <= 1e-9 || len < RAMP_MIN_LENGTH || dz < RAMP_MIN_DEPTH {
+            self.feed([a[0], a[1], z]);
+            return;
+        }
+        let leg = (dz / 2.0 / self.ramp_tan).min(len);
+        let cycle = 2.0 * self.ramp_tan * leg;
+        let mut n = ((dz / cycle) as usize).max(1);
+        if dz - cycle * n as f64 > cycle * RAMP_ZIGZAG_REST {
+            n += 1;
+        }
+        let per_leg = dz / (2 * n) as f64;
+        let f = leg / len;
+        let far = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        let mut level = h;
+        for _ in 0..n {
+            level -= per_leg;
+            self.feed([far[0], far[1], level]);
+            level -= per_leg;
+            self.feed([a[0], a[1], level.max(z)]);
+        }
     }
     /// Lift straight up to safe_z where the cutter is (nothing, if it has not moved yet).
     pub fn retract(&mut self) {
@@ -450,11 +494,21 @@ impl Out<'_> {
                 out.feed([p[0], p[1], after]);
             }
         };
-        let ramp_len = (z_from - z).max(0.0) / self.ramp_tan;
+        // Spark 0x1012972d0..0x101297450: the ramp is depth / tan(angle) long but never longer than
+        // one round; a shorter ring gets a steeper ramp. Too short a ring or too little depth to go:
+        // straight down.
+        let dz = (z_from - z).max(0.0);
         let mut s = start;
-        for (p, walked, at) in ring_walk(pts, &cum, s, ramp_len, &breaks) {
-            emit(self, p, at, (z_from - walked * self.ramp_tan).max(z));
-            s = at;
+        if per < RAMP_MIN_LENGTH || dz < RAMP_MIN_DEPTH {
+            let cur = self.cur();
+            self.feed([cur[0], cur[1], z.max(tab_level(s))]);
+        } else {
+            let ramp_len = (dz / self.ramp_tan).min(per);
+            let slope = dz / ramp_len;
+            for (p, walked, at) in ring_walk(pts, &cum, s, ramp_len, &breaks) {
+                emit(self, p, at, (z_from - walked * slope).max(z));
+                s = at;
+            }
         }
         let s_end = s.rem_euclid(per);
         for (p, _, at) in ring_walk(pts, &cum, s_end, per, &breaks) {
@@ -464,12 +518,47 @@ impl Out<'_> {
         self.ring_end = Some((pts[0], per, s_end, [end[0], end[1]]));
     }
 
+    /// Whether the cutter is down in the material at depth `z` right now.
+    pub fn is_down_at(&self, z: f64) -> bool {
+        self.moves.last().is_some_and(|m| !m.rapid && (m.to[2] - z).abs() < 1e-6)
+    }
+
+    /// Cut a closed ring at depth `z`, starting at its point nearest the cutter. When the cutter is
+    /// already down at `z` and `stay_down(from, to)` allows the straight way over to the ring (the
+    /// neighbouring pass, through cleared material), it feeds across and goes round without
+    /// lifting; only a real new entry lifts, travels and comes in again (with the ramp, if set).
+    pub fn cut_ring_linked(&mut self, pts: &[Pt], z: f64, stay_down: &dyn Fn(Pt, Pt) -> bool) {
+        if pts.len() < 2 {
+            return;
+        }
+        let cur = self.cur();
+        let ring = start_nearest(pts, [cur[0], cur[1]]);
+        if self.is_down_at(z) && stay_down([cur[0], cur[1]], ring[0]) {
+            for p in ring.iter().chain(std::iter::once(&ring[0])) {
+                self.feed([p[0], p[1], z]);
+            }
+            self.ring_end = None;
+        } else {
+            self.cut_ring(&ring, z, None);
+        }
+    }
+
+    /// Feed along `pts` at depth `z` (the cutter is already down at the first point).
+    pub fn feed_along(&mut self, pts: &[Pt], z: f64) {
+        for p in pts {
+            self.feed([p[0], p[1], z]);
+        }
+    }
+
     /// Cut an open polyline at depth `z`.
     pub fn cut_open(&mut self, pts: &[Pt], z: f64) {
         if pts.is_empty() {
             return;
         }
-        self.go_to([pts[0][0], pts[0][1], z]);
+        match pts.get(1) {
+            Some(next) => self.enter_along(pts[0], *next, z),
+            None => self.go_to([pts[0][0], pts[0][1], z]),
+        }
         for p in &pts[1..] {
             self.feed([p[0], p[1], z]);
         }
@@ -509,6 +598,44 @@ fn ring_walk(pts: &[Pt], cum: &[f64], from: f64, len: f64, breaks: &[f64]) -> Ve
         }
     }
     out
+}
+
+/// The same closed ring, starting at its point nearest `p` (put in on an edge where needed).
+pub fn start_nearest(pts: &[Pt], p: Pt) -> Vec<Pt> {
+    let n = pts.len();
+    let mut best = (f64::MAX, 0, pts[0]);
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len2 = dx * dx + dy * dy;
+        let t = if len2 > 1e-18 { (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+        let q = [a[0] + dx * t, a[1] + dy * t];
+        let d = dist(p, q);
+        if d < best.0 {
+            best = (d, i, q);
+        }
+    }
+    let (_, i, q) = best;
+    let mut out = vec![q];
+    for k in 1..=n {
+        let v = pts[(i + k) % n];
+        if dist(v, q) > 1e-9 && out.last().is_none_or(|l| dist(*l, v) > 1e-9) {
+            out.push(v);
+        }
+    }
+    if out.len() > 1 && dist(*out.last().unwrap(), q) < 1e-9 {
+        out.pop();
+    }
+    out
+}
+
+/// Whether the straight way from `a` to `b` stays inside `region` (checked along it, ends left out
+/// since they lie on ring edges).
+pub fn stays_inside(region: &crate::geom::Region, a: Pt, b: Pt) -> bool {
+    (1..8).all(|k| {
+        let t = k as f64 / 8.0;
+        region.contains([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+    })
 }
 
 /// The depths of each pass: stepdown increments, last one exactly at `depth`.
@@ -586,7 +713,7 @@ pub fn raster_segments(rings: &[Ring], step: f64) -> Vec<(Pt, Pt)> {
 /// Build a toolpath with the original's defaults for the given tool kind.
 pub fn default_toolpath(kind: &str, lib: &ToolLibrary, job: &Job, ids: Vec<u64>) -> Toolpath {
     let (strategy, tool, depth) = match kind {
-        "pocket" => (Strategy::Pocket { raster: false, climb: true, raster_angle: 0.0 }, lib.pick(&job.material, ToolKind::EndMill, 6.0, None), 3.0),
+        "pocket" => (Strategy::Pocket { raster: false, climb: true, raster_angle: 0.0, spiral: false },lib.pick(&job.material, ToolKind::EndMill, 6.0, None), 3.0),
         "drill" => (Strategy::Drill, lib.pick(&job.material, ToolKind::Drill, 6.0, None), 10.0),
         "vcarve" => (Strategy::VCarve { max_depth: 0.0 }, lib.pick(&job.material, ToolKind::VBit, 12.0, Some(90.0)), 6.0),
         "cutout" => {
@@ -718,5 +845,140 @@ mod ramp_tests {
         v.as_object_mut().unwrap().remove("ramp_angle");
         let back: Toolpath = serde_json::from_value(v).unwrap();
         assert_eq!(back.ramp_angle, RAMP_ANGLE);
+    }
+}
+
+#[cfg(test)]
+mod linking_tests {
+    use super::*;
+    use shape_edit::{Rect, Shape};
+
+    fn pocket(clearing: Clearing) -> (Toolpath, Job) {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("pocket", &lib, &job, vec![1]);
+        let (raster, spiral) = clearing.switches();
+        tp.strategy = Strategy::Pocket { raster, climb: true, raster_angle: 0.0, spiral };
+        tp.tool.diameter = 6.0;
+        tp.tool.stepover = 2.4;
+        tp.tool.stepdown = 2.0;
+        tp.cut_depth = 4.0;
+        tp.compute(&job, &[Item::new(1, Shape::Rect(Rect::new([100.0, 100.0], 60.0, 40.0)))]);
+        (tp, job)
+    }
+
+    /// How often the cutter comes up out of the material (a rapid move up from below the surface).
+    fn lifts(tp: &Toolpath) -> usize {
+        tp.moves.windows(2).filter(|w| w[1].rapid && w[0].to[2] < 0.0 && w[1].to[2] > w[0].to[2]).count()
+    }
+
+    #[test]
+    fn neighbouring_offset_rings_are_joined_without_lifting() {
+        let (tp, _) = pocket(Clearing::Offset);
+        let depths = 2;
+        assert!(tp.moves.len() > 20);
+        assert_eq!(lifts(&tp), depths, "only once per depth, at its end: {} lifts", lifts(&tp));
+    }
+
+    #[test]
+    fn a_spiral_pocket_never_starts_again_within_a_depth() {
+        let (tp, _) = pocket(Clearing::Spiral);
+        assert_eq!(lifts(&tp), 2, "one entry per depth");
+        // the cutter never jumps sideways at depth: every feed move is short
+        let longest = tp.moves.windows(2).filter(|w| !w[1].rapid && w[1].to[2] < 0.0 && (w[1].to[2] - w[0].to[2]).abs() < 1e-9).map(|w| dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]])).fold(0.0, f64::max);
+        assert!(longest < 60.0, "no move across the whole pocket: {longest}");
+    }
+
+    #[test]
+    fn an_open_vector_goes_down_pass_by_pass_without_lifting() {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("profile", &lib, &job, vec![1]);
+        tp.strategy = Strategy::Profile { side: Side::On, climb: true, tabs: false, tab_count: 0 };
+        tp.tool.stepdown = 1.0;
+        tp.cut_depth = 3.0;
+        tp.compute(&job, &[Item::new(1, Shape::Path(shape_edit::Path::new(vec![[10.0, 10.0], [80.0, 10.0]], false)))]);
+        assert_eq!(lifts(&tp), 1, "only at the very end");
+        // it ramps in: no feed straight down into the material
+        let straight = tp.moves.windows(2).filter(|w| !w[1].rapid && w[1].to[2] < w[0].to[2] - 1e-6 && w[1].to[2] < -1e-6 && dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]]) < 1e-6).count();
+        assert_eq!(straight, 0);
+    }
+
+    #[test]
+    fn a_raster_pocket_ramps_in_instead_of_plunging() {
+        let (tp, _) = pocket(Clearing::Raster);
+        let straight = tp.moves.windows(2).filter(|w| !w[1].rapid && w[1].to[2] < w[0].to[2] - 1e-6 && w[1].to[2] < -1e-6 && dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]]) < 1e-6).count();
+        assert_eq!(straight, 0, "every entry ramps");
+    }
+
+    /// XY length walked from the first feed into the material until the cutter first reaches `z`.
+    fn ramp_length_until(tp: &Toolpath, z: f64) -> f64 {
+        let start = tp.moves.iter().position(|m| !m.rapid).unwrap().saturating_sub(1);
+        let mut walked = 0.0;
+        for w in tp.moves[start..].windows(2) {
+            walked += dist([w[0].to[0], w[0].to[1]], [w[1].to[0], w[1].to[1]]);
+            if (w[1].to[2] - z).abs() < 1e-9 {
+                break;
+            }
+        }
+        walked
+    }
+
+    #[test]
+    fn a_ring_ramp_is_at_most_one_round_and_steeper_on_short_rings() {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("profile", &lib, &job, vec![1]);
+        tp.strategy = Strategy::Profile { side: Side::On, climb: true, tabs: false, tab_count: 0 };
+        tp.tool.stepdown = 3.0;
+        tp.cut_depth = 3.0;
+        tp.ramp_angle = 5.0;
+        tp.compute(&job, &[Item::new(1, Shape::Rect(Rect::new([50.0, 50.0], 4.0, 4.0)))]);
+        // 3.5 mm down at 5° would need 40 mm; the square is 16 mm round: one round, steeper (Spark 0x101297450)
+        let walked = ramp_length_until(&tp, -3.0);
+        assert!((walked - 16.0).abs() < 1e-6, "{walked}");
+    }
+
+    #[test]
+    fn a_zigzag_ramp_goes_out_and_back_by_half_the_depth_per_leg() {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("profile", &lib, &job, vec![1]);
+        tp.strategy = Strategy::Profile { side: Side::On, climb: true, tabs: false, tab_count: 0 };
+        tp.tool.stepdown = 1.0;
+        tp.cut_depth = 1.0;
+        tp.ramp_angle = 5.0;
+        tp.compute(&job, &[Item::new(1, Shape::Path(shape_edit::Path::new(vec![[10.0, 10.0], [90.0, 10.0]], false)))]);
+        // from 0.5 mm over the surface to -1 mm: 1.5 mm, leg = 0.75 / tan 5° (Spark 0x101297380)
+        let leg = 0.75 / 5f64.to_radians().tan();
+        let walked = ramp_length_until(&tp, -1.0);
+        assert!((walked - 2.0 * leg).abs() < 1e-6, "{walked} vs {}", 2.0 * leg);
+        let farthest = tp.moves.iter().filter(|m| !m.rapid && m.to[2] > -1.0 + 1e-9).map(|m| m.to[0] - 10.0).fold(0.0, f64::max);
+        assert!((farthest - leg).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pecks_are_equal_steps_as_in_the_original() {
+        use super::strategies::peck_depths;
+        // 10 mm with 3 mm pecks: round(3.33) = 3, the rest 1 mm is over 1 % of 3, so 4 steps of 2.5
+        assert_eq!(peck_depths(0.0, 10.0, 3.0), vec![-2.5, -5.0, -7.5, -10.0]);
+        // exactly divisible: no extra step
+        assert_eq!(peck_depths(0.0, 6.0, 2.0), vec![-2.0, -4.0, -6.0]);
+        // shallower than one peck: one step
+        assert_eq!(peck_depths(-1.0, 1.5, 3.0), vec![-2.5]);
+    }
+
+    #[test]
+    fn the_drill_comes_right_out_of_the_hole_after_every_step() {
+        let lib = ToolLibrary::load();
+        let job = Job::default();
+        let mut tp = default_toolpath("drill", &lib, &job, vec![1]);
+        tp.tool.stepdown = 2.0;
+        tp.cut_depth = 7.0;
+        tp.compute(&job, &[Item::new(1, Shape::Circle(shape_edit::Circle::new([50.0, 50.0], 3.0)))]);
+        let bottoms: Vec<f64> = tp.moves.iter().filter(|m| !m.rapid && m.to[2] < -1e-9).map(|m| m.to[2]).collect();
+        assert_eq!(bottoms, vec![-1.75, -3.5, -5.25, -7.0], "Spark 0x10124baec: 7 mm in round(7/2) = 4 equal steps");
+        let outs = tp.moves.iter().filter(|m| m.rapid && (m.to[2] - RETRACT_GAP).abs() < 1e-9).count();
+        assert_eq!(outs, 3, "out of the hole between the four steps");
     }
 }

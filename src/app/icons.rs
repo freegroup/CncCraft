@@ -144,8 +144,18 @@ fn rounded_rect(r: Rect, radius: f32) -> Vec<Pos2> {
     v
 }
 
+/// An icon button with a [`super::Tip`] that shows the button's own icon on its left.
+pub(super) fn icon_button_tip(ui: &mut egui::Ui, icon: Icon, selected: bool, tip: super::Tip) -> Response {
+    use super::WithTip;
+    icon_button_bare(ui, icon, selected).tip(&tip.icon(icon))
+}
+
 /// An icon button: returns the click response, with `tip` on hover.
 pub(super) fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, tip: &str) -> Response {
+    icon_button_bare(ui, icon, selected).on_hover_text(tip)
+}
+
+fn icon_button_bare(ui: &mut egui::Ui, icon: Icon, selected: bool) -> Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(BUTTON), Sense::click());
     let enabled = ui.is_enabled();
     let hovered = resp.hovered() && enabled;
@@ -167,7 +177,7 @@ pub(super) fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, tip: &s
     // an icon that cannot be used is the same picture under a grey veil, like the original's
     // `ImageProvider::AddGrayOverlay` (0x101a2be80): a disabled `Ui` already paints everything
     // faded towards the background, so nothing else is drawn for it
-    resp.on_hover_text(tip)
+    resp
 }
 
 /// Draws on a 24-point grid centred on `c`.
@@ -326,7 +336,7 @@ impl Pen<'_> {
         self.p.add(Shape::line(arc.iter().map(|(x, y)| self.at(*x, *y)).collect(), red));
     }
 
-    fn draw(&self, icon: Icon) {
+    pub(super) fn draw(&self, icon: Icon) {
         match icon {
             Icon::Draw(DrawTool::Select) => self.solid(vec![self.at(-5.0, -10.0), self.at(-5.0, 7.0), self.at(-0.8, 3.2), self.at(2.6, 10.0), self.at(5.2, 8.8), self.at(1.9, 2.0), self.at(7.0, 1.4)]),
             Icon::Draw(DrawTool::NodeEdit) => {
