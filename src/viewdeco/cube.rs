@@ -61,11 +61,12 @@ impl ViewCube {
         let resp = ui.interact(cube_rect, Id::new("view_cube"), Sense::click_and_drag());
         let pointer = ui.input(|i| i.pointer.hover_pos());
 
-        // the cube turns the view when dragged (the same way as dragging the picture)
+        // the cube turns the view when dragged (the same way as dragging the picture):
+        // part follows the mouse, like Fusion 360
         if resp.dragged_by(egui::PointerButton::Primary) {
             let d = resp.drag_delta();
-            view.cam.yaw -= d.x * 0.012;
-            view.cam.pitch = (view.cam.pitch + d.y * 0.01).clamp(0.0, PI);
+            view.cam.yaw += d.x * 0.012;
+            view.cam.pitch = (view.cam.pitch - d.y * 0.01).clamp(0.0, PI);
         }
 
         // the sides facing the viewer, nearest last

@@ -2161,8 +2161,10 @@ impl App {
         painter.add(mesh);
         if resp.dragged_by(egui::PointerButton::Primary) {
             let d = resp.drag_delta();
-            self.cam.yaw -= d.x * 0.008;
-            self.cam.pitch = (self.cam.pitch + d.y * 0.006).clamp(0.0, std::f32::consts::PI);
+            // like Fusion 360: the part follows the mouse (drag right turns the front to the right,
+            // drag down tips the top towards the viewer)
+            self.cam.yaw += d.x * 0.008;
+            self.cam.pitch = (self.cam.pitch - d.y * 0.006).clamp(0.0, std::f32::consts::PI);
         }
         if resp.dragged_by(egui::PointerButton::Secondary) || resp.dragged_by(egui::PointerButton::Middle) {
             self.cam.pan += resp.drag_delta();
