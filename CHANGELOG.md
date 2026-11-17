@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/freegroup/CncCraft/compare/v1.10.0...v1.11.0) (2026-11-17)
+
+
+### Features
+
+* promote sister apps PatternMaster and HoruCNC on the start screen ([1e60204](https://github.com/freegroup/CncCraft/commit/1e60204e27c3042be3dc02984fc60ed54ce091b8))
+
 # [1.10.0](https://github.com/freegroup/CncCraft/compare/v1.9.1...v1.10.0) (2026-11-16)
 
 
