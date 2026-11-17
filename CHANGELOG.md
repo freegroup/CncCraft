@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/freegroup/CncCraft/compare/v1.11.0...v1.12.0) (2026-11-17)
+
+
+### Features
+
+* show sister app previews in start page and docs ([30131d9](https://github.com/freegroup/CncCraft/commit/30131d9644e947260bd80de63b5e673a8785dc9a))
+
 # [1.11.0](https://github.com/freegroup/CncCraft/compare/v1.10.0...v1.11.0) (2026-11-17)
 
 
