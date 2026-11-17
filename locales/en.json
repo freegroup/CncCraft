@@ -710,5 +710,18 @@
  "name": "name",
  "Radius": "Radius",
  "Material": "Material",
- "Export": "Export"
+ "Export": "Export",
+ "Noch mehr für deine Fräse": "More for your CNC",
+ "Kostenlose Apps aus derselben Werkstatt – laufen direkt im Browser, ohne Installation": "Free apps from the same workshop – they run right in your browser, nothing to install",
+ "Muster für deine CNC-Fräse": "Patterns for your CNC",
+ "Muster wählen, an den Reglern drehen und sofort in 3D sehen, wie dein Werkstück aussieht. Die Fräsbahnen rechnet PatternMaster für dich.": "Pick a pattern, turn the sliders and see right away in 3D how your piece will look. PatternMaster works out the toolpaths for you.",
+ "Rauten, Wellen, Waben": "Diamonds, waves, honeycombs",
+ "3D-Vorschau": "3D preview",
+ "Kein Konto": "No account",
+ "Vom Bild zum CNC-Programm": "From a picture to a CNC program",
+ "Zeichnung oder Foto vor die Kamera halten, ein paar Filter wählen und den G-Code für GRBL oder Marlin herunterladen.": "Hold a drawing or photo in front of your camera, pick a few filters and download the G-code for GRBL or Marlin.",
+ "Kamera oder Bild": "Camera or picture",
+ "3D-Relief": "3D relief",
+ "GRBL & Marlin": "GRBL & Marlin",
+ "Im Browser öffnen": "Open in browser"
 }

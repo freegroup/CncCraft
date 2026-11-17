@@ -1487,6 +1487,8 @@ impl App {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, canvas());
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect.shrink(40.0)), |ui| {
+            // scrollable, since the app cards below can push the content past small windows
+            egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(30.0);
                 ui.label(egui::RichText::new(t!("Willkommen bei CncCraft")).size(28.0).strong().color(ink()));
@@ -1614,6 +1616,10 @@ impl App {
             if let Some(path) = open_recent {
                 self.open_path(path);
             }
+            ui.add_space(36.0);
+            other_apps_ui(ui);
+            ui.add_space(20.0);
+            });
         });
     }
 
@@ -2843,4 +2849,156 @@ impl App {
             crate::theme::apply(ctx);
         }
     }
+}
+
+/// Draws the "more for your CNC" section on the start screen: two clickable cards
+/// promoting the sister web apps (PatternMaster, HoruCNC), styled in each site's
+/// own accent colours. Clicking a card opens the app in a new browser tab.
+fn other_apps_ui(ui: &mut egui::Ui) {
+    ui.vertical_centered(|ui| {
+        ui.label(egui::RichText::new(t!("Noch mehr für deine Fräse")).size(16.0).strong().color(ink()));
+        ui.label(egui::RichText::new(t!("Kostenlose Apps aus derselben Werkstatt – laufen direkt im Browser, ohne Installation")).color(muted()));
+    });
+    ui.add_space(12.0);
+    let apps = [
+        (
+            0,
+            "PatternMaster",
+            t!("Muster für deine CNC-Fräse"),
+            t!("Muster wählen, an den Reglern drehen und sofort in 3D sehen, wie dein Werkstück aussieht. Die Fräsbahnen rechnet PatternMaster für dich."),
+            [t!("Rauten, Wellen, Waben"), t!("3D-Vorschau"), t!("Kein Konto")],
+            // tint colours of the PatternMaster site (--accent, --accent-deep, text on accent)
+            [Color32::from_rgb(0xf8, 0xb8, 0x62), Color32::from_rgb(0xe0, 0x74, 0x3a), Color32::from_rgb(0x1c, 0x11, 0x07)],
+            "https://freegroup.github.io/patternmaster/",
+        ),
+        (
+            1,
+            "HoruCNC",
+            t!("Vom Bild zum CNC-Programm"),
+            t!("Zeichnung oder Foto vor die Kamera halten, ein paar Filter wählen und den G-Code für GRBL oder Marlin herunterladen."),
+            [t!("Kamera oder Bild"), t!("3D-Relief"), t!("GRBL & Marlin")],
+            // tint colours of the HoruCNC site (--accent, --accent-dark, --on-accent)
+            [Color32::from_rgb(0x64, 0xd2, 0xff), Color32::from_rgb(0x08, 0xb7, 0xff), Color32::from_rgb(0x06, 0x19, 0x21)],
+            "https://freegroup.github.io/HoruCNC/",
+        ),
+    ];
+    let (w, h, gap, band_h) = (360.0_f32, 214.0_f32, 20.0_f32, 72.0_f32);
+    ui.horizontal(|ui| {
+        ui.add_space(((ui.available_width() - (2.0 * w + gap)) / 2.0).max(0.0));
+        for (which, name, sub, body, chips, [color, deep, on], url) in apps {
+            let (slot, resp) = ui.allocate_exact_size(Vec2::new(w, h), Sense::click());
+            let hover = resp.hovered();
+            let r = if hover { slot.translate(Vec2::new(0.0, -2.0)) } else { slot };
+            let p = ui.painter();
+            if hover {
+                p.rect_filled(r.translate(Vec2::new(0.0, 5.0)), 12.0, Color32::from_black_alpha(35));
+            }
+            p.rect(r, 12.0, crate::theme::card(), Stroke::new(if hover { 2.0_f32 } else { 1.0_f32 }, if hover { deep } else { crate::theme::card_edge() }));
+            let band = Rect::from_min_size(r.min, Vec2::new(w, band_h));
+            // left-to-right gradient like the sites' buttons, with the card's rounded top corners
+            let mut mesh = egui::Mesh::default();
+            let (n, rad) = (90, 12.0_f32);
+            for i in 0..=n {
+                let f = i as f32 / n as f32;
+                let x = band.left() + f * w;
+                let d = (x - band.left()).min(band.right() - x);
+                let inset = if d < rad { rad - (rad * rad - (rad - d) * (rad - d)).max(0.0).sqrt() } else { 0.0 };
+                let c = Color32::from_rgb(
+                    (color.r() as f32 + (deep.r() as f32 - color.r() as f32) * f) as u8,
+                    (color.g() as f32 + (deep.g() as f32 - color.g() as f32) * f) as u8,
+                    (color.b() as f32 + (deep.b() as f32 - color.b() as f32) * f) as u8,
+                );
+                mesh.colored_vertex(Pos2::new(x, band.top() + inset), c);
+                mesh.colored_vertex(Pos2::new(x, band.bottom()), c);
+                if i > 0 {
+                    let k = 2 * i as u32;
+                    mesh.add_triangle(k - 2, k - 1, k);
+                    mesh.add_triangle(k - 1, k, k + 1);
+                }
+            }
+            p.add(egui::Shape::mesh(mesh));
+            // light pattern in the band that hints at what the app does
+            let deco = p.with_clip_rect(band);
+            let soft = Stroke::new(2.0_f32, on.gamma_multiply(0.14));
+            if which == 0 {
+                for k in 0..5 {
+                    let y0 = band.top() + 10.0 + k as f32 * 14.0;
+                    let pts: Vec<Pos2> = (0..=40)
+                        .map(|i| {
+                            let x = band.left() + 150.0 + i as f32 * 6.0;
+                            Pos2::new(x, y0 + (x * 0.06 + k as f32).sin() * 5.0)
+                        })
+                        .collect();
+                    deco.add(egui::Shape::line(pts, soft));
+                }
+            } else {
+                let c = Pos2::new(band.right() - 50.0, band.center().y);
+                for rad in [14.0, 28.0, 42.0, 56.0, 70.0] {
+                    deco.circle_stroke(c, rad, soft);
+                }
+            }
+            let ic = Pos2::new(band.left() + 40.0, band.center().y);
+            p.circle_filled(ic, 24.0, Color32::WHITE);
+            if which == 0 {
+                for i in -1..=1 {
+                    for j in -1..=1 {
+                        let m = ic + Vec2::new(i as f32 * 9.0, j as f32 * 9.0);
+                        let d = 4.2;
+                        p.add(egui::Shape::convex_polygon(
+                            vec![m + Vec2::new(0.0, -d), m + Vec2::new(d, 0.0), m + Vec2::new(0.0, d), m + Vec2::new(-d, 0.0)],
+                            deep,
+                            Stroke::NONE,
+                        ));
+                    }
+                }
+            } else {
+                let st = Stroke::new(2.4_f32, deep);
+                p.rect_stroke(Rect::from_center_size(ic + Vec2::new(0.0, 2.0), Vec2::new(28.0, 19.0)), 4.0, st);
+                p.rect_filled(Rect::from_center_size(ic + Vec2::new(-5.0, -9.5), Vec2::new(9.0, 4.0)), 1.5, deep);
+                p.circle_stroke(ic + Vec2::new(0.0, 2.0), 5.5, st);
+            }
+            let tx = ic.x + 38.0;
+            p.text(Pos2::new(tx, band.center().y - 10.0), Align2::LEFT_CENTER, name, FontId::proportional(21.0), on);
+            p.text(Pos2::new(tx, band.center().y + 13.0), Align2::LEFT_CENTER, sub.to_string(), FontId::proportional(12.5), on.gamma_multiply(0.8));
+
+            let pad = 16.0;
+            let text = p.layout(body.to_string(), FontId::proportional(12.5), ink(), w - 2.0 * pad);
+            let ty = band.bottom() + 12.0;
+            let text_h = text.size().y;
+            p.galley(Pos2::new(r.left() + pad, ty), text, ink());
+
+            let mut cx = r.left() + pad;
+            let cy = ty + text_h + 10.0;
+            for chip in chips {
+                let g = p.layout_no_wrap(chip.to_string(), FontId::proportional(11.0), ink());
+                let cr = Rect::from_min_size(Pos2::new(cx, cy), g.size() + Vec2::new(16.0, 8.0));
+                if cr.right() > r.right() - pad {
+                    break;
+                }
+                p.rect_filled(cr, 11.0, color.gamma_multiply(0.25));
+                p.galley(cr.min + Vec2::new(8.0, 4.0), g, ink());
+                cx = cr.right() + 6.0;
+            }
+
+            let g = p.layout_no_wrap(t!("Im Browser öffnen").to_string(), FontId::proportional(13.0), on);
+            let size = g.size() + Vec2::new(44.0, 14.0);
+            let br = Rect::from_min_size(r.right_bottom() - size - Vec2::new(pad, 14.0), size);
+            p.rect_filled(br, br.height() / 2.0, if hover { deep } else { color });
+            p.galley(br.min + Vec2::new(14.0, 7.0), g, on);
+            let a = Pos2::new(br.right() - 18.0, br.center().y);
+            let ast = Stroke::new(2.0_f32, on);
+            p.line_segment([a - Vec2::new(5.0, 0.0), a + Vec2::new(5.0, 0.0)], ast);
+            p.line_segment([a + Vec2::new(1.0, -4.0), a + Vec2::new(5.0, 0.0)], ast);
+            p.line_segment([a + Vec2::new(1.0, 4.0), a + Vec2::new(5.0, 0.0)], ast);
+
+            if hover {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if resp.clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+            }
+            resp.on_hover_text(url);
+            ui.add_space(gap);
+        }
+    });
 }
