@@ -687,6 +687,10 @@ impl App {
         }
         if app.shot.is_some() || app.selftest.is_some() {
             app.load_example();
+            // for the review screenshot: show the start page (with the sister-app cards) if asked
+            if std::env::var("CNCCRAFT_SHOW_START").is_ok() {
+                app.start_page = true;
+            }
             // for the review screenshot: show the job dialog if asked, so its look is visible
             if std::env::var("CNCCRAFT_SHOW_DIALOG").is_ok() {
                 app.job_dialog = Some((app.job.clone(), true));
@@ -1487,7 +1491,7 @@ impl App {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, canvas());
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect.shrink(40.0)), |ui| {
-            // scrollable, since the app cards below can push the content past small windows
+            // scrollable, since the sister-app cards below can push the content past small windows
             egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(30.0);
@@ -2851,9 +2855,10 @@ impl App {
     }
 }
 
-/// Draws the "more for your CNC" section on the start screen: two clickable cards
-/// promoting the sister web apps (PatternMaster, HoruCNC), styled in each site's
-/// own accent colours. Clicking a card opens the app in a new browser tab.
+/// Draws the "more for your CNC" section on the start page: one clickable card per
+/// sister web app (PatternMaster, HoruCNC) with a gradient band in the site's own
+/// accent colours, a 3D preview screenshot, a short text and tag chips.
+/// Clicking a card opens the app in a new browser tab.
 fn other_apps_ui(ui: &mut egui::Ui) {
     ui.vertical_centered(|ui| {
         ui.label(egui::RichText::new(t!("Noch mehr für deine Fräse")).size(16.0).strong().color(ink()));
@@ -2882,7 +2887,8 @@ fn other_apps_ui(ui: &mut egui::Ui) {
             "https://freegroup.github.io/HoruCNC/",
         ),
     ];
-    let (w, h, gap, band_h) = (360.0_f32, 214.0_f32, 20.0_f32, 72.0_f32);
+    let (w, h, gap, band_h, shot_h) = (360.0_f32, 340.0_f32, 20.0_f32, 72.0_f32, 126.0_f32);
+    let shots = sister_previews(ui.ctx());
     ui.horizontal(|ui| {
         ui.add_space(((ui.available_width() - (2.0 * w + gap)) / 2.0).max(0.0));
         for (which, name, sub, body, chips, [color, deep, on], url) in apps {
@@ -2961,9 +2967,24 @@ fn other_apps_ui(ui: &mut egui::Ui) {
             p.text(Pos2::new(tx, band.center().y - 10.0), Align2::LEFT_CENTER, name, FontId::proportional(21.0), on);
             p.text(Pos2::new(tx, band.center().y + 13.0), Align2::LEFT_CENTER, sub.to_string(), FontId::proportional(12.5), on.gamma_multiply(0.8));
 
+            // the app's own 3D preview, cropped to fill the strip
+            let shot = Rect::from_min_size(Pos2::new(r.left() + 1.0, band.bottom()), Vec2::new(w - 2.0, shot_h));
+            let tex = &shots[which];
+            let [tw, th] = tex.size().map(|v| v as f32);
+            let (sa, ta) = (shot.width() / shot.height(), tw / th);
+            let uv = if ta > sa {
+                let k = sa / ta;
+                Rect::from_min_max(Pos2::new((1.0 - k) / 2.0, 0.0), Pos2::new((1.0 + k) / 2.0, 1.0))
+            } else {
+                let k = ta / sa;
+                Rect::from_min_max(Pos2::new(0.0, (1.0 - k) / 2.0), Pos2::new(1.0, (1.0 + k) / 2.0))
+            };
+            p.image(tex.id(), shot, uv, Color32::WHITE);
+            p.line_segment([shot.left_bottom(), shot.right_bottom()], Stroke::new(1.0_f32, crate::theme::card_edge()));
+
             let pad = 16.0;
             let text = p.layout(body.to_string(), FontId::proportional(12.5), ink(), w - 2.0 * pad);
-            let ty = band.bottom() + 12.0;
+            let ty = shot.bottom() + 12.0;
             let text_h = text.size().y;
             p.galley(Pos2::new(r.left() + pad, ty), text, ink());
 
@@ -3001,4 +3022,24 @@ fn other_apps_ui(ui: &mut egui::Ui) {
             ui.add_space(gap);
         }
     });
+}
+
+/// Preview screenshots of the sister apps, bundled into the binary. They are decoded
+/// and uploaded as textures once, then cached in egui's temp data for later frames.
+fn sister_previews(ctx: &egui::Context) -> [egui::TextureHandle; 2] {
+    let id = egui::Id::new("sister_previews");
+    if let Some(t) = ctx.data(|d| d.get_temp::<[egui::TextureHandle; 2]>(id)) {
+        return t;
+    }
+    let load = |name: &str, bytes: &[u8]| {
+        let img = image::load_from_memory(bytes).expect("bundled preview image").to_rgba8();
+        let size = [img.width() as usize, img.height() as usize];
+        ctx.load_texture(name, egui::ColorImage::from_rgba_unmultiplied(size, &img), egui::TextureOptions::LINEAR)
+    };
+    let t = [
+        load("sister_patternmaster", include_bytes!("../assets/sister/patternmaster.png")),
+        load("sister_horucnc", include_bytes!("../assets/sister/horucnc.png")),
+    ];
+    ctx.data_mut(|d| d.insert_temp(id, t.clone()));
+    t
 }

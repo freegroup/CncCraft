@@ -13,6 +13,46 @@ def e(s):
     return html.escape(s, quote=True)
 
 
+# Sister apps (PatternMaster, HoruCNC): a link line in every footer and a card section
+# on the help home and the product page. Styles: .schwester* in docs_assets/site.css.
+PM_URL = "https://freegroup.github.io/patternmaster/"
+HORU_URL = "https://freegroup.github.io/HoruCNC/"
+SISTER_LINE = (f'<div>Schwester-Apps: <a href="{PM_URL}" target="_blank" rel="noopener">PatternMaster</a> – Muster fräsen · '
+               f'<a href="{HORU_URL}" target="_blank" rel="noopener">HoruCNC</a> – vom Bild zum G-Code</div>')
+_PM_ICON = ('<svg viewBox="0 0 32 32" aria-hidden="true">' +
+            "".join(f'<path d="M{x} {y-5}l5 5-5 5-5-5z"/>' for x in (7, 16, 25) for y in (7, 16, 25)) + '</svg>')
+_HORU_ICON = ('<svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-width="2.6">'
+              '<rect x="3" y="9" width="26" height="18" rx="4"/><path d="M10 9l2-4h8l2 4" stroke-linejoin="round"/>'
+              '<circle cx="16" cy="18" r="5"/></svg>')
+
+
+def _sister(r, cls, url, icon, name, sub, text, tags, shot, alt):
+    lis = "".join(f"<li>{e(t)}</li>" for t in tags)
+    return (f'<a class="schwester {cls}" href="{url}" target="_blank" rel="noopener">'
+            f'<div class="band"><span class="zeichen">{icon}</span><div><strong>{name}</strong><small>{e(sub)}</small></div></div>'
+            f'<img class="bild" src="{r}assets/img/{shot}" alt="{e(alt)}" loading="lazy">'
+            f'<div class="koerper"><p>{e(text)}</p><ul>{lis}</ul><span class="los">Jetzt ausprobieren →</span></div></a>')
+
+
+def sister_cards(depth):
+    """Both sister-app cards in a grid; depth sets the relative path to the assets."""
+    r = rel(depth)
+    return ('<div class="schwester-karten">' +
+                _sister(r, "pm", PM_URL, _PM_ICON, "PatternMaster", "Muster für Ihre CNC-Fräse",
+                        "Muster wählen, an den Reglern drehen und sofort in 3D sehen, wie das Werkstück aussieht. "
+                        "Die Fräsbahnen rechnet PatternMaster für Sie.",
+                        ["Rauten, Wellen, Waben", "3D-Vorschau", "Kein Konto"],
+                        "schwester-patternmaster.png", "3D-Vorschau in PatternMaster: Brett mit gefrästem Rautenmuster") +
+                _sister(r, "horu", HORU_URL, _HORU_ICON, "HoruCNC", "Vom Bild zum CNC-Programm",
+                        "Zeichnung oder Foto vor die Kamera halten, ein paar Filter wählen und den G-Code "
+                        "für GRBL oder Marlin herunterladen.",
+                        ["Kamera oder Bild", "3D-Relief", "GRBL & Marlin"],
+                        "schwester-horucnc.png", "3D-Vorschau in HoruCNC: gefräster Stern im Kreis") +
+                '</div>')
+SISTER_TITLE = "Schwester-Apps für Ihre Fräse"
+SISTER_LEAD = "Kostenlos, direkt im Browser und ohne Installation – aus derselben Werkstatt wie CncCraft."
+
+
 def rel(depth):
     return "../" * depth if depth else "./"
 
@@ -64,6 +104,7 @@ def foot(depth):
     return f"""<footer class="fuss"><div class="innen">
 <div><strong>{SITE}</strong> · Entwerfen, Werkzeugwege berechnen, fräsen.</div>
 <div>{e(DISCLAIMER)}</div>
+{SISTER_LINE}
 <div><a href="{r}hilfe/Help/page/home/index.html">Hilfe</a> · <a href="{r}PARAMETRIK.md">Hintergrund: parametrisches Zeichnen</a></div>
 </div></footer>
 <script src="{r}assets/search-index.js"></script>
@@ -122,7 +163,8 @@ def home_html(categories, order, pages, page_url):
             f'von der ersten Zeichnung bis zur fertigen G-Code-Datei.</p>{search_box("Wonach suchen Sie? z. B. Tasche, Variablen, Haltestege …")}</div></section>'
             f'<div class="inhalt"><div class="karten">{"".join(cards)}</div>'
             f'<h2>Neu gegenüber dem Original</h2><p>Diese Funktionen hat CncCraft zusätzlich zu dem, was die Vorlage Spark kann:</p>'
-            f'<ul class="liste-neu">{neu_list}</ul></div>' + foot(depth))
+            f'<ul class="liste-neu">{neu_list}</ul>'
+            f'<h2>{SISTER_TITLE}</h2><p>{e(SISTER_LEAD)}</p>{sister_cards(depth)}</div>' + foot(depth))
 
 
 def product_html(categories, order, pages, page_url):
@@ -178,6 +220,7 @@ def product_html(categories, order, pages, page_url):
             f'<section class="abschnitt"><h2>Entfalten Sie Ihre Ideen</h2><p class="unter">Von der ersten Skizze bis zum Schnitt: alles in einem Programm.</p>{blocks}</section>'
             f'<section class="abschnitt"><h2>Funktionen im Überblick</h2><div class="liste-zwei" style="columns:1">'
             f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px">{lst}</div></div></section>'
+            f'<section class="abschnitt"><h2>{SISTER_TITLE}</h2><p class="unter">{e(SISTER_LEAD)}</p>{sister_cards(depth)}</section>'
             f'<section class="abschnitt"><h2>Häufig gestellte Fragen</h2><div class="faq">{faq_html}</div></section>'
             f'<section class="abschnitt" style="padding-bottom:60px"><h2>Die Hilfe</h2><p class="unter">Jede Funktion ist beschrieben – mit Abbildungen aus dem Programm. '
             f'<a href="hilfe/Help/page/home/index.html">Zur Onlinehilfe →</a></p></section>' + foot(depth))
