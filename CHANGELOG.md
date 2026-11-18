@@ -1,3 +1,15 @@
+# [1.13.0](https://github.com/freegroup/CncCraft/compare/v1.12.0...v1.13.0) (2026-11-18)
+
+
+### Bug Fixes
+
+* rotate 3D view so the part follows the mouse like Fusion 360 ([5b7f2b6](https://github.com/freegroup/CncCraft/commit/5b7f2b6818503b8419056a9a6849749ea761b2a0))
+
+
+### Features
+
+* add reusable widgets module and 2D/3D slide toggle ([6e813e1](https://github.com/freegroup/CncCraft/commit/6e813e16e24cc481655748ef3619b8c9b6819537))
+
 # [1.12.0](https://github.com/freegroup/CncCraft/compare/v1.11.0...v1.12.0) (2026-11-17)
 
 
