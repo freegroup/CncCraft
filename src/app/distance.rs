@@ -647,7 +647,7 @@ impl App {
                     _ => format!("{v} mm"),
                 };
                 let chosen = matches!(self.selected_constraint, Some(LabelTarget::Distance(j)) if j == i);
-                let tone = if chosen { SELECT } else if off { Color32::from_rgb(0xc0, 0x30, 0x30) } else { CONSTRAINT };
+                let tone = if chosen { SELECT } else if off { crate::theme::error() } else { CONSTRAINT };
                 let tone = if slim { tone.gamma_multiply(0.5) } else { tone };
                 if let Some((label, line)) = self.draw_distance(&items, painter, c, (!slim).then_some(text), tone) {
                     if let Some(r) = label {
@@ -775,7 +775,7 @@ impl App {
         let (listing, taken) = (suggested.listing, suggested.taken);
         if let Some(why) = self.field_problem(&e.text) {
             // the reason, under the field
-            painter.text(resp.rect.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, why, egui::FontId::proportional(11.5), Color32::from_rgb(0xc0, 0x30, 0x30));
+            painter.text(resp.rect.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, why, egui::FontId::proportional(11.5), crate::theme::error());
         }
         self.distance_edit = Some(e);
         if esc && listing {

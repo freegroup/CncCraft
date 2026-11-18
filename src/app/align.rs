@@ -146,7 +146,7 @@ impl App {
             let Some((pa, pb)) = al.ends(&items) else { continue };
             let off = al.error(&items).is_some_and(|e| e > 1e-6);
             let chosen = matches!(self.selected_constraint, Some(super::distance::LabelTarget::Align(j)) if j == i);
-            let tone = if chosen { SELECT } else if off { Color32::from_rgb(0xc0, 0x30, 0x30) } else { CONSTRAINT };
+            let tone = if chosen { SELECT } else if off { crate::theme::error() } else { CONSTRAINT };
             let tone = if slim { tone.gamma_multiply(0.5) } else { tone };
             let (sa, sb) = (self.to_screen(pa), self.to_screen(pb));
             let mid = sa + (sb - sa) / 2.0;

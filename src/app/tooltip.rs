@@ -24,17 +24,13 @@ const ICON_BOX: f32 = 38.0;
 const ICON_GAP: f32 = 10.0;
 /// How much bigger a `big` icon is drawn (a 38 pt icon becomes about 84 pt).
 const BIG: f32 = 2.2;
-/// The colour of a keyboard shortcut badge: warm grey background.
-const KEY_BG: egui::Color32 = egui::Color32::from_rgb(0x58, 0x55, 0x52);
 /// Padding inside a key-cap badge.
 const KEY_PAD: f32 = 3.0;
-
-const REASON: egui::Color32 = egui::Color32::from_rgb(0xc0, 0x50, 0x00);
 
 /// A tooltip: header, text, an optional icon, an optional keyboard shortcut badge, and an optional
 /// text for when the control is disabled.
 #[derive(Clone)]
-pub(in crate::app) struct Tip {
+pub(crate) struct Tip {
     header: String,
     text: String,
     icon: Option<Icon>,
@@ -105,7 +101,7 @@ impl Tip {
                         let w = galley.size().x + KEY_PAD * 2.0;
                         let h = galley.size().y + KEY_PAD * 1.4;
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
-                        ui.painter().rect_filled(rect, 3.0, KEY_BG);
+                        ui.painter().rect_filled(rect, 3.0, crate::theme::key_bg());
                         let text_pos = rect.left_top() + Vec2::new(KEY_PAD, KEY_PAD * 0.7);
                         ui.painter().galley(text_pos, galley, egui::Color32::WHITE);
                     }
@@ -118,7 +114,7 @@ impl Tip {
         if let Some(reason) = reason {
             ui.add_space(2.0);
             ui.separator();
-            ui.add(egui::Label::new(egui::RichText::new(reason).color(REASON)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(reason).color(crate::theme::warning())).wrap());
         }
     }
 }
@@ -133,7 +129,7 @@ pub(in crate::app) fn shown_id() -> egui::Id {
 }
 
 /// Gives any control (button, combo box, radio button, label, …) a [`Tip`].
-pub(in crate::app) trait WithTip {
+pub(crate) trait WithTip {
     fn tip(self, tip: &Tip) -> Self;
 }
 

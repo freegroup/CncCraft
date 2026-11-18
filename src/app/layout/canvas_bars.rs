@@ -4,10 +4,11 @@
 use crate::app::shortcuts::Action;
 use crate::app::{icon_button, icon_button_tip, App, Icon, Tip, ViewMode};
 use crate::theme::{hairline, ink};
+use crate::widgets::SlideToggle;
 use egui::{Pos2, Sense, Stroke, Vec2};
 use shape_edit::selection_bounds;
 use super::tool_column::GAP;
-use super::widgets::{toolbar_group, SlideToggle};
+use super::widgets::toolbar_group;
 
 impl App {
     /// The toolbar over the drawing area: snapping and grid on the left; 2D/3D and zoom at the

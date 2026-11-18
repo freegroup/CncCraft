@@ -2,6 +2,7 @@
 //! tool, the strategy and the travel heights.
 
 use crate::app::*;
+use crate::widgets::combo_with_manage;
 use egui::Pos2;
 
 /// The editor's width: wide rather than tall.
@@ -140,7 +141,7 @@ impl App {
                             })
                             .collect();
                         let tool_label = crate::tools::shown_name(&tp.tool.name);
-                        if layout::combo_with_manage(ui, "tool", 160.0, &tool_label, Some(&tool_tip), |ui| {
+                        if combo_with_manage(ui, "tool", 160.0, &tool_label, Some(&tool_tip), |ui| {
                             for t in &allowed {
                                 if ui.selectable_label(tp.tool.name == t.name && tp.tool.diameter == t.diameter, crate::tools::shown_name(&t.name)).clicked() {
                                     tp.tool = (*t).clone();
@@ -362,7 +363,7 @@ fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr
       });
       // what is wrong, under the field (a long text would run out of the panel beside it)
       if let Some(e) = error {
-          ui.label(egui::RichText::new(e).small().color(input::ERROR));
+          ui.label(egui::RichText::new(e).small().color(input::error_color()));
       }
     });
     ui.end_row();

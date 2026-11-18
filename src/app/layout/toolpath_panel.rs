@@ -7,7 +7,8 @@ use crate::theme::{ACCENT, hairline, ink, muted};
 use crate::toolpath::Strategy;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use super::tool_column::GAP;
-use super::widgets::{draw_pencil, eye, group_container, group_title};
+use super::widgets::{draw_pencil, group_container, group_title};
+use crate::widgets::eye;
 
 /// Where a value between `lo` and `hi` sits on a 0–100 slider (spread logarithmically).
 fn to_slider(value: f64, lo: f64, hi: f64) -> f64 {
@@ -92,7 +93,7 @@ impl App {
             ui.horizontal(|ui| {
                 // only a problem is marked: a tick on every good board said nothing
                 if !valid {
-                    ui.label(egui::RichText::new("⚠").color(Color32::from_rgb(0xc0, 0x50, 0x00))).on_hover_text(t!("Die Platte hat keine gültige Größe: bitte einrichten"));
+                    ui.label(egui::RichText::new("⚠").color(crate::theme::warning())).on_hover_text(t!("Die Platte hat keine gültige Größe: bitte einrichten"));
                 }
                 ui.label(egui::RichText::new(t!("Platten-Setup")).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -371,7 +372,7 @@ impl App {
                     });
                 });
                 if let Some(w) = &tp.warning {
-                    ui.label(egui::RichText::new(format!("⚠ {w}")).small().color(Color32::from_rgb(0xc0, 0x50, 0x00)));
+                    ui.label(egui::RichText::new(format!("⚠ {w}")).small().color(crate::theme::warning()));
                 }
             });
             rows.push(row.response.rect);

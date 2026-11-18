@@ -283,8 +283,8 @@ impl Projection {
 /// A ring marks where the machine starts (home).
 pub fn paint_steps(painter: &egui::Painter, proj: &Projection, steps: &[Step], cut_colour: &dyn Fn(usize) -> egui::Color32) {
     use crate::transform::from_gcode::Kind;
-    let rapid_col = egui::Color32::from_rgba_premultiplied(0x00, 0xaa, 0xbb, 0xa0);
-    let plunge_col = egui::Color32::from_rgb(0xe0, 0xb0, 0x20).gamma_multiply(0.8);
+    let rapid_col = crate::theme::sim_rapid();
+    let plunge_col = crate::theme::sim_plunge().gamma_multiply(0.8);
     let at = |p: [f64; 3]| proj.to_screen([p[0] as f32, p[1] as f32, p[2] as f32]);
     for step in steps {
         let (from, to) = (at(step.from), at(step.to));

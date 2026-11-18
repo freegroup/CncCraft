@@ -110,7 +110,7 @@ pub(super) fn field(ctx: &egui::Context, key: Id, pos: Pos2, text: &mut String, 
         .fixed_pos(pos - Vec2::new(38.0, 11.0))
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
-            egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(if invalid { 1.6 } else { 1.0_f32 }, if invalid { Color32::from_rgb(0xc0, 0x30, 0x30) } else { crate::theme::outline() })).rounding(5.0).inner_margin(egui::Margin::symmetric(4.0, 1.0)).show(ui, |ui| {
+            egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(if invalid { 1.6 } else { 1.0_f32 }, if invalid { crate::theme::error() } else { crate::theme::outline() })).rounding(5.0).inner_margin(egui::Margin::symmetric(4.0, 1.0)).show(ui, |ui| {
                 // Tab must not wander off to other widgets: the fields handle it themselves
                 ui.add(egui::TextEdit::singleline(text).id(key).desired_width(68.0).font(egui::TextStyle::Monospace).frame(false).lock_focus(true))
             })
@@ -465,7 +465,7 @@ impl App {
                 menu_now = true;
             }
             if let (true, Err(why)) = (red, &invalid) {
-                painter.text(resp.rect.left_bottom() + Vec2::new(2.0, 3.0), Align2::LEFT_TOP, why, FontId::proportional(10.5), Color32::from_rgb(0xc0, 0x30, 0x30));
+                painter.text(resp.rect.left_bottom() + Vec2::new(2.0, 3.0), Align2::LEFT_TOP, why, FontId::proportional(10.5), crate::theme::error());
             }
             // the first field of a new shape gets the cursor as soon as it exists, and after taking
             // a suggestion it goes back into the field, behind the name

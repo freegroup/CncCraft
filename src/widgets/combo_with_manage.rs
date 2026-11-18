@@ -1,4 +1,5 @@
 use egui::{Rect, Sense, Stroke, Vec2};
+use crate::app::tooltip::{Tip, WithTip};
 
 /// A ComboBox whose popup has a scrollable item list and a pinned "Verwalten…" button below it.
 /// `items` draws the selectable rows; returns `true` when "Verwalten…" was clicked. `tip` shows
@@ -8,7 +9,7 @@ pub fn combo_with_manage(
     id: &str,
     width: f32,
     selected: &str,
-    tip: Option<&crate::app::Tip>,
+    tip: Option<&Tip>,
     items: impl FnOnce(&mut egui::Ui),
 ) -> bool {
     let widget_id = ui.make_persistent_id(id);
@@ -26,7 +27,6 @@ pub fn combo_with_manage(
     let desired = Vec2::new(total_w, galley.size().y.max(icon_size.y) + 2.0 * margin.y);
     let (rect, mut button) = ui.allocate_exact_size(desired, Sense::click());
     if let (Some(tip), false) = (tip, is_open) {
-        use crate::app::WithTip;
         button = button.tip(tip);
     }
 

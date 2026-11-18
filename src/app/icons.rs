@@ -16,7 +16,7 @@ const LINE: f32 = 1.8;
 
 /// The colours an icon is drawn with.
 #[derive(Clone, Copy)]
-pub(super) struct Colours {
+pub(crate) struct Colours {
     pub line: Color32,
     pub top: Color32,
     pub bottom: Color32,
@@ -634,7 +634,7 @@ impl Pen<'_> {
 }
 
 /// An eye (crossed out when hidden), in the icon colours; also used by the lists.
-pub(super) fn paint_eye(p: &Painter, c: Pos2, open: bool, k: Colours, hover: bool) {
+pub(crate) fn paint_eye(p: &Painter, c: Pos2, open: bool, k: Colours, hover: bool) {
     let lid: Vec<Pos2> = (0..=16)
         .map(|i| c + Vec2::angled(PI * (1.0 + i as f32 / 16.0)) * Vec2::new(8.5, 5.5))
         .chain((0..=16).map(|i| c + Vec2::angled(PI * (i as f32 / 16.0)) * Vec2::new(8.5, 5.5)))

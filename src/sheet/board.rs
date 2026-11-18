@@ -15,7 +15,7 @@ impl Decoration for Board {
     }
 
     fn paint(&self, view: &SheetView, painter: &Painter) {
-        painter.rect_filled(view.canvas, 0.0, if crate::theme::is_dark() { Color32::from_rgb(0x2d, 0x2f, 0x35) } else { Color32::from_rgb(0xd9, 0xdc, 0xe0) });
+        painter.rect_filled(view.canvas, 0.0, crate::theme::board_desk());
         let board = view.board();
         painter.rect_filled(board.translate(Vec2::new(3.0, 3.0)), 0.0, Color32::from_black_alpha(30));
         painter.rect_filled(board, 0.0, Color32::WHITE);

@@ -1,7 +1,7 @@
 //! Small pieces of interface that the layout modules share (not reusable outside layout).
 
 use crate::theme::{hairline, ink, muted};
-use egui::{Color32, FontId, Pos2, Stroke, Vec2};
+use egui::{Color32, Pos2, Stroke, Vec2};
 use super::tool_column::GAP;
 
 /// A pencil lying at 45°, tip at the lower left: a body with an eraser band and a pointed tip

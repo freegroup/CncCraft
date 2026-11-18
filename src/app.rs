@@ -12,7 +12,7 @@ mod gcode_highlight;
 mod gcode_overlay;
 mod input;
 mod grouping;
-mod icons;
+pub(crate) mod icons;
 mod importing;
 mod layers_ui;
 mod layout;
@@ -21,7 +21,7 @@ mod selftest;
 mod selftest_vector_ops;
 mod shortcuts;
 mod spline_deco;
-mod tooltip;
+pub(crate) mod tooltip;
 mod variables;
 mod vector_ops;
 
@@ -116,7 +116,7 @@ enum ViewMode {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Icon {
+pub(crate) enum Icon {
     Draw(DrawTool),
     Job,
     MirrorH,
@@ -543,8 +543,7 @@ impl App {
             crate::quit::install(&cc.egui_ctx);
         }
         let dark = theme_choice.dark(cc.egui_ctx.system_theme());
-        crate::theme::set_dark(dark);
-        crate::theme::apply(&cc.egui_ctx);
+        crate::theme::apply(&cc.egui_ctx, dark);
         let mut app = App {
             job: Job::default(),
             shapes: vec![],
@@ -2849,10 +2848,9 @@ impl App {
     /// Bring the colours in line with the choice (and with the system when it follows it).
     pub(super) fn sync_theme(&mut self, ctx: &egui::Context) {
         let dark = self.theme_choice.dark(ctx.system_theme());
-        if dark != self.dark || dark != crate::theme::is_dark() {
+        if dark != self.dark {
             self.dark = dark;
-            crate::theme::set_dark(dark);
-            crate::theme::apply(ctx);
+            crate::theme::apply(ctx, dark);
         }
     }
 }

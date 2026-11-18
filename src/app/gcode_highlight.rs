@@ -4,33 +4,18 @@ use std::sync::Arc;
 
 const MONO: fn() -> FontId = || FontId::monospace(12.0);
 
-fn cmd_color(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(86, 180, 233) } else { Color32::from_rgb(0, 100, 180) }
-}
-
-fn num_color(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(230, 159, 0) } else { Color32::from_rgb(160, 80, 0) }
-}
-
-fn comment_color(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(120, 140, 120) } else { Color32::from_rgb(100, 120, 100) }
-}
-
-fn placeholder_color(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(200, 130, 220) } else { Color32::from_rgb(140, 50, 160) }
-}
-
-fn text_color(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(210, 210, 210) } else { Color32::from_rgb(30, 30, 30) }
-}
+fn cmd_color() -> Color32 { crate::theme::gcode_cmd() }
+fn num_color() -> Color32 { crate::theme::gcode_num() }
+fn comment_color() -> Color32 { crate::theme::gcode_comment() }
+fn placeholder_color() -> Color32 { crate::theme::gcode_placeholder() }
+fn text_color() -> Color32 { crate::theme::gcode_text() }
 
 pub fn layout_gcode(ui: &egui::Ui, text: &str, wrap_width: f32) -> Arc<egui::Galley> {
-    let dark = ui.visuals().dark_mode;
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap_width;
 
     for line in text.split_inclusive('\n') {
-        layout_line(&mut job, line, dark);
+        layout_line(&mut job, line);
     }
     if !text.ends_with('\n') && !text.is_empty() {
         // no trailing newline — already handled
@@ -38,7 +23,7 @@ pub fn layout_gcode(ui: &egui::Ui, text: &str, wrap_width: f32) -> Arc<egui::Gal
     ui.fonts(|f| f.layout_job(job))
 }
 
-fn layout_line(job: &mut LayoutJob, line: &str, dark: bool) {
+fn layout_line(job: &mut LayoutJob, line: &str) {
     let bytes = line.as_bytes();
     let len = bytes.len();
     let mut i = 0;
@@ -47,21 +32,21 @@ fn layout_line(job: &mut LayoutJob, line: &str, dark: bool) {
         if bytes[i] == b'(' {
             if let Some(end) = line[i..].find(')') {
                 let span = &line[i..i + end + 1];
-                job.append(span, 0.0, TextFormat { font_id: MONO(), color: comment_color(dark), ..Default::default() });
+                job.append(span, 0.0, TextFormat { font_id: MONO(), color: comment_color(), ..Default::default() });
                 i += end + 1;
                 continue;
             }
         }
 
         if bytes[i] == b';' {
-            job.append(&line[i..], 0.0, TextFormat { font_id: MONO(), color: comment_color(dark), ..Default::default() });
+            job.append(&line[i..], 0.0, TextFormat { font_id: MONO(), color: comment_color(), ..Default::default() });
             return;
         }
 
         if bytes[i] == b'{' {
             if let Some(end) = line[i..].find('}') {
                 let span = &line[i..i + end + 1];
-                job.append(span, 0.0, TextFormat { font_id: MONO(), color: placeholder_color(dark), ..Default::default() });
+                job.append(span, 0.0, TextFormat { font_id: MONO(), color: placeholder_color(), ..Default::default() });
                 i += end + 1;
                 continue;
             }
@@ -78,16 +63,15 @@ fn layout_line(job: &mut LayoutJob, line: &str, dark: bool) {
                 let letter = &line[start..start + 1];
                 let number = &line[start + 1..i];
                 let letter_color = match b {
-                    b'G' | b'M' | b'T' => cmd_color(dark),
-                    b'S' | b'F' | b'N' => num_color(dark),
-                    _ => num_color(dark), // X Y Z
+                    b'G' | b'M' | b'T' => cmd_color(),
+                    _ => num_color(),
                 };
                 job.append(letter, 0.0, TextFormat { font_id: MONO(), color: letter_color, ..Default::default() });
-                job.append(number, 0.0, TextFormat { font_id: MONO(), color: num_color(dark), ..Default::default() });
+                job.append(number, 0.0, TextFormat { font_id: MONO(), color: num_color(), ..Default::default() });
                 continue;
             }
             i = start + 1;
-            job.append(&line[start..i], 0.0, TextFormat { font_id: MONO(), color: text_color(dark), ..Default::default() });
+            job.append(&line[start..i], 0.0, TextFormat { font_id: MONO(), color: text_color(), ..Default::default() });
             continue;
         }
 
@@ -101,7 +85,7 @@ fn layout_line(job: &mut LayoutJob, line: &str, dark: bool) {
             i += 1;
         }
         if i > start {
-            job.append(&line[start..i], 0.0, TextFormat { font_id: MONO(), color: text_color(dark), ..Default::default() });
+            job.append(&line[start..i], 0.0, TextFormat { font_id: MONO(), color: text_color(), ..Default::default() });
         }
     }
 }

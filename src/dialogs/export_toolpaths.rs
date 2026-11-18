@@ -3,7 +3,7 @@
 use crate::app::{App, Tip};
 use crate::theme::{ink, muted};
 use egui::{Align2, Vec2};
-use crate::app::layout::combo_with_manage;
+use crate::widgets::combo_with_manage;
 
 impl App {
     /// The window every export of the toolpaths goes through (the menu and the disk icon): which

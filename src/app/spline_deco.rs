@@ -70,7 +70,7 @@ impl App {
             let arm_col = if any_active {
                 ACCENT
             } else {
-                Color32::from_rgba_unmultiplied(0x40, 0x80, 0xd0, 180)
+                crate::theme::spline_arm().gamma_multiply(0.7)
             };
 
             let pos_s = self.to_screen(pos);

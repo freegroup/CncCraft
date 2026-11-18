@@ -5,7 +5,7 @@
 
 use super::{App, DrawTool};
 use crate::theme::{CONSTRAINT, INK};
-use egui::{Color32, CursorIcon, Pos2, Rect, Stroke, Vec2};
+use egui::{CursorIcon, Pos2, Rect, Stroke, Vec2};
 
 /// What the badge next to the crosshair shows.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -66,7 +66,7 @@ impl App {
         self.custom_cursor_badge = Some(badge);
         let tone = if badge == Badge::Dimension { CONSTRAINT } else { INK };
         // every line gets a light edge, so it can be seen on dark toolpaths and on the board alike
-        let halo = Stroke::new(3.2_f32, Color32::from_white_alpha(200));
+        let halo = Stroke::new(3.2_f32, crate::theme::halo());
         let line = Stroke::new(1.3_f32, tone);
         let (gap, arm) = (3.0, 9.0);
         for dir in [Vec2::X, Vec2::Y, -Vec2::X, -Vec2::Y] {

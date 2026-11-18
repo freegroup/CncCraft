@@ -155,4 +155,4 @@ pub(super) fn problem(text: &str, lookup: &dyn calc::Lookup, positive: bool) -> 
 }
 
 /// The colour of an error line under a field.
-pub(super) const ERROR: Color32 = Color32::from_rgb(0xc0, 0x30, 0x30);
+pub(super) fn error_color() -> Color32 { crate::theme::error() }

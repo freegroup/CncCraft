@@ -26,14 +26,17 @@ impl<'a> SlideToggle<'a> {
             width: n as f32 * 36.0,
             height: 28.0,
             font_size: 13.0,
-            active_color: crate::app::ACCENT,
+            active_color: crate::theme::ACCENT,
             anim_secs: 0.15,
         }
     }
 
     pub fn width(mut self, w: f32) -> Self { self.width = w; self }
+    #[allow(dead_code)]
     pub fn height(mut self, h: f32) -> Self { self.height = h; self }
+    #[allow(dead_code)]
     pub fn font_size(mut self, s: f32) -> Self { self.font_size = s; self }
+    #[allow(dead_code)]
     pub fn active_color(mut self, c: Color32) -> Self { self.active_color = c; self }
 
     pub fn show(self, ui: &mut egui::Ui, value: &mut usize) -> egui::Response {

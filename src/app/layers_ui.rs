@@ -10,9 +10,6 @@ use crate::layers::{Leftovers, PALETTE};
 use crate::theme::{ink, muted};
 use egui::{Align2, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, Vec2};
 
-/// The dark blue bar of the active layer in the original's list.
-const ACTIVE_BAR: Color32 = Color32::from_rgb(0x22, 0x49, 0x85);
-
 pub(super) enum LayerDialog {
     /// A name for a new layer.
     New { text: String, fresh: bool },
@@ -28,7 +25,8 @@ fn stroke(c: Color32) -> Stroke {
 
 /// The eye of a row: the blue icon, or plain white on the active bar.
 fn paint_eye(p: &egui::Painter, c: Pos2, open: bool, on_bar: bool) {
-    let k = if on_bar { Colours { line: Color32::WHITE, top: Color32::WHITE, bottom: Color32::WHITE, back: ACTIVE_BAR } } else { Colours::normal() };
+    let oa = crate::theme::on_accent();
+    let k = if on_bar { Colours { line: oa, top: oa, bottom: oa, back: crate::theme::layer_active() } } else { Colours::normal() };
     super::icons::paint_eye(p, c, open, k, false);
 }
 
@@ -135,10 +133,11 @@ impl App {
         let active = id == self.layers.active;
         let (row, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 30.0), Sense::click());
         let key = Id::new(("layer_row", id));
-        let tone = if active { Color32::WHITE } else if visible { crate::theme::icon_line() } else { crate::theme::disabled() };
-        let text_tone = if active { Color32::WHITE } else if visible { ink() } else { muted() };
+        let oa = crate::theme::on_accent();
+        let tone = if active { oa } else if visible { crate::theme::icon_line() } else { crate::theme::disabled() };
+        let text_tone = if active { oa } else if visible { ink() } else { muted() };
         if active {
-            ui.painter().rect_filled(row, 15.0, ACTIVE_BAR);
+            ui.painter().rect_filled(row, 15.0, crate::theme::layer_active());
         } else if resp.hovered() {
             ui.painter().rect_filled(row, 15.0, crate::theme::hover());
         }
@@ -152,10 +151,10 @@ impl App {
         paint_lock(p, lock.rect.center(), locked, tone);
         let c = PALETTE[colour % PALETTE.len()];
         let layer_colour = Color32::from_rgb(c[0], c[1], c[2]);
-        paint_sheet(p, Pos2::new(row.left() + 80.0, row.center().y), if active { Color32::WHITE } else { layer_colour }, if active { Color32::WHITE } else { tone });
+        paint_sheet(p, Pos2::new(row.left() + 80.0, row.center().y), if active { oa } else { layer_colour }, if active { oa } else { tone });
         p.text(Pos2::new(row.left() + 100.0, row.center().y), Align2::LEFT_CENTER, name, FontId::proportional(14.0), text_tone);
         p.circle_filled(dot_rect.center(), 7.5, layer_colour);
-        p.circle_stroke(dot_rect.center(), 7.5, Stroke::new(1.0_f32, if active { Color32::WHITE } else { crate::theme::outline() }));
+        p.circle_stroke(dot_rect.center(), 7.5, Stroke::new(1.0_f32, if active { oa } else { crate::theme::outline() }));
         if eye.on_hover_text(if visible { t!("Sichtbar (klicken zum Ausblenden: Formen werden dann nicht gezeigt, nicht gefräst und nicht exportiert)") } else { t!("Ausgeblendet (klicken zum Einblenden)") }).clicked() {
             self.layers.set_visible(id, !visible);
         } else if lock.on_hover_text(if locked { t!("Gesperrt (klicken zum Entsperren)") } else { t!("Entsperrt (klicken zum Sperren: bleibt sichtbar, aber nichts darauf lässt sich anklicken oder ändern)") }).clicked() {
