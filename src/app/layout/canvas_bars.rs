@@ -7,7 +7,7 @@ use crate::theme::{hairline, ink};
 use egui::{Pos2, Sense, Stroke, Vec2};
 use shape_edit::selection_bounds;
 use super::tool_column::GAP;
-use super::widgets::toolbar_group;
+use super::widgets::{toolbar_group, SlideToggle};
 
 impl App {
     /// The toolbar over the drawing area: snapping and grid on the left; 2D/3D and zoom at the
@@ -55,14 +55,12 @@ impl App {
                     if icon_button(ui, Icon::ZoomFit, false, &t!("Ganze Ansicht")).clicked() {
                         self.run(Action::FitView);
                     }
-                    let (label, next, hint) = match self.mode {
-                        ViewMode::TwoD => ("2D", ViewMode::ThreeD, t!("Zur 3D-Ansicht wechseln")),
-                        ViewMode::ThreeD => ("3D", ViewMode::TwoD, t!("Zur 2D-Ansicht wechseln")),
-                    };
-                    let b = egui::Button::new(egui::RichText::new(label).strong().size(15.0).color(ink())).min_size(Vec2::new(38.0, 30.0)).stroke(Stroke::new(1.5_f32, ink())).rounding(4.0);
-                    if ui.add(b).on_hover_text(hint).clicked() {
-                        self.mode = next;
-                    }
+                    // slide toggle: 2D / 3D
+                    let mut idx = if self.mode == ViewMode::ThreeD { 1 } else { 0 };
+                    let toggle = SlideToggle::new("view_toggle_slide", &["2D", "3D"]).width(72.0);
+                    let hint = if idx == 1 { t!("Zur 2D-Ansicht wechseln") } else { t!("Zur 3D-Ansicht wechseln") };
+                    toggle.show(ui, &mut idx).on_hover_text(hint);
+                    self.mode = if idx == 1 { ViewMode::ThreeD } else { ViewMode::TwoD };
                 });
             });
         });

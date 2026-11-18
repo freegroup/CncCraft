@@ -39,6 +39,7 @@ mod tools;
 mod transform;
 mod view3d;
 mod viewdeco;
+mod widgets;
 mod zipfile;
 
 use std::path::PathBuf;
