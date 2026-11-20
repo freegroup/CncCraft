@@ -12,17 +12,22 @@ impl App {
         let mut keep = true;
         let mut next = None;
         match dialog {
-            LayerDialog::New { mut text, fresh } => {
-                let (ok, cancel) = name_window(ctx, &t!("Neue Ebene"), &mut text, fresh);
+            LayerDialog::New { mut text, fresh, mut image } => {
+                let (ok, cancel) = new_layer_window(ctx, &mut text, &mut image, fresh);
                 if ok {
-                    let id = self.layers.add(&text);
-                    self.status = format!("Ebene „{}“ angelegt", self.layers.name(id));
+                    self.last_layer_image = image;
+                    let id = if image { self.layers.add_image(&text) } else { self.layers.add(&text) };
+                    if image {
+                        self.tool = DrawTool::Select;
+                        self.tool_form = None;
+                    }
+                    self.status = format!("Ebene \u{201e}{}\u{201c} angelegt", self.layers.name(id));
                     keep = false;
                 } else if cancel {
                     keep = false;
                 }
                 if keep {
-                    next = Some(LayerDialog::New { text, fresh: false });
+                    next = Some(LayerDialog::New { text, fresh: false, image });
                 }
             }
             LayerDialog::Rename { id, mut text, fresh } => {
@@ -69,6 +74,48 @@ impl App {
     }
 }
 
+/// The "new layer" window: a type selector (Vector / Image) and a name field.
+fn new_layer_window(ctx: &egui::Context, text: &mut String, image: &mut bool, fresh: bool) -> (bool, bool) {
+    let (mut ok, mut cancel) = (false, false);
+    dialogs::window("new_layer_window", ctx).anchor(Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
+        if dialogs::header(ui, &t!("Neue Ebene")) {
+            cancel = true;
+        }
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(t!("Typ")).strong());
+            ui.add_space(8.0);
+            if ui.radio(!*image, t!("Vektor")).clicked() {
+                *image = false;
+            }
+            if ui.radio(*image, t!("Bild")).clicked() {
+                *image = true;
+            }
+        });
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(t!("Name")).strong());
+        ui.add_space(2.0);
+        let resp = ui.add(egui::TextEdit::singleline(text).id(egui::Id::new("layer_name")).desired_width(240.0));
+        if fresh {
+            resp.request_focus();
+            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
+                state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(text.chars().count()))));
+                state.store(ui.ctx(), resp.id);
+            }
+        }
+        if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            ok = true;
+        }
+        dialog_buttons(ui, |ui| {
+            ok |= ui.add(egui::Button::new(egui::RichText::new(t!("OK")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(80.0, 30.0)).rounding(4.0)).clicked();
+            cancel |= ui.button(t!("Abbrechen")).clicked();
+        });
+    });
+    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        cancel = true;
+    }
+    (ok, cancel)
+}
+
 /// A window with one name field; returns (confirmed, cancelled).
 fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool) -> (bool, bool) {
     let (mut ok, mut cancel) = (false, false);
@@ -89,7 +136,7 @@ fn name_window(ctx: &egui::Context, title: &str, text: &mut String, fresh: bool)
             ok = true;
         }
         dialog_buttons(ui, |ui| {
-            ok |= ui.button(t!("OK")).clicked();
+            ok |= ui.add(egui::Button::new(egui::RichText::new(t!("OK")).strong().color(INK)).fill(ACCENT).min_size(Vec2::new(80.0, 30.0)).rounding(4.0)).clicked();
             cancel |= ui.button(t!("Abbrechen")).clicked();
         });
     });

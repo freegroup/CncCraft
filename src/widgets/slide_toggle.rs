@@ -65,9 +65,11 @@ impl<'a> SlideToggle<'a> {
         }
 
         if resp.clicked() {
-            if let Some(pos) = ui.input(|i| i.pointer.latest_pos()) {
-                let clicked_seg = ((pos.x - rect.left()) / seg).floor() as usize;
-                if clicked_seg < n && clicked_seg != *value {
+            if n == 2 {
+                *value = 1 - *value;
+            } else if let Some(pos) = ui.input(|i| i.pointer.latest_pos()) {
+                let clicked_seg = ((pos.x - rect.left()) / seg).floor().clamp(0.0, (n - 1) as f32) as usize;
+                if clicked_seg != *value {
                     *value = clicked_seg;
                 }
             } else {

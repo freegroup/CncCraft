@@ -10,6 +10,7 @@ use dialogs::{dialog_buttons, dialog_group};
 mod fields;
 mod gcode_highlight;
 mod gcode_overlay;
+mod image_tools;
 mod input;
 mod grouping;
 pub(crate) mod icons;
@@ -44,6 +45,7 @@ use shape_edit::{
     Rect as RectShape, Shape, SnapKind, Snapping, Text, Tool as EditTool, View,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -153,6 +155,14 @@ pub(crate) enum Icon {
     Align,
     /// Show or hide the origin: the axis cross of the sheet and the zero cross of the 3D view.
     Origin,
+    /// Insert a reference image on the active image layer.
+    InsertImage,
+    /// Calibrate the reference image (click two points, enter distance).
+    Calibrate,
+    /// Slot / trace milling strategy.
+    Slot,
+    /// Adjust the opacity of a reference image.
+    Transparency,
 }
 
 /// What the right-click menu of the canvas works on: the shape under the pointer when it opened.
@@ -516,6 +526,14 @@ pub struct App {
     layer_dialog: Option<layers_ui::LayerDialog>,
     /// Review only: keep the layer list open.
     layer_open: bool,
+    /// The last chosen layer type in the "new layer" dialog (persisted across restarts).
+    last_layer_image: bool,
+    /// Decoded image textures keyed by layer id; rebuilt when the image bytes change.
+    image_textures: HashMap<u32, (egui::TextureHandle, [u32; 2])>,
+    /// The calibrate-image mode: pick two points, enter distance.
+    calibrate_mode: Option<image_tools::CalibrateMode>,
+    /// Whether the transparency slider for the active image layer is open.
+    transparency_open: bool,
     /// The dark colours are in use right now.
     dark: bool,
     /// What the person chose: follow the system, light or dark (as in the original).
@@ -679,6 +697,10 @@ impl App {
             layers: crate::layers::Layers::default(),
             layer_dialog: None,
             layer_open: false,
+            last_layer_image: cc.storage.and_then(|s| s.get_string("cnccraft_layer_type")).is_some_and(|v| v == "image"),
+            image_textures: HashMap::new(),
+            calibrate_mode: None,
+            transparency_open: false,
         };
         app.post_idx = app.post_idx.min(app.postprocs.len().saturating_sub(1));
         if cc.storage.and_then(|s| s.get_string("cnccraft_cam_perspective")).is_some_and(|v| v == "true") {
@@ -884,6 +906,7 @@ impl App {
         self.align_mode = None;
         self.dim_mode = None;
         self.distance_edit = None;
+        self.calibrate_mode = None;
         self.edit = ShapeEditor::default();
         self.undo.clear();
         self.redo.clear();
@@ -944,7 +967,7 @@ impl App {
 
     /// A window that asks something and must be answered first is open.
     pub(super) fn modal_open(&self) -> bool {
-        self.unsaved.is_some() || self.after_thumb.is_some() || self.export_dialog || self.export_file || self.job_dialog.is_some() || self.about
+        self.unsaved.is_some() || self.after_thumb.is_some() || self.export_dialog || self.export_file || self.job_dialog.is_some() || self.about || self.calibrate_mode.as_ref().is_some_and(|m| m.second.is_some())
     }
 
     /// Drop everything that is being typed or drawn, and the pop-ups: the floating value fields and
@@ -1016,6 +1039,9 @@ impl App {
                 self.aligns = p.aligns;
                 self.layers = p.layers.repaired();
                 self.layers.sync(&mut self.shapes);
+                self.image_textures.clear();
+                self.calibrate_mode = None;
+                self.transparency_open = false;
                 if !p.postprocs.is_empty() {
                     self.postprocs = p.postprocs;
                 } else {
@@ -1490,8 +1516,11 @@ impl App {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, canvas());
         ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect.shrink(40.0)), |ui| {
-            // scrollable, since the sister-app cards below can push the content past small windows
             egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+
+            let avail = ui.available_width();
+
+            // ── hero: welcome + three action cards ──
             ui.vertical_centered(|ui| {
                 ui.add_space(30.0);
                 ui.label(egui::RichText::new(t!("Willkommen bei CncCraft")).size(28.0).strong().color(ink()));
@@ -1513,7 +1542,6 @@ impl App {
                     ui.painter().rect_filled(ic, 10.0, if hover { ACCENT } else { Color32::from_rgb(0xff, 0xf3, 0xcc) });
                     let p = ui.painter();
                     let c = ic.center();
-                    // the tile is pale yellow in both themes, so its drawing is the dark ink in both
                     let st = Stroke::new(2.5_f32, INK);
                     match which {
                         0 => {
@@ -1542,86 +1570,93 @@ impl App {
                 }
             });
 
-            // Recent files list
+            // ── recent files: horizontal thumbnail cards ──
             let mut open_recent: Option<PathBuf> = None;
             if !self.recent_files.is_empty() {
                 ui.add_space(30.0);
                 ui.vertical_centered(|ui| {
                     ui.label(egui::RichText::new(t!("Zuletzt verwendet")).size(16.0).strong().color(ink()));
                 });
-                ui.add_space(8.0);
-                let list_width = 500.0_f32.min(ui.available_width() - 40.0);
+                ui.add_space(12.0);
+                let thumb_card_w = 160.0_f32;
+                let thumb_card_h = 140.0_f32;
+                let thumb_gap = 14.0_f32;
+                let max_shown = ((avail + thumb_gap) / (thumb_card_w + thumb_gap)).floor() as usize;
+                let shown = self.recent_files.len().min(max_shown).max(1);
+                let row_w = shown as f32 * thumb_card_w + (shown.saturating_sub(1)) as f32 * thumb_gap;
                 ui.horizontal(|ui| {
-                    ui.add_space(((ui.available_width() - list_width) / 2.0).max(0.0));
-                    ui.vertical(|ui| {
-                        ui.set_width(list_width);
-                        for path in &self.recent_files {
-                            let name = path.file_stem().map_or_else(|| "?".into(), |s| s.to_string_lossy().into_owned());
-                            let dir = path.parent().map_or(String::new(), |p| p.to_string_lossy().into_owned());
-                            let thumb = thumb_path(path);
-                            let frame = egui::Frame::none()
-                                .fill(crate::theme::card())
-                                .rounding(6.0)
-                                .inner_margin(egui::Margin::symmetric(10.0, 6.0));
-                            let row = frame.show(ui, |ui| {
-                                ui.set_width(ui.available_width());
-                                ui.horizontal(|ui| {
-                                    let tex_id = egui::Id::new(("thumb_tex", path.as_os_str()));
-                                    let loaded = ui.data(|d| d.get_temp::<egui::TextureId>(tex_id));
-                                    let tid = loaded.unwrap_or_else(|| {
-                                        if let Ok(img) = image::open(&thumb) {
-                                            let rgba = img.to_rgba8();
-                                            let size = [rgba.width() as usize, rgba.height() as usize];
-                                            let full_size_id = egui::Id::new(("thumb_size", path.as_os_str()));
-                                            ui.data_mut(|d| d.insert_temp(full_size_id, [size[0] as f32, size[1] as f32]));
-                                            let ci = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
-                                            let t = ui.ctx().load_texture(format!("thumb_{}", path.display()), ci, egui::TextureOptions::LINEAR);
-                                            let id = t.id();
-                                            ui.data_mut(|d| d.insert_temp(tex_id, id));
-                                            ui.data_mut(|d| d.insert_temp(egui::Id::new(("thumb_handle", path.as_os_str())), t));
-                                            id
-                                        } else {
-                                            egui::TextureId::default()
-                                        }
-                                    });
-                                    if tid != egui::TextureId::default() {
-                                        let th = 80.0_f32;
-                                        let tw = th * 16.0 / 9.0;
-                                        let img_resp = ui.add(egui::Image::new(egui::load::SizedTexture::new(tid, Vec2::new(tw, th))).rounding(6.0));
-                                        let full_size_id = egui::Id::new(("thumb_size", path.as_os_str()));
-                                        let full_size = ui.data(|d| d.get_temp::<[f32; 2]>(full_size_id)).unwrap_or([tw, th]);
-                                        img_resp.on_hover_ui(|ui| {
-                                            ui.add(egui::Image::new(egui::load::SizedTexture::new(tid, Vec2::new(full_size[0], full_size[1]))).rounding(6.0));
-                                        });
-                                    } else {
-                                        ui.label(egui::RichText::new("📄").size(32.0));
-                                    }
-                                    ui.add_space(6.0);
-                                    ui.vertical(|ui| {
-                                        ui.label(egui::RichText::new(&name).strong().color(ink()));
-                                        ui.label(egui::RichText::new(&dir).small().color(muted()));
-                                    });
-                                });
-                            });
-                            let resp = ui.interact(row.response.rect, egui::Id::new(("recent", path.as_os_str())), Sense::click());
-                            if resp.hovered() {
-                                ui.painter().rect_stroke(row.response.rect, 6.0, Stroke::new(1.5_f32, ACCENT));
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    ui.add_space(((avail - row_w) / 2.0).max(0.0));
+                    for (i, path) in self.recent_files.iter().enumerate() {
+                        if i >= shown { break; }
+                        let name = path.file_stem().map_or_else(|| "?".into(), |s| s.to_string_lossy().into_owned());
+                        let thumb = thumb_path(path);
+                        let (r, resp) = ui.allocate_exact_size(Vec2::new(thumb_card_w, thumb_card_h), Sense::click());
+                        let hover = resp.hovered();
+                        let p = ui.painter();
+                        p.rect(r, 8.0, crate::theme::card(), Stroke::new(if hover { 2.0_f32 } else { 1.0_f32 }, if hover { ACCENT } else { crate::theme::card_edge() }));
+
+                        let img_rect = Rect::from_min_size(r.min + Vec2::new(6.0, 6.0), Vec2::new(thumb_card_w - 12.0, thumb_card_h - 40.0));
+                        let tex_id = egui::Id::new(("thumb_tex", path.as_os_str()));
+                        let loaded = ui.data(|d| d.get_temp::<egui::TextureId>(tex_id));
+                        let tid = loaded.unwrap_or_else(|| {
+                            if let Ok(img) = image::open(&thumb) {
+                                let rgba = img.to_rgba8();
+                                let size = [rgba.width() as usize, rgba.height() as usize];
+                                let ci = egui::ColorImage::from_rgba_unmultiplied(size, &rgba);
+                                let t = ui.ctx().load_texture(format!("thumb_{}", path.display()), ci, egui::TextureOptions::LINEAR);
+                                let id = t.id();
+                                ui.data_mut(|d| d.insert_temp(tex_id, id));
+                                ui.data_mut(|d| d.insert_temp(egui::Id::new(("thumb_handle", path.as_os_str())), t));
+                                id
+                            } else {
+                                egui::TextureId::default()
                             }
-                            if resp.clicked() {
-                                open_recent = Some(path.clone());
-                            }
-                            ui.add_space(2.0);
+                        });
+                        if tid != egui::TextureId::default() {
+                            p.image(tid, img_rect, Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)), Color32::WHITE);
+                            p.rect_stroke(img_rect, 4.0, Stroke::new(1.0_f32, crate::theme::card_edge()));
+                        } else {
+                            p.rect_filled(img_rect, 4.0, crate::theme::surface());
                         }
-                    });
+
+                        let name_trunc: String = if name.chars().count() > 18 { format!("{}…", name.chars().take(17).collect::<String>()) } else { name };
+                        p.text(Pos2::new(r.center().x, r.bottom() - 16.0), Align2::CENTER_CENTER, name_trunc, FontId::proportional(12.0), ink());
+
+                        if hover {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+                        if resp.clicked() {
+                            open_recent = Some(path.clone());
+                        }
+                        resp.on_hover_text(path.display().to_string());
+                        if i + 1 < shown {
+                            ui.add_space(thumb_gap);
+                        }
+                    }
                 });
             }
             if let Some(path) = open_recent {
                 self.open_path(path);
             }
-            ui.add_space(36.0);
-            other_apps_ui(ui);
+
+            // ── sister apps: distinct panel zone ──
+            ui.add_space(40.0);
+            let panel_w = 800.0_f32.min(avail);
+            ui.horizontal(|ui| {
+                ui.add_space(((avail - panel_w) / 2.0).max(0.0));
+                ui.vertical(|ui| {
+                    ui.set_width(panel_w);
+                    egui::Frame::none()
+                        .fill(crate::theme::panel())
+                        .rounding(14.0)
+                        .inner_margin(egui::Margin::symmetric(24.0, 24.0))
+                        .show(ui, |ui| {
+                            other_apps_ui(ui);
+                        });
+                });
+            });
             ui.add_space(20.0);
+
             });
         });
     }
@@ -1657,6 +1692,41 @@ impl App {
 
         // the worksheet under the design (board, grid…), each a decoration of its own
         self.sheet.paint(sheet::Layer::Under, &self.sheet_view(rect), &painter);
+
+        // reference images on visible image layers
+        for layer in &self.layers.list {
+            if !layer.visible { continue; }
+            let Some(ib) = layer.as_image() else { continue; };
+            if ib.image.bytes.is_empty() { continue; }
+            let lid = layer.id;
+            let needs_texture = !self.image_textures.contains_key(&lid);
+            if needs_texture {
+                if let Ok(decoded) = image::load_from_memory(&ib.image.bytes) {
+                    let rgba = decoded.to_rgba8();
+                    let size = [rgba.width() as usize, rgba.height() as usize];
+                    let tex = ui.ctx().load_texture(
+                        format!("layer_img_{lid}"),
+                        egui::ColorImage::from_rgba_unmultiplied(size, &rgba),
+                        egui::TextureOptions::LINEAR,
+                    );
+                    self.image_textures.insert(lid, (tex, [rgba.width(), rgba.height()]));
+                }
+            }
+            if let Some((tex, _)) = self.image_textures.get(&lid) {
+                let ref_shape = self.shapes.iter().find(|s| matches!(&s.shape, Shape::RefImage(r) if r.layer_id == lid));
+                let (lo, hi) = if let Some(s) = ref_shape {
+                    if let Some(b) = s.shape.bounds() { b } else { continue; }
+                } else {
+                    continue;
+                };
+                let alpha = (ib.image.opacity * 255.0) as u8;
+                let tint = Color32::from_rgba_unmultiplied(255, 255, 255, alpha);
+                let tl = self.to_screen([lo[0], hi[1]]);
+                let br = self.to_screen([hi[0], lo[1]]);
+                let img_rect = Rect::from_two_pos(tl, br);
+                painter.image(tex.id(), img_rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), tint);
+            }
+        }
 
         // shapes
         let view = self.view();
@@ -1706,6 +1776,19 @@ impl App {
         // a ring or a line shows its selection as a solid line, not in marching dashes
         let solid_selection = self.edit.style(&self.shapes) != shape_edit::SelectionStyle::Box;
         for s in self.shapes.iter().filter(|s| !s.hidden) {
+            // RefImage shapes are rendered as textures above; only draw their selection outline
+            if matches!(&s.shape, Shape::RefImage(_)) {
+                if self.edit.selection.contains(&s.id) || Some(s.id) == hover_id {
+                    let sel = self.edit.selection.contains(&s.id);
+                    let col = if sel { SELECT } else { Color32::from_rgb(0xd0, 0x40, 0x40) };
+                    for c in s.shape.contours() {
+                        let mut pts: Vec<Pos2> = c.pts.iter().map(|p| self.to_screen(*p)).collect();
+                        if c.closed && !pts.is_empty() { pts.push(pts[0]); }
+                        painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5_f32, col), 6.0, 4.0));
+                    }
+                }
+                continue;
+            }
             let sel = self.edit.selection.contains(&s.id);
             let base = if mark_free { free_edge } else { Color32::BLACK };
             let col = if sel { SELECT } else if Some(s.id) == hover_id { Color32::from_rgb(0xd0, 0x40, 0x40) } else { base };
@@ -1937,6 +2020,8 @@ impl App {
         self.angle_ui(ui.ctx(), &painter);
         // a tool cursor of our own over the drawing (hiding the system pointer)
         self.custom_cursor(ui.ctx(), &painter, rect, resp.hovered());
+        // calibrate mode: crosshairs and measurement line
+        self.calibrate_paint(&painter);
         // the worksheet over the design (rulers, axis cross…), with the pointer as it is now
         self.sheet.paint(sheet::Layer::Over, &self.sheet_view(rect), &painter);
     }
@@ -1984,6 +2069,13 @@ impl App {
                 self.dimension_input(resp, mouse);
             }
             if self.dim_mode.is_some() && !dragging_shape {
+                return;
+            }
+        }
+        // the calibrate-image mode takes clicks to pick two points
+        if self.calibrate_mode.is_some() {
+            self.calibrate_input(resp, mouse);
+            if self.calibrate_mode.is_some() {
                 return;
             }
         }
@@ -2060,6 +2152,7 @@ impl App {
                         _ => {}
                     }
                     if outcome.changed_shapes() {
+                        self.sync_image_from_shape();
                         self.recompute_all();
                     }
                 }
@@ -2346,6 +2439,9 @@ impl App {
         if self.cancel_dim_mode() {
             return;
         }
+        if self.cancel_calibrate() {
+            return;
+        }
         if self.edit.is_busy() {
             self.edit.cancel(&mut self.shapes);
             if self.gesture_undo {
@@ -2613,6 +2709,7 @@ impl eframe::App for App {
         storage.set_string("cnccraft_output_scope", format!("{:?}", self.output_scope));
         storage.set_string("cnccraft_export_per_tool", self.export_per_tool.to_string());
         storage.set_string("cnccraft_cam_perspective", self.cam.perspective.to_string());
+        storage.set_string("cnccraft_layer_type", (if self.last_layer_image { "image" } else { "vector" }).into());
         storage.set_string("cnccraft_tools", self.lib.to_json());
     }
 
@@ -2629,6 +2726,7 @@ impl eframe::App for App {
             self.edit.retain_existing(&self.shapes);
             self.recompute_all();
         }
+        self.edit.priority_layer = self.layers.active;
         if self.selftest.is_some() {
             // the synthetic events come one per frame, so keep the frames coming
             ctx.request_repaint();
@@ -2722,6 +2820,8 @@ impl eframe::App for App {
         self.import_missing_ui(ctx);
         self.pp_dialog_ui(ctx);
         self.tool_dialog_ui(ctx);
+        self.calibrate_dialog(ctx);
+        self.transparency_dialog(ctx);
         self.save_thumbnail(ctx);
         if self.thumb_pending == 0 {
             if let Some(what) = self.after_thumb.take() {
@@ -2813,6 +2913,7 @@ fn tp_color(s: &Strategy) -> Color32 {
         Strategy::Pocket { .. } => Color32::from_rgb(0x1f, 0x9d, 0x55),
         Strategy::Drill => Color32::from_rgb(0xd0, 0x30, 0x30),
         Strategy::VCarve { .. } => Color32::from_rgb(0xe0, 0x7a, 0x10),
+        Strategy::Slot { .. } => Color32::from_rgb(0x9a, 0x50, 0xc8),
     }
 }
 

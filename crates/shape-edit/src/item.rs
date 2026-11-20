@@ -215,7 +215,7 @@ fn rotation_of(shape: &Shape) -> f64 {
         Shape::Ellipse(s) => s.rotation,
         Shape::Polygon(s) => s.rotation,
         Shape::Text(s) => s.rotation,
-        Shape::Circle(_) | Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => 0.0,
+        Shape::Circle(_) | Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) | Shape::RefImage(_) => 0.0,
     }
 }
 
@@ -291,6 +291,10 @@ impl Editable for Item {
         self.frozen
     }
 
+    fn layer(&self) -> u32 {
+        self.layer
+    }
+
     fn hit(&self, p: Pt, tol: f64) -> bool {
         if self.hidden || self.frozen {
             return false;
@@ -312,7 +316,7 @@ impl Editable for Item {
         }
         // like the original, a vector is picked on its line, so a selection box can start
         // inside a big outline; only text is picked anywhere in its box (letters are thin)
-        matches!(self.shape, Shape::Text(_)) && self.bounds().is_some_and(|(lo, hi)| p[0] >= lo[0] && p[0] <= hi[0] && p[1] >= lo[1] && p[1] <= hi[1])
+        matches!(self.shape, Shape::Text(_) | Shape::RefImage(_)) && self.bounds().is_some_and(|(lo, hi)| p[0] >= lo[0] && p[0] <= hi[0] && p[1] >= lo[1] && p[1] <= hi[1])
     }
 
     /// Whether `p` lies inside the shape's filled area (even-odd), e.g. for "click inside" tools.
@@ -378,6 +382,7 @@ impl Editable for Item {
             Shape::Ellipse(e) => Some(e.center),
             Shape::Polygon(p) => Some(p.center),
             Shape::Text(t) => Some(t.center),
+            Shape::RefImage(r) => Some(r.center),
             Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => None,
         };
         out.extend(centre.map(|c| (c, SnapKind::Centre)));
@@ -414,7 +419,7 @@ impl Editable for Item {
     }
 
     fn keeps_proportions(&self) -> bool {
-        matches!(self.shape, Shape::Circle(_))
+        matches!(self.shape, Shape::Circle(_) | Shape::RefImage(_))
     }
 
     /// A circle and an ellipse show a ring with side handles, a straight line (an open vector of

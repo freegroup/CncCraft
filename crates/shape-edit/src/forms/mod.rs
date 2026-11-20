@@ -9,6 +9,7 @@ mod ellipse;
 mod path;
 mod polygon;
 mod rect;
+mod ref_image;
 mod spline;
 mod text;
 
@@ -18,6 +19,7 @@ pub use ellipse::Ellipse;
 pub use path::Path;
 pub use polygon::Polygon;
 pub use rect::Rect;
+pub use ref_image::RefImage;
 pub use spline::{Spline, SplineNode};
 pub use text::Text;
 
@@ -109,6 +111,7 @@ pub enum Shape {
     Compound(Compound),
     Text(Text),
     Spline(Spline),
+    RefImage(RefImage),
 }
 
 /// Run `$body` with `$f` bound to the inner class, whatever it is.
@@ -123,6 +126,7 @@ macro_rules! each {
             Shape::Compound($f) => $body,
             Shape::Text($f) => $body,
             Shape::Spline($f) => $body,
+            Shape::RefImage($f) => $body,
         }
     };
 }
@@ -136,7 +140,7 @@ macro_rules! from_class {
         })*
     };
 }
-from_class!(Rect, Circle, Ellipse, Polygon, Path, Compound, Text, Spline);
+from_class!(Rect, Circle, Ellipse, Polygon, Path, Compound, Text, Spline, RefImage);
 
 impl Shape {
     pub fn label(&self) -> &'static str {
@@ -168,7 +172,7 @@ impl Shape {
     /// Shapes that already have editable nodes (paths, compounds, splines) stay as they are.
     pub fn to_curves(&self) -> Shape {
         match self {
-            Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) => self.clone(),
+            Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) | Shape::RefImage(_) => self.clone(),
             _ => curves_from(self.contours()),
         }
     }
@@ -192,6 +196,7 @@ impl Shape {
                 }).collect();
                 Spline::new(nodes, s.closed).into()
             }
+            Shape::RefImage(r) => RefImage { center: turn(r.center), ..r.clone() }.into(),
         }
     }
 
@@ -249,6 +254,8 @@ impl Shape {
             (Shape::Ellipse(e), Dim::Height) => e.ry = value / 2.0,
             (Shape::Polygon(p), Dim::Radius) => p.radius = value,
             (Shape::Text(t), Dim::TextHeight) => t.height = value,
+            (Shape::RefImage(r), Dim::Width) => r.width = value,
+            (Shape::RefImage(r), Dim::Height) => r.height = value,
             (Shape::Path(_) | Shape::Compound(_), Dim::Width | Dim::Height) => {
                 let Some((lo, hi)) = self.bounds() else { return s };
                 let c = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];

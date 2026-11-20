@@ -111,15 +111,15 @@ impl App {
         }
     }
 
-    /// The five operations a toolpath can be made with.
+    /// The six operations a toolpath can be made with.
     fn operation_buttons(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(GAP);
-            // in the original's order (0x10052b5f4): cutout, profile, pocket, drilling, V-carve
             for (icon, kind, header, text) in [
                 (Icon::Cutout, "cutout", t!("Ausschnitt"), t!("Trennt das Teil aus der Platte heraus: Der Fräser läuft außen um die Kontur und schneidet in mehreren Durchgängen ganz durch. Haltestege halten das Teil fest, bis alles fertig ist; danach werden sie von Hand durchtrennt.")),
                 (Icon::Profile, "profile", t!("Profil"), t!("Fräst entlang der gewählten Vektoren bis zur Zieltiefe – außen, innen oder genau auf der Linie. Für Konturen, Nuten und Kanten. Offene Linien werden hin und her gefräst, Tiefe für Tiefe.")),
                 (Icon::Pocket, "pocket", t!("Tasche"), t!("Räumt die Fläche innerhalb geschlossener Vektoren bis zur Zieltiefe aus: als Ringe von innen nach außen, hin und her im Raster oder als eine durchgehende Spirale. Flächen innerhalb der Tasche bleiben als Inseln stehen.")),
+                (Icon::Slot, "slot", t!("Nut"), t!("Fräst eine Nut entlang der gewählten Vektoren: auf der Linie, links oder rechts davon versetzt. Bei offenen Linien bestimmt die Kappe, ob der Fräser bis zum Endpunkt reicht (außen) oder vorher stoppt (innen).")),
                 (Icon::Drill, "drill", t!("Bohren"), t!("Bohrt in der Mitte jedes gewählten Kreises bzw. jeder geschlossenen Kontur ein Loch bis zur Zieltiefe. Gebohrt wird in gleich großen Hüben; nach jedem Hub fährt der Bohrer ganz heraus, damit die Späne abgeführt werden.")),
                 (Icon::VCarve, "vcarve", t!("V-Carving"), t!("Graviert mit einem V-Fräser: Die Tiefe folgt der Breite der Form – schmale Stellen bleiben flach, breite werden tief. So entstehen scharfe Kanten und Ecken, ideal für Schrift und Ornamente.")),
             ] {
@@ -442,6 +442,7 @@ impl App {
                 Strategy::Pocket { .. } => "pocket",
                 Strategy::Drill => "drill",
                 Strategy::VCarve { .. } => "vcarve",
+                Strategy::Slot { .. } => "slot",
                 Strategy::Profile { .. } => "profile",
             };
             self.edit.selection = tp.shape_ids.clone();

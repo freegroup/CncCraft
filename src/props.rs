@@ -121,7 +121,7 @@ pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
             Shape::Text(t) => text(ui, t),
             Shape::Path(p) => path(ui, p),
             Shape::Compound(c) => compound(ui, c),
-            Shape::Spline(_) => {}
+            Shape::Spline(_) | Shape::RefImage(_) => {}
         }
     });
     if let Some((lo, hi)) = shape.bounds() {

@@ -242,6 +242,28 @@ impl App {
                                 ui.add(egui::DragValue::new(max_depth).speed(0.1).range(0.0..=100.0).suffix(" mm")).on_hover_text(t!("0 = nur durch den Fräserdurchmesser begrenzt"));
                                 ui.end_row();
                             }
+                            Strategy::Slot { side, climb, caps } => {
+                                ui.label(t!("Seite"));
+                                ui.horizontal(|ui| {
+                                    ui.radio_value(side, Side::On, t!("Auf der Linie"));
+                                    ui.radio_value(side, Side::Outside, t!("Links"));
+                                    ui.radio_value(side, Side::Inside, t!("Rechts"));
+                                });
+                                ui.end_row();
+                                ui.label(t!("Kappe"));
+                                ui.horizontal(|ui| {
+                                    use crate::toolpath::Cap;
+                                    ui.radio_value(caps, Cap::Outer, t!("Außen")).tip(&Tip::new(t!("Außen"), t!("Der Fräser reicht bis zum Endpunkt der Linie: die Nut wird so lang wie der Vektor.")));
+                                    ui.radio_value(caps, Cap::Inner, t!("Innen")).tip(&Tip::new(t!("Innen"), t!("Der Fräser stoppt vor dem Endpunkt: die Nut endet um den Werkzeugradius kürzer.")));
+                                });
+                                ui.end_row();
+                                ui.label(t!("Fräsrichtung"));
+                                ui.horizontal(|ui| {
+                                    ui.radio_value(climb, true, t!("Gleichlauf"));
+                                    ui.radio_value(climb, false, t!("Gegenlauf"));
+                                });
+                                ui.end_row();
+                            }
                         }
                         if !matches!(tp.strategy, Strategy::Drill) {
                             let tip = Tip::new(t!("Rampenwinkel"), t!("Beim Eintauchen fährt der Fräser schräg ins Material statt senkrecht: auf Ringen höchstens eine Runde lang, auf Linien im Zickzack hin und zurück. 0° = senkrecht."));

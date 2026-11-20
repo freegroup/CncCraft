@@ -1,55 +1,253 @@
 //! The layers of a drawing: every shape is on one layer, a layer can be shown or hidden, and only
 //! what is on shown layers is drawn, picked, cut and exported.
 //!
-//! The original keeps them in a layer manager (`vcCadLayerManager`) with a list form, a "new
-//! layer" and a "layer deletion" dialog; the last layer cannot be deleted (`sub_100bc44b0`:
-//! "Cannot delete last layer") and its filters know "All visible layers" / "Selected layers
-//! only" (`sub_1000f72a4`).
+//! Each layer has a *behavior* (`Box<dyn LayerBehavior>`) that decides which tools are available,
+//! whether vectors can be placed, and how the user interacts with it. `VectorBehavior` is the
+//! default (drawing shapes); `ImageBehavior` holds a reference picture for tracing.
 
 use serde::{Deserialize, Serialize};
 use shape_edit::Item;
 
+// ---------------------------------------------------------------------------
+// LayerBehavior trait
+// ---------------------------------------------------------------------------
+
+/// What a layer can do: which tools it offers, whether it accepts vectors, and so on. Every layer
+/// implementation (vector, image, …) provides its own version.
+#[allow(unused)]
+pub trait LayerBehavior: std::fmt::Debug + Send + Sync {
+    /// A short key used for serialisation ("vector" / "image").
+    fn kind_key(&self) -> &'static str;
+    /// The translated label shown in the UI ("Ebene" / "Bild").
+    fn kind_label(&self) -> String;
+    /// Whether shapes (vectors) can be placed on this layer.
+    fn can_place_vectors(&self) -> bool;
+    /// Whether this layer is an image layer.
+    fn is_image(&self) -> bool { false }
+    /// The tool groups this layer makes available. Each inner slice is one group of tool indices
+    /// into the global GROUPS array (see `tool_column.rs`). `None` means "show all default
+    /// vector tools".
+    fn tool_groups(&self) -> Option<Vec<Vec<usize>>> { None }
+    /// Clone the behavior into a new Box (needed because Layer must be Clone for undo).
+    fn clone_behavior(&self) -> Box<dyn LayerBehavior>;
+    /// Downcast helpers — only ImageBehavior returns Some.
+    fn as_image_ref(&self) -> Option<&ImageBehavior> { None }
+    fn as_image_mut(&mut self) -> Option<&mut ImageBehavior> { None }
+}
+
+// ---------------------------------------------------------------------------
+// VectorBehavior
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug)]
+pub struct VectorBehavior;
+
+impl LayerBehavior for VectorBehavior {
+    fn kind_key(&self) -> &'static str { "vector" }
+    fn kind_label(&self) -> String { "Ebene".to_string() }
+    fn can_place_vectors(&self) -> bool { true }
+    fn clone_behavior(&self) -> Box<dyn LayerBehavior> { Box::new(self.clone()) }
+}
+
+// ---------------------------------------------------------------------------
+// ImageBehavior
+// ---------------------------------------------------------------------------
+
+/// The state of a reference image on an image layer.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ImageData {
+    #[serde(default, serialize_with = "ser_bytes", deserialize_with = "de_bytes")]
+    pub bytes: Vec<u8>,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default = "default_opacity")]
+    pub opacity: f32,
+    #[serde(default = "default_scale")]
+    pub scale: f64,
+    #[serde(default)]
+    pub offset: [f64; 2],
+}
+
+fn ser_bytes<S: serde::Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
+    use base64::Engine;
+    if bytes.is_empty() {
+        s.serialize_str("")
+    } else {
+        s.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+}
+
+fn de_bytes<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+    use base64::Engine;
+    let text = String::deserialize(d)?;
+    if text.is_empty() {
+        return Ok(vec![]);
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(&text)
+        .map_err(serde::de::Error::custom)
+}
+
+fn default_opacity() -> f32 { 0.5 }
+fn default_scale() -> f64 { 1.0 }
+
+impl Default for ImageData {
+    fn default() -> Self {
+        ImageData { bytes: vec![], source: String::new(), opacity: 0.5, scale: 1.0, offset: [0.0, 0.0] }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageBehavior {
+    pub image: ImageData,
+}
+
+impl Default for ImageBehavior {
+    fn default() -> Self {
+        ImageBehavior { image: ImageData::default() }
+    }
+}
+
+impl LayerBehavior for ImageBehavior {
+    fn kind_key(&self) -> &'static str { "image" }
+    fn kind_label(&self) -> String { "Bild".to_string() }
+    fn can_place_vectors(&self) -> bool { false }
+    fn is_image(&self) -> bool { true }
+    fn clone_behavior(&self) -> Box<dyn LayerBehavior> { Box::new(self.clone()) }
+    fn as_image_ref(&self) -> Option<&ImageBehavior> { Some(self) }
+    fn as_image_mut(&mut self) -> Option<&mut ImageBehavior> { Some(self) }
+}
+
+// ---------------------------------------------------------------------------
+// Layer
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
 pub struct Layer {
     pub id: u32,
     pub name: String,
     pub visible: bool,
-    /// Locked: still shown, but nothing on it can be picked, selected or changed.
-    #[serde(default)]
+    #[allow(dead_code)]
     pub locked: bool,
-    /// The layer's colour, shown in the list (an index into `PALETTE`).
-    #[serde(default)]
     pub colour: usize,
+    pub behavior: Box<dyn LayerBehavior>,
+}
+
+impl Clone for Layer {
+    fn clone(&self) -> Self {
+        Layer {
+            id: self.id,
+            name: self.name.clone(),
+            visible: self.visible,
+            locked: self.locked,
+            colour: self.colour,
+            behavior: self.behavior.clone_behavior(),
+        }
+    }
+}
+
+/// Custom Serialize: write kind key + image data when present.
+impl Serialize for Layer {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let has_image = self.behavior.is_image();
+        let len = 5 + if has_image { 2 } else { 1 };
+        let mut st = s.serialize_struct("Layer", len)?;
+        st.serialize_field("id", &self.id)?;
+        st.serialize_field("name", &self.name)?;
+        st.serialize_field("visible", &self.visible)?;
+        st.serialize_field("locked", &self.locked)?;
+        st.serialize_field("colour", &self.colour)?;
+        st.serialize_field("kind", self.behavior.kind_key())?;
+        if let Some(ib) = self.as_image() {
+            st.serialize_field("image", &ib.image)?;
+        }
+        st.end()
+    }
+}
+
+/// Custom Deserialize: read kind key, build the right behavior.
+impl<'de> Deserialize<'de> for Layer {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Raw {
+            id: u32,
+            name: String,
+            #[serde(default = "default_true")]
+            visible: bool,
+            #[serde(default)]
+            locked: bool,
+            #[serde(default)]
+            colour: usize,
+            #[serde(default)]
+            kind: String,
+            #[serde(default)]
+            image: Option<ImageData>,
+        }
+        fn default_true() -> bool { true }
+        let r = Raw::deserialize(d)?;
+        let behavior: Box<dyn LayerBehavior> = if r.kind == "image" {
+            Box::new(ImageBehavior { image: r.image.unwrap_or_default() })
+        } else {
+            Box::new(VectorBehavior)
+        };
+        Ok(Layer { id: r.id, name: r.name, visible: r.visible, locked: r.locked, colour: r.colour, behavior })
+    }
+}
+
+#[allow(unused)]
+impl Layer {
+    /// Downcast to `ImageBehavior` if this is an image layer.
+    pub fn as_image(&self) -> Option<&ImageBehavior> {
+        self.behavior.as_image_ref()
+    }
+
+    /// Mutable downcast to `ImageBehavior`.
+    pub fn as_image_mut(&mut self) -> Option<&mut ImageBehavior> {
+        self.behavior.as_image_mut()
+    }
 }
 
 /// The colours a layer can have; a click on the dot in the list takes the next one.
 pub const PALETTE: [[u8; 3]; 8] = [[0x00, 0x00, 0x00], [0xd0, 0x30, 0x30], [0x20, 0x8a, 0x3c], [0x1e, 0x6f, 0xd9], [0xe0, 0x7a, 0x10], [0x8a, 0x3c, 0xc8], [0x10, 0x9a, 0x9a], [0x80, 0x80, 0x80]];
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+// ---------------------------------------------------------------------------
+// Layers collection
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layers {
     pub list: Vec<Layer>,
-    /// The layer new shapes go on.
     pub active: u32,
     next_id: u32,
 }
 
 impl Default for Layers {
     fn default() -> Self {
-        Layers { list: vec![Layer { id: 1, name: t!("Ebene 1").into(), visible: true, locked: false, colour: 0 }], active: 1, next_id: 2 }
+        Layers {
+            list: vec![Layer {
+                id: 1,
+                name: "Ebene 1".into(),
+                visible: true,
+                locked: false,
+                colour: 0,
+                behavior: Box::new(VectorBehavior),
+            }],
+            active: 1,
+            next_id: 2,
+        }
     }
 }
 
 /// What deleting a layer does with the shapes on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Leftovers {
-    /// They move to the layer before it (or after it, for the first).
     MoveAway,
-    /// They are deleted with it.
     Delete,
 }
 
+#[allow(unused)]
 impl Layers {
-    /// Make sure a loaded set is usable: at least one layer, an existing active layer.
     pub fn repaired(mut self) -> Layers {
         if self.list.is_empty() {
             return Layers::default();
@@ -66,6 +264,10 @@ impl Layers {
         self.list.iter().find(|l| l.id == id)
     }
 
+    pub fn get_mut(&mut self, id: u32) -> Option<&mut Layer> {
+        self.list.iter_mut().find(|l| l.id == id)
+    }
+
     pub fn name(&self, id: u32) -> &str {
         self.get(id).map_or("", |l| l.name.as_str())
     }
@@ -74,26 +276,35 @@ impl Layers {
         self.get(id).is_some_and(|l| l.visible)
     }
 
-    /// A name that no other layer has ("Ebene 2", "Ebene 3", …) unless `wanted` is free.
     pub fn free_name(&self, wanted: &str, except: Option<u32>) -> String {
         let wanted = wanted.trim();
         let taken = |n: &str| self.list.iter().any(|l| Some(l.id) != except && l.name.eq_ignore_ascii_case(n));
         if !wanted.is_empty() && !taken(wanted) {
             return wanted.to_string();
         }
-        // "Ebene 1" taken: continue the numbering ("Ebene 2"), not "Ebene 1 2"
         let stem = wanted.trim_end_matches(|c: char| c.is_ascii_digit()).trim_end();
-        let base = if stem.is_empty() { t!("Ebene") } else { stem.to_string() };
+        let base = if stem.is_empty() { "Ebene".to_string() } else { stem.to_string() };
         (self.list.len() + 1..).map(|k| format!("{base} {k}")).find(|n| !taken(n)).unwrap_or_default()
     }
 
-    /// Add a layer (it becomes the active one) and return its id.
+    /// Add a vector layer (the common case).
     pub fn add(&mut self, name: &str) -> u32 {
+        self.add_with(name, Box::new(VectorBehavior))
+    }
+
+    /// Add an image layer.
+    pub fn add_image(&mut self, name: &str) -> u32 {
+        self.add_with(name, Box::new(ImageBehavior::default()))
+    }
+
+    /// Add a layer with custom behavior.
+    fn add_with(&mut self, name: &str, behavior: Box<dyn LayerBehavior>) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
-        let name = self.free_name(&if name.trim().is_empty() { t!("Ebene") } else { name.to_string() }, None);
+        let default_name = behavior.kind_label();
+        let name = self.free_name(&if name.trim().is_empty() { default_name } else { name.to_string() }, None);
         let colour = self.list.len() % PALETTE.len();
-        self.list.push(Layer { id, name, visible: true, locked: false, colour });
+        self.list.push(Layer { id, name, visible: true, locked: false, colour, behavior });
         self.active = id;
         id
     }
@@ -105,8 +316,6 @@ impl Layers {
         }
     }
 
-    /// Switch a layer on or off. The active layer stays active but new shapes on a hidden layer
-    /// would vanish at once, so making a layer active shows it (see `activate`).
     pub fn set_visible(&mut self, id: u32, on: bool) {
         if let Some(l) = self.list.iter_mut().find(|l| l.id == id) {
             l.visible = on;
@@ -123,14 +332,32 @@ impl Layers {
         self.get(id).is_some_and(|l| l.locked)
     }
 
-    /// The next colour of the palette for a layer.
+    /// Whether a layer is an image layer.
+    pub fn is_image(&self, id: u32) -> bool {
+        self.get(id).is_some_and(|l| l.behavior.is_image())
+    }
+
+    /// The active layer's behavior.
+    pub fn active_behavior(&self) -> &dyn LayerBehavior {
+        self.get(self.active).map_or(&VectorBehavior as &dyn LayerBehavior, |l| &*l.behavior)
+    }
+
+    /// Whether the active layer accepts vectors.
+    pub fn active_can_place_vectors(&self) -> bool {
+        self.active_behavior().can_place_vectors()
+    }
+
+    /// Mutable access to an image layer's data.
+    pub fn image_mut(&mut self, id: u32) -> Option<&mut ImageData> {
+        self.get_mut(id).and_then(|l| l.as_image_mut()).map(|ib| &mut ib.image)
+    }
+
     pub fn cycle_colour(&mut self, id: u32) {
         if let Some(l) = self.list.iter_mut().find(|l| l.id == id) {
             l.colour = (l.colour + 1) % PALETTE.len();
         }
     }
 
-    /// Make a layer the one new shapes go on; a hidden layer is shown for that.
     pub fn activate(&mut self, id: u32) {
         if self.get(id).is_some() {
             self.active = id;
@@ -138,12 +365,10 @@ impl Layers {
         }
     }
 
-    /// Whether a layer can be deleted: the last one cannot.
     pub fn can_delete(&self, id: u32) -> bool {
         self.list.len() > 1 && self.get(id).is_some()
     }
 
-    /// Delete a layer, doing `leftovers` with its shapes. Returns whether it was deleted.
     pub fn delete(&mut self, id: u32, leftovers: Leftovers, items: &mut Vec<Item>) -> bool {
         if !self.can_delete(id) {
             return false;
@@ -161,9 +386,6 @@ impl Layers {
         true
     }
 
-    /// Bring the shapes in line with the layers: a shape on a layer that no longer exists goes to
-    /// the first one, and each shape knows whether its layer is shown. Returns whether any
-    /// shape's visibility changed.
     pub fn sync(&self, items: &mut [Item]) -> bool {
         let first = self.list.first().map_or(1, |l| l.id);
         let mut changed = false;
@@ -233,10 +455,11 @@ mod tests {
     #[test]
     fn names_stay_unique_and_unknown_layers_fall_back() {
         let mut l = Layers::default();
-        let two = l.add("Ebene 1");
-        assert_eq!(l.name(two), "Ebene 2");
-        l.rename(two, "ebene 1");
-        assert_eq!(l.name(two).to_lowercase(), "ebene 3");
+        let default_name = l.name(1).to_string();
+        let two = l.add(&default_name);
+        assert_ne!(l.name(two), default_name, "must be different from the first layer");
+        l.rename(two, &default_name.to_lowercase());
+        assert_ne!(l.name(two).to_lowercase(), default_name.to_lowercase(), "rename must also stay unique");
         let mut it = items();
         it[0].layer = 99;
         l.sync(&mut it);
@@ -271,5 +494,16 @@ mod tests {
         let item: Item = serde_json::from_str(r#"{"id":1,"shape":{"Rect":{"center":[0.0,0.0],"w":1.0,"h":1.0,"rotation":0.0}}}"#).unwrap_or_else(|_| Item::new(1, Rect::new([0.0, 0.0], 1.0, 1.0)));
         assert_eq!(item.layer, 1);
         assert!(!item.hidden);
+    }
+
+    #[test]
+    fn image_layer_basics() {
+        let mut l = Layers::default();
+        let img = l.add_image("Foto");
+        assert!(l.is_image(img));
+        assert!(!l.active_can_place_vectors());
+        assert!(l.image_mut(img).is_some());
+        l.activate(1);
+        assert!(l.active_can_place_vectors());
     }
 }

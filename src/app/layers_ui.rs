@@ -11,8 +11,8 @@ use crate::theme::{ink, muted};
 use egui::{Align2, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, Vec2};
 
 pub(super) enum LayerDialog {
-    /// A name for a new layer.
-    New { text: String, fresh: bool },
+    /// A name for a new layer (and whether it is an image layer).
+    New { text: String, fresh: bool, image: bool },
     /// A new name for a layer.
     Rename { id: u32, text: String, fresh: bool },
     /// What to do with the shapes of a layer that is being deleted.
@@ -50,6 +50,21 @@ fn paint_sheet(p: &egui::Painter, c: Pos2, fill: Color32, edge: Color32) {
     p.add(egui::Shape::convex_polygon(pts, fill, Stroke::new(1.0_f32, edge)));
 }
 
+/// A small image icon (a landscape picture frame with a mountain and sun).
+fn paint_image_icon(p: &egui::Painter, c: Pos2, tone: Color32) {
+    let r = egui::Rect::from_center_size(c, Vec2::new(14.0, 11.0));
+    p.rect_stroke(r, 1.5, Stroke::new(1.2_f32, tone));
+    // mountain
+    let mountain = vec![
+        r.left_bottom() + Vec2::new(2.0, -1.0),
+        Pos2::new(r.left() + 5.5, r.top() + 3.5),
+        r.right_bottom() + Vec2::new(-2.0, -1.0),
+    ];
+    p.add(egui::Shape::line(mountain, Stroke::new(1.2_f32, tone)));
+    // sun
+    p.circle_filled(Pos2::new(r.right() - 3.5, r.top() + 3.5), 1.8, tone);
+}
+
 impl App {
     /// The middle of the title bar: symbol, name of the active layer, chevron. A click opens the
     /// list.
@@ -58,6 +73,9 @@ impl App {
         let resp = ui.interact(rect, Id::new("layer_selector"), Sense::click());
         let active = self.layers.active;
         let mut name = self.layers.name(active).to_string();
+        if self.layers.is_image(active) {
+            name.push_str("  🖼");
+        }
         if !self.layers.is_visible(active) {
             name.push_str(&t!("  (ausgeblendet)"));
         } else if self.layers.is_locked(active) {
@@ -92,9 +110,9 @@ impl App {
                 egui::Frame::none().stroke(Stroke::new(1.0_f32, crate::theme::separator())).rounding(8.0).inner_margin(6.0).show(ui, |ui| {
                     ui.set_min_height(96.0);
                     ui.set_width(width - 20.0 - 14.0);
-                    let layers: Vec<(u32, String, bool, bool, usize)> = self.layers.list.iter().map(|l| (l.id, l.name.clone(), l.visible, l.locked, l.colour)).collect();
-                    for (id, name, visible, locked, colour) in layers {
-                        self.layer_row(ui, id, &name, visible, locked, colour, &mut close);
+                    let layers: Vec<(u32, String, bool, bool, usize, bool)> = self.layers.list.iter().map(|l| (l.id, l.name.clone(), l.visible, l.locked, l.colour, l.behavior.is_image())).collect();
+                    for (id, name, visible, locked, colour, is_img) in layers {
+                        self.layer_row(ui, id, &name, visible, locked, colour, is_img, &mut close);
                     }
                 });
                 ui.add_space(2.0);
@@ -102,7 +120,8 @@ impl App {
                     egui::Frame::none().fill(crate::theme::hover()).rounding(6.0).inner_margin(egui::Margin::symmetric(2.0, 0.0)).show(ui, |ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         if ui.add(egui::Button::new(egui::RichText::new("+").strong().size(15.0)).frame(false).min_size(Vec2::new(26.0, 22.0))).on_hover_text(t!("Neue Ebene")).clicked() {
-                            self.layer_dialog = Some(LayerDialog::New { text: self.layers.free_name(&t!("Ebene"), None), fresh: true });
+                            let default_name = if self.last_layer_image { "Bild" } else { "Ebene" };
+                            self.layer_dialog = Some(LayerDialog::New { text: self.layers.free_name(default_name, None), fresh: true, image: self.last_layer_image });
                             close = true;
                         }
                         let (sep, _) = ui.allocate_exact_size(Vec2::new(1.0, 14.0), Sense::hover());
@@ -114,10 +133,6 @@ impl App {
                             close = true;
                         }
                     });
-                    let can_move = !self.edit.selection.is_empty();
-                    if ui.add_enabled(can_move, egui::Button::new(t!("Auswahl hierher")).small()).on_hover_text(t!("Die gewählten Formen auf die aktive Ebene verschieben")).on_disabled_hover_text(t!("Erst Formen auswählen")).clicked() {
-                        self.move_selection_to_active_layer();
-                    }
                 });
             });
         });
@@ -129,7 +144,7 @@ impl App {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn layer_row(&mut self, ui: &mut egui::Ui, id: u32, name: &str, visible: bool, locked: bool, colour: usize, _close: &mut bool) {
+    fn layer_row(&mut self, ui: &mut egui::Ui, id: u32, name: &str, visible: bool, locked: bool, colour: usize, is_image: bool, _close: &mut bool) {
         let active = id == self.layers.active;
         let (row, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 30.0), Sense::click());
         let key = Id::new(("layer_row", id));
@@ -151,7 +166,12 @@ impl App {
         paint_lock(p, lock.rect.center(), locked, tone);
         let c = PALETTE[colour % PALETTE.len()];
         let layer_colour = Color32::from_rgb(c[0], c[1], c[2]);
-        paint_sheet(p, Pos2::new(row.left() + 80.0, row.center().y), if active { oa } else { layer_colour }, if active { oa } else { tone });
+        let icon_center = Pos2::new(row.left() + 80.0, row.center().y);
+        if is_image {
+            paint_image_icon(p, icon_center, if active { oa } else { tone });
+        } else {
+            paint_sheet(p, icon_center, if active { oa } else { layer_colour }, if active { oa } else { tone });
+        }
         p.text(Pos2::new(row.left() + 100.0, row.center().y), Align2::LEFT_CENTER, name, FontId::proportional(14.0), text_tone);
         p.circle_filled(dot_rect.center(), 7.5, layer_colour);
         p.circle_stroke(dot_rect.center(), 7.5, Stroke::new(1.0_f32, if active { oa } else { crate::theme::outline() }));
@@ -166,29 +186,21 @@ impl App {
             self.layer_open = false;
         } else if resp.on_hover_text(t!("Auf dieser Ebene zeichnen (Doppelklick: umbenennen)")).clicked() {
             self.layers.activate(id);
+            if !self.layers.active_can_place_vectors() {
+                self.tool = crate::app::DrawTool::Select;
+                self.tool_form = None;
+            }
         }
-    }
-
-    /// Put the selected shapes on the active layer.
-    pub(super) fn move_selection_to_active_layer(&mut self) {
-        if self.edit.selection.is_empty() {
-            return;
-        }
-        self.push_undo();
-        let (sel, to) = (self.edit.selection.clone(), self.layers.active);
-        for it in self.shapes.iter_mut().filter(|s| sel.contains(&s.id)) {
-            it.layer = to;
-        }
-        self.status = format!("{} Form(en) auf „{}“ verschoben", sel.len(), self.layers.name(to));
     }
 
     pub(in crate::app) fn delete_layer(&mut self, id: u32, leftovers: Leftovers) {
         let name = self.layers.name(id).to_string();
         self.push_undo();
         if self.layers.delete(id, leftovers, &mut self.shapes) {
+            self.image_textures.remove(&id);
             self.edit.retain_existing(&self.shapes);
             self.recompute_all();
-            self.status = format!("Ebene „{name}“ gelöscht");
+            self.status = format!("Ebene \u{201e}{}\u{201c} gelöscht", name);
         }
     }
 

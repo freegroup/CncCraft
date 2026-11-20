@@ -604,6 +604,71 @@ impl Pen<'_> {
                 self.p.text(self.at(-5.0, 0.0), egui::Align2::CENTER_CENTER, "ƒ", egui::FontId::proportional(20.0), self.k.line);
                 self.p.text(self.at(5.0, 1.0), egui::Align2::CENTER_CENTER, "(x)", egui::FontId::proportional(11.0), self.k.line);
             }
+            Icon::InsertImage => {
+                // a picture frame with a mountain and sun
+                let r = Rect::from_center_size(self.at(0.0, 0.0), Vec2::new(20.0, 16.0));
+                self.solid(rounded_rect(r, 2.0));
+                // mountain
+                self.p.add(Shape::line(vec![
+                    Pos2::new(r.left() + 3.0, r.bottom() - 3.0),
+                    Pos2::new(r.left() + 8.0, r.top() + 4.0),
+                    Pos2::new(r.left() + 11.0, r.top() + 7.0),
+                    Pos2::new(r.left() + 14.0, r.top() + 4.5),
+                    Pos2::new(r.right() - 3.0, r.bottom() - 3.0),
+                ], Stroke::new(LINE, self.k.back)));
+                // sun
+                self.p.circle_filled(Pos2::new(r.right() - 5.5, r.top() + 5.0), 2.5, self.k.back);
+            }
+            Icon::Calibrate => {
+                // two crosshairs connected by a double-arrow with a ruler mark
+                let a = self.at(-6.0, -4.0);
+                let b = self.at(6.0, 4.0);
+                let arm = 3.5_f32;
+                // crosshair A
+                self.p.line_segment([a - Vec2::new(arm, 0.0), a + Vec2::new(arm, 0.0)], Stroke::new(LINE, self.k.line));
+                self.p.line_segment([a - Vec2::new(0.0, arm), a + Vec2::new(0.0, arm)], Stroke::new(LINE, self.k.line));
+                self.p.circle_stroke(a, 2.5, Stroke::new(LINE, self.k.line));
+                // crosshair B
+                self.p.line_segment([b - Vec2::new(arm, 0.0), b + Vec2::new(arm, 0.0)], Stroke::new(LINE, self.k.line));
+                self.p.line_segment([b - Vec2::new(0.0, arm), b + Vec2::new(0.0, arm)], Stroke::new(LINE, self.k.line));
+                self.p.circle_stroke(b, 2.5, Stroke::new(LINE, self.k.line));
+                // dashed line between
+                let mid = a + (b - a) * 0.5;
+                self.p.line_segment([a + Vec2::new(arm + 1.0, 0.0), mid - Vec2::new(1.0, 0.0)], Stroke::new(LINE * 0.8, self.k.line));
+                self.p.line_segment([mid + Vec2::new(1.0, 0.0), b - Vec2::new(arm + 1.0, 0.0)], Stroke::new(LINE * 0.8, self.k.line));
+                // dimension text
+                self.p.text(self.at(0.0, -1.0), egui::Align2::CENTER_BOTTOM, "d", egui::FontId::proportional(9.0), self.k.line);
+            }
+            Icon::Slot => {
+                // a line with offset grooves on each side (slot/trace milling)
+                let w = &Colours::normal();
+                let y = 0.0_f32;
+                // centre line
+                self.p.line_segment([self.at(-9.0, y), self.at(9.0, y)], Stroke::new(LINE, w.line));
+                // groove walls
+                let d = 3.5_f32;
+                self.p.line_segment([self.at(-9.0, y - d), self.at(9.0, y - d)], Stroke::new(LINE * 0.7, w.line));
+                self.p.line_segment([self.at(-9.0, y + d), self.at(9.0, y + d)], Stroke::new(LINE * 0.7, w.line));
+                // fill between
+                let r = Rect::from_min_max(self.at(-9.0, y - d), self.at(9.0, y + d));
+                fill_gradient(self.p, &[
+                    Pos2::new(r.left(), r.top()),
+                    Pos2::new(r.right(), r.top()),
+                    Pos2::new(r.right(), r.bottom()),
+                    Pos2::new(r.left(), r.bottom()),
+                ], self.k.top, self.k.bottom);
+            }
+            Icon::Transparency => {
+                // a square with a gradient from opaque to transparent (checkerboard hint)
+                let r = Rect::from_center_size(self.at(0.0, 0.0), Vec2::new(18.0, 14.0));
+                self.p.rect_stroke(r, 2.0, Stroke::new(LINE, self.k.line));
+                // left half: solid fill
+                let left = Rect::from_min_max(r.min, Pos2::new(r.center().x, r.max.y)).shrink(1.0);
+                self.p.rect_filled(left, 0.0, self.k.top);
+                // right half: faded
+                let right = Rect::from_min_max(Pos2::new(r.center().x, r.min.y), r.max).shrink(1.0);
+                self.p.rect_filled(right, 0.0, self.k.top.gamma_multiply(0.3));
+            }
         }
     }
 
@@ -670,6 +735,7 @@ pub(super) fn operation_icon(p: &Painter, c: Pos2, strategy: &crate::toolpath::S
         Strategy::Pocket { .. } => Icon::Pocket,
         Strategy::Drill => Icon::Drill,
         Strategy::VCarve { .. } => Icon::VCarve,
+        Strategy::Slot { .. } => Icon::Slot,
     };
     Pen { p, c, k: Colours::normal(), scale: size / 30.0 }.draw(icon);
 }

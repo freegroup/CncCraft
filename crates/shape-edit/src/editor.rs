@@ -88,6 +88,8 @@ pub struct Editor<S> {
     pub selection: Vec<u64>,
     /// In node mode: the shape id and node index last picked.
     pub active_node: Option<(u64, usize)>,
+    /// Shapes on this layer are picked first, even if another shape is on top.
+    pub priority_layer: u32,
     /// Snapping used while moving, resizing and dragging nodes.
     pub snapping: Snapping,
     /// What the pointer snapped to during the current gesture (for a marker on screen).
@@ -115,6 +117,7 @@ impl<S> Default for Editor<S> {
         Editor {
             selection: vec![],
             active_node: None,
+            priority_layer: 0,
             snapping: Snapping::default(),
             last_snap: None,
             rotate_mode: false,
@@ -247,8 +250,14 @@ impl<S: Editable> Editor<S> {
         self.grips(shapes).into_iter().filter(|g| dist(g.at, p) <= view.tolerance).min_by(|a, b| dist(a.at, p).total_cmp(&dist(b.at, p)))
     }
 
-    /// The topmost shape under `p`.
+    /// The topmost shape under `p`. Shapes on the priority layer are preferred.
     pub fn shape_under(&self, shapes: &[S], p: Pt, view: View) -> Option<u64> {
+        let pl = self.priority_layer;
+        if pl != 0 {
+            if let Some(id) = shapes.iter().rev().filter(|s| s.layer() == pl).find(|s| s.hit(p, view.tolerance)).map(Editable::id) {
+                return Some(id);
+            }
+        }
         shapes.iter().rev().find(|s| s.hit(p, view.tolerance)).map(Editable::id)
     }
 

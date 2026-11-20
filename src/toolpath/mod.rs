@@ -11,7 +11,7 @@ use crate::geom::{bounds_of, dist, perimeter, signed_area, Contour, Item, Pt, Ri
 use crate::tools::{Tool, ToolKind, ToolLibrary};
 use serde::{Deserialize, Serialize};
 
-pub use strategies::{Clearing, DrillTool, PocketTool, ProfileTool, VCarveTool};
+pub use strategies::{Cap, Clearing, DrillTool, PocketTool, ProfileTool, SlotTool, VCarveTool};
 
 // Values from MECHANICS.md
 pub const SAFE_Z: f64 = 5.0; // estimated
@@ -94,6 +94,7 @@ pub enum Strategy {
     Pocket { raster: bool, climb: bool, #[serde(default)] raster_angle: f64, #[serde(default)] spiral: bool },
     Drill,
     VCarve { max_depth: f64 },
+    Slot { side: Side, climb: bool, #[serde(default)] caps: Cap },
 }
 
 impl Strategy {
@@ -108,6 +109,7 @@ impl Strategy {
             Strategy::Pocket { raster, climb, raster_angle, spiral } => Box::new(PocketTool { clearing: Clearing::of(raster, spiral), climb, raster_angle }),
             Strategy::Drill => Box::new(DrillTool),
             Strategy::VCarve { max_depth } => Box::new(VCarveTool { max_depth }),
+            Strategy::Slot { side, climb, caps } => Box::new(SlotTool { side, climb, caps }),
         }
     }
 }
@@ -716,6 +718,7 @@ pub fn default_toolpath(kind: &str, lib: &ToolLibrary, job: &Job, ids: Vec<u64>)
         "pocket" => (Strategy::Pocket { raster: false, climb: true, raster_angle: 0.0, spiral: false },lib.pick(&job.material, ToolKind::EndMill, 6.0, None), 3.0),
         "drill" => (Strategy::Drill, lib.pick(&job.material, ToolKind::Drill, 6.0, None), 10.0),
         "vcarve" => (Strategy::VCarve { max_depth: 0.0 }, lib.pick(&job.material, ToolKind::VBit, 12.0, Some(90.0)), 6.0),
+        "slot" => (Strategy::Slot { side: Side::On, climb: true, caps: Cap::Outer }, lib.pick(&job.material, ToolKind::EndMill, 6.0, None), 3.0),
         "cutout" => {
             let mut t = lib.pick(&job.material, ToolKind::EndMill, 6.0, None);
             // use the original cut-out default pass depth (0.075 in) as the starting value

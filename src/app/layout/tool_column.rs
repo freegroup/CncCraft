@@ -33,13 +33,14 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Trim), Icon::Draw(DrawTool::Erase), Icon::Draw(DrawTool::Connect), Icon::Draw(DrawTool::FilletOuter), Icon::Draw(DrawTool::FilletInner)],
     &[Icon::Union, Icon::Subtract, Icon::Intersect],
     &[Icon::Group, Icon::Ungroup],
+    &[Icon::InsertImage, Icon::Calibrate, Icon::Transparency],
 ];
 
 /// How many groups the tool column has (one remembered choice each when folded).
-pub(in crate::app) const GROUP_COUNT: usize = 10;
+pub(in crate::app) const GROUP_COUNT: usize = 11;
 
 /// What each group is, for the folded column's tooltips.
-const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Vektoroperationen"), tr!("Boolesche Operationen"), tr!("Gruppieren")];
+const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Vektoroperationen"), tr!("Boolesche Operationen"), tr!("Gruppieren"), tr!("Bildwerkzeuge")];
 
 /// Icons per row in the expanded column, and the size of one icon cell.
 const ROW: usize = 5;
@@ -66,8 +67,8 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Draw(DrawTool::Rect) => Tip::new(t!("Rechteck"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe lassen sich danach genau eintippen.")).shortcut("R"),
         Icon::Draw(DrawTool::Circle) => Tip::new(t!("Kreis"), t!("Vom Mittelpunkt aus aufziehen. Den Durchmesser danach genau eintippen.")).shortcut("C"),
         Icon::Draw(DrawTool::Ellipse) => Tip::new(t!("Ellipse"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe danach genau eintippen.")),
-        Icon::Draw(DrawTool::Polygon) => Tip::new(t!("Polygon"), t!("Ein regelmäßiges Vieleck vom Mittelpunkt aus aufziehen. Die Zahl der Ecken unter „Eigenschaften“ ändern.")),
-        Icon::Draw(DrawTool::Text) => Tip::new(t!("Text"), t!("Ein Klick setzt einen Text; den Inhalt unter „Eigenschaften“ ändern. Die Buchstaben lassen sich fräsen oder gravieren.")),
+        Icon::Draw(DrawTool::Polygon) => Tip::new(t!("Polygon"), t!("Ein regelmäßiges Vieleck vom Mittelpunkt aus aufziehen. Die Zahl der Ecken unter \u{201e}Eigenschaften\u{201c} ändern.")),
+        Icon::Draw(DrawTool::Text) => Tip::new(t!("Text"), t!("Ein Klick setzt einen Text; den Inhalt unter \u{201e}Eigenschaften\u{201c} ändern. Die Buchstaben lassen sich fräsen oder gravieren.")),
         Icon::Draw(DrawTool::Trim) => Tip::new(t!("Trennen"), t!("Einen Vektor anklicken: Er wird an jeder Kreuzung mit anderen Vektoren geteilt.")).shortcut("T"),
         Icon::Draw(DrawTool::Erase) => Tip::new(t!("Vektor löschen"), t!("Einen Vektor oder ein getrenntes Stück anklicken: Es wird gelöscht.")),
         Icon::Draw(DrawTool::Connect) => Tip::new(t!("Verbinden"), t!("Zwei Punkte nacheinander anklicken: Sie werden mit einer Linie verbunden. Beide Enden eines Linienzugs schließen ihn.")),
@@ -87,13 +88,26 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Ungroup => Tip::new(t!("Gruppe auflösen"), t!("Löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick.")).shortcut(cmd("⇧G")).when_disabled(t!("Erst eine Gruppe auswählen.")),
         Icon::ImportDxf => Tip::new(t!("DXF importieren"), t!("Holt eine Zeichnung aus einer DXF-Datei (R12, R14 und neuer) als eine Gruppe. Rechtsklick auf die Form lädt sie neu von der Platte.")),
         Icon::Job => Tip::new(t!("Job einrichten"), t!("Größe und Dicke der Platte, Material und wo der Nullpunkt liegt.")),
-        Icon::Variables => Tip::new(t!("Variablen"), t!("Benannte Werte wie „breite“, die Maße, Tiefen und Abstände verwenden. Ändert man den Wert, folgt alles.")),
+        Icon::Variables => Tip::new(t!("Variablen"), t!("Benannte Werte wie \u{201e}breite\u{201c}, die Ma\u{00df}e, Tiefen und Abst\u{00e4}nde verwenden. \u{00c4}ndert man den Wert, folgt alles.")),
+        Icon::InsertImage => Tip::new(t!("Bild einfügen"), t!("Ein Bild (PNG, JPEG) als transparente Vorlage auf die Bild-Ebene laden.")),
+        Icon::Calibrate => Tip::new(t!("Bild kalibrieren"), t!("Zwei Punkte im Bild anklicken und den echten Abstand eingeben. Das Bild wird danach so skaliert, dass es 1:1 zum Arbeitskoordinatensystem passt.")),
+        Icon::Transparency => Tip::new(t!("Transparenz"), t!("Die Deckkraft des Referenzbilds einstellen – von durchsichtig bis deckend.")),
+        Icon::Slot => Tip::new(t!("Nut"), t!("Fräst eine Nut entlang der gewählten Vektoren: auf der Linie, links oder rechts davon versetzt.")),
         _ => Tip::new(String::new(), String::new()),
     };
     tip.icon(icon)
 }
 
 impl App {
+    /// Whether a tool icon is available on the active layer. On an image layer only Select, Job,
+    /// Variables and the image tools are shown; all vector drawing / editing tools are hidden.
+    fn icon_available_on_layer(&self, icon: Icon) -> bool {
+        if self.layers.active_can_place_vectors() {
+            return !matches!(icon, Icon::InsertImage | Icon::Calibrate | Icon::Transparency);
+        }
+        matches!(icon, Icon::Draw(DrawTool::Select) | Icon::Job | Icon::Variables | Icon::InsertImage | Icon::Calibrate | Icon::Transparency)
+    }
+
     /// The tool column. Expanded, it shows every tool, grouped in rows of up to five. Folded, it
     /// is one narrow column with one button per group, showing the group's current tool; a
     /// group of several tools opens them to the right, so the folded column never scrolls.
@@ -116,8 +130,10 @@ impl App {
                 if self.tools_open {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         for group in GROUPS {
+                            let visible: Vec<Icon> = group.iter().copied().filter(|&i| self.icon_available_on_layer(i)).collect();
+                            if visible.is_empty() { continue; }
                             ui.add_space(4.0);
-                            for row in group.chunks(per_row) {
+                            for row in visible.chunks(per_row) {
                                 ui.horizontal(|ui| {
                                     for &icon in row {
                                         if self.column_icon(ui, icon).clicked() {
@@ -141,10 +157,12 @@ impl App {
                     });
                 } else {
                     for (g, group) in GROUPS.iter().enumerate() {
+                        let visible: Vec<Icon> = group.iter().copied().filter(|&i| self.icon_available_on_layer(i)).collect();
+                        if visible.is_empty() { continue; }
                         ui.add_space(2.0);
                         let shown = self.group_icon(g);
                         let resp = self.column_icon(ui, shown);
-                        if group.len() > 1 {
+                        if visible.len() > 1 {
                             // a small corner mark: this button holds more tools
                             let r = resp.rect;
                             ui.painter().add(egui::Shape::convex_polygon(vec![r.right_bottom() - Vec2::new(2.0, 2.0), r.right_bottom() - Vec2::new(8.0, 2.0), r.right_bottom() - Vec2::new(2.0, 8.0)], ink(), Stroke::NONE));
@@ -231,6 +249,9 @@ impl App {
 
     /// Whether a tool column icon is switched on, and whether it can be used now.
     pub(in crate::app) fn icon_state(&self, icon: Icon) -> (bool, bool) {
+        if !self.icon_available_on_layer(icon) {
+            return (false, false);
+        }
         let any = !self.edit.selection.is_empty();
         match icon {
             Icon::Draw(t) => (self.tool == t, true),
@@ -239,7 +260,13 @@ impl App {
             Icon::Union | Icon::Subtract | Icon::Intersect => (false, self.edit.selection.len() >= 2),
             Icon::Group => (false, self.selection_can_group()),
             Icon::Ungroup => (false, self.selection_has_group()),
-            Icon::Job | Icon::ImportDxf => (false, true),
+            Icon::Job | Icon::ImportDxf | Icon::InsertImage => (false, true),
+            Icon::Calibrate | Icon::Transparency => {
+                let has_image = self.layers.get(self.layers.active)
+                    .and_then(|l| l.as_image())
+                    .is_some_and(|ib| !ib.image.bytes.is_empty());
+                (false, has_image)
+            }
             Icon::Variables => (self.vars_open, true),
             _ => (false, any),
         }
@@ -283,6 +310,9 @@ impl App {
             Icon::Job => self.job_dialog = Some((self.job.clone(), false)),
             Icon::ImportDxf => self.import_dialog(),
             Icon::Variables => self.vars_open = !self.vars_open,
+            Icon::InsertImage => self.insert_image_dialog(),
+            Icon::Calibrate => self.start_calibrate(),
+            Icon::Transparency => self.transparency_open = !self.transparency_open,
             _ => {}
         }
     }

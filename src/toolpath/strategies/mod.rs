@@ -7,6 +7,7 @@ mod pocket_offset;
 mod pocket_raster;
 mod pocket_spiral;
 mod profile;
+mod slot;
 mod vcarve;
 
 #[cfg(test)]
@@ -14,4 +15,5 @@ pub use drill::peck_depths;
 pub use drill::DrillTool;
 pub use pocket::{Clearing, PocketTool};
 pub use profile::ProfileTool;
+pub use slot::{Cap, SlotTool};
 pub use vcarve::VCarveTool;

@@ -37,7 +37,7 @@ pub mod vector;
 
 pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, Orient, SizeConstraint};
 pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
-pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, Shape, Spline, SplineNode, Text};
+pub use forms::{Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, RefImage, Shape, Spline, SplineNode, Text};
 pub use geometry::Contour;
 pub use handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
 pub use item::{can_group, group_items, ungroup_items, Item, Source};
@@ -82,6 +82,10 @@ pub trait Editable: Clone {
     /// The shape's layer is locked: it is drawn, but nothing can be done with it.
     fn frozen(&self) -> bool {
         false
+    }
+    /// The layer the shape is on (0 means no layer).
+    fn layer(&self) -> u32 {
+        0
     }
     /// The outermost group the shape is in: picking one member of a group picks all of them.
     fn group(&self) -> Option<u64> {
