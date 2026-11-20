@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/freegroup/CncCraft/compare/v1.16.0...v1.17.0) (2026-11-20)
+
+
+### Features
+
+* command-stack undo/redo covering layers and toolpaths ([87c2166](https://github.com/freegroup/CncCraft/commit/87c216617bb0b9f1ea4835bc555b1dc79abe9789))
+
 # [1.16.0](https://github.com/freegroup/CncCraft/compare/v1.15.0...v1.16.0) (2026-11-20)
 
 
