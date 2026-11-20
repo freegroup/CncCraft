@@ -34,7 +34,7 @@ impl App {
         if let Some((id, idx)) = self.edit.node_under(&self.shapes, mouse, view) {
             if let Some(item) = self.shapes.iter().find(|s| s.id == id) {
                 if let Some(toggled) = item.toggle_spline_node(idx) {
-                    let before = self.shapes.clone();
+                    let before = (self.shapes.clone(), self.layers.clone());
                     if let Some(slot) = self.shapes.iter_mut().find(|s| s.id == id) {
                         *slot = toggled;
                     }
@@ -45,7 +45,7 @@ impl App {
                 }
             }
         }
-        let before = self.shapes.clone();
+        let before = (self.shapes.clone(), self.layers.clone());
         if self.edit.insert_node(&mut self.shapes, mouse, view) {
             self.push_undo_from(before);
             self.status = "Knoten eingefügt".into();

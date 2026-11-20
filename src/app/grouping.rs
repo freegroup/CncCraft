@@ -12,7 +12,7 @@ impl App {
             self.status = "Zum Gruppieren mindestens zwei Formen oder Gruppen auswählen".into();
             return;
         }
-        let before = self.shapes.clone();
+        let before = (self.shapes.clone(), self.layers.clone());
         let (ids, group) = (self.edit.selection.clone(), self.new_id());
         if group_items(&mut self.shapes, &ids, group) {
             self.push_undo_from(before);
@@ -27,7 +27,7 @@ impl App {
 
     /// Dissolve the outermost group of the shapes `ids`.
     pub(super) fn ungroup(&mut self, ids: &[u64]) {
-        let before = self.shapes.clone();
+        let before = (self.shapes.clone(), self.layers.clone());
         if ungroup_items(&mut self.shapes, ids) {
             self.push_undo_from(before);
         } else {

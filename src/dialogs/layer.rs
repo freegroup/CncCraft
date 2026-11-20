@@ -16,7 +16,9 @@ impl App {
                 let (ok, cancel) = new_layer_window(ctx, &mut text, &mut image, fresh);
                 if ok {
                     self.last_layer_image = image;
-                    let id = if image { self.layers.add_image(&text) } else { self.layers.add(&text) };
+                    let cmd = crate::commandstack::LayerAddCommand::new(text.clone(), image);
+                    self.execute_command(Box::new(cmd));
+                    let id = self.layers.list.last().map_or(0, |l| l.id);
                     if image {
                         self.tool = DrawTool::Select;
                         self.tool_form = None;
@@ -33,7 +35,7 @@ impl App {
             LayerDialog::Rename { id, mut text, fresh } => {
                 let (ok, cancel) = name_window(ctx, &t!("Ebene umbenennen"), &mut text, fresh);
                 if ok {
-                    self.layers.rename(id, &text);
+                    self.execute_command(Box::new(crate::commandstack::LayerRenameCommand::new(id, text.clone())));
                     keep = false;
                 } else if cancel {
                     keep = false;

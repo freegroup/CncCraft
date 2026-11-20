@@ -156,11 +156,13 @@ pub(super) fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, tip: &s
 }
 
 fn icon_button_bare(ui: &mut egui::Ui, icon: Icon, selected: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(BUTTON), Sense::click());
+    icon_button_sized(ui, icon, selected, BUTTON)
+}
+
+pub(super) fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, selected: bool, size: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
     let enabled = ui.is_enabled();
     let hovered = resp.hovered() && enabled;
-    // quiet: nothing behind a resting button, a light tint under the pointer, a soft blue with a
-    // fine edge for the one that is on
     let bg = if selected {
         crate::theme::selected_fill()
     } else if hovered {
@@ -173,10 +175,8 @@ fn icon_button_bare(ui: &mut egui::Ui, icon: Icon, selected: bool) -> Response {
     } else if hovered {
         ui.painter().rect_filled(rect, 6.0, bg);
     }
-    Pen { p: ui.painter(), c: rect.center(), k: Colours::normal(), scale: 1.0 }.draw(icon);
-    // an icon that cannot be used is the same picture under a grey veil, like the original's
-    // `ImageProvider::AddGrayOverlay` (0x101a2be80): a disabled `Ui` already paints everything
-    // faded towards the background, so nothing else is drawn for it
+    let scale = size / BUTTON;
+    Pen { p: ui.painter(), c: rect.center(), k: Colours::normal(), scale }.draw(icon);
     resp
 }
 
@@ -640,23 +640,20 @@ impl Pen<'_> {
                 self.p.text(self.at(0.0, -1.0), egui::Align2::CENTER_BOTTOM, "d", egui::FontId::proportional(9.0), self.k.line);
             }
             Icon::Slot => {
-                // a line with offset grooves on each side (slot/trace milling)
-                let w = &Colours::normal();
-                let y = 0.0_f32;
-                // centre line
-                self.p.line_segment([self.at(-9.0, y), self.at(9.0, y)], Stroke::new(LINE, w.line));
-                // groove walls
-                let d = 3.5_f32;
-                self.p.line_segment([self.at(-9.0, y - d), self.at(9.0, y - d)], Stroke::new(LINE * 0.7, w.line));
-                self.p.line_segment([self.at(-9.0, y + d), self.at(9.0, y + d)], Stroke::new(LINE * 0.7, w.line));
-                // fill between
-                let r = Rect::from_min_max(self.at(-9.0, y - d), self.at(9.0, y + d));
-                fill_gradient(self.p, &[
-                    Pos2::new(r.left(), r.top()),
-                    Pos2::new(r.right(), r.top()),
-                    Pos2::new(r.right(), r.bottom()),
-                    Pos2::new(r.left(), r.bottom()),
-                ], self.k.top, self.k.bottom);
+                // a groove milled along the slab surface (isometric, following the u-axis)
+                let w = self.wood();
+                let slab = self.slab();
+                let half = 0.14_f32;
+                let groove: Vec<Pos2> = vec![
+                    slab.p(-0.9, -half),
+                    slab.p(-0.9, half),
+                    slab.p(0.9, half),
+                    slab.p(0.9, -half),
+                ];
+                fill_gradient(self.p, &groove, w.pit.0, w.pit.1);
+                // dark wall on the far side, light lip on the near side
+                self.p.line_segment([slab.p(-0.9, -half), slab.p(0.9, -half)], Stroke::new(self.w(1.4), w.groove));
+                self.p.line_segment([slab.p(-0.9, half), slab.p(0.9, half)], Stroke::new(self.w(1.0), w.lip));
             }
         }
     }

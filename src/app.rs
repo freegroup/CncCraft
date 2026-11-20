@@ -363,8 +363,7 @@ pub struct App {
     post_idx: usize,
     pp_dialog: Option<PpDialog>,
     tool_dialog: Option<ToolDialog>,
-    undo: Vec<Vec<Item>>,
-    redo: Vec<Vec<Item>>,
+    undo: crate::commandstack::CommandStack,
     path: Option<PathBuf>,
     recent_files: Vec<PathBuf>,
     thumb_pending: u8,
@@ -452,6 +451,7 @@ pub struct App {
     tp_grips: Vec<Rect>,
     /// The layer being dragged to a new position in the layer list (its index).
     layer_drag: Option<usize>,
+    opacity_before_drag: Option<f32>,
     flyout: Option<(usize, Pos2)>,
     /// Named values the shape inputs can use (parametric sizes), their resolved values, and
     /// whether the variables dialog is open. `vars_dirty` triggers a re-resolve.
@@ -588,8 +588,7 @@ impl App {
             post_idx: cc.storage.and_then(|s| s.get_string("cnccraft_post_idx")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0),
             pp_dialog: None,
             tool_dialog: None,
-            undo: vec![],
-            redo: vec![],
+            undo: crate::commandstack::CommandStack::new(100),
             path: None,
             recent_files: cc.storage
                 .and_then(|s| s.get_string("cnccraft_recent"))
@@ -643,6 +642,7 @@ impl App {
             tool_choice: [0; layout::GROUP_COUNT],
             tp_drag: None,
             layer_drag: None,
+            opacity_before_drag: None,
             tp_selected: None,
             preview_scope: cc.storage.and_then(|s| s.get_string("cnccraft_preview_scope")).map_or(PreviewScope::Visible, |v| match v.as_str() {
                 "All" => PreviewScope::All,
@@ -831,17 +831,18 @@ impl App {
     }
 
     fn push_undo(&mut self) {
-        let snapshot = self.shapes.clone();
-        self.push_undo_from(snapshot);
+        let cmd = crate::commandstack::SnapshotCommand::new("edit", self.shapes.clone(), self.layers.clone());
+        self.undo.push_executed(Box::new(cmd));
     }
 
-    /// Save `before` as an undo step (taken before a change that already happened).
-    fn push_undo_from(&mut self, before: Vec<Item>) {
-        self.undo.push(before);
-        if self.undo.len() > 100 {
-            self.undo.remove(0);
-        }
-        self.redo.clear();
+    fn push_undo_from(&mut self, before: (Vec<Item>, crate::layers::Layers)) {
+        let mut cmd = crate::commandstack::SnapshotCommand::new("edit", before.0, before.1);
+        cmd.capture_after(&self.shapes, &self.layers);
+        self.undo.push_executed(Box::new(cmd));
+    }
+
+    fn execute_command(&mut self, cmd: Box<dyn crate::commandstack::Command>) {
+        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths);
     }
 
     fn add_shape(&mut self, shape: impl Into<Shape>) -> u64 {
@@ -907,7 +908,6 @@ impl App {
         self.calibrate_mode = None;
         self.edit = ShapeEditor::default();
         self.undo.clear();
-        self.redo.clear();
         self.editor = None;
         self.sim = None;
         self.path = None;
@@ -983,7 +983,7 @@ impl App {
         if self.edit.is_busy() {
             self.edit.cancel(&mut self.shapes);
             if self.gesture_undo {
-                self.undo.pop();
+                self.undo.pop_last();
                 self.gesture_undo = false;
             }
         }
@@ -1356,10 +1356,8 @@ impl App {
     // ---------------- UI ----------------
 
     fn do_undo(&mut self) {
-        if let Some(s) = self.undo.pop() {
-            self.redo.push(std::mem::replace(&mut self.shapes, s));
+        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths) {
             self.edit.retain_existing(&self.shapes);
-            // the toolpaths a paste made go away with its shapes
             while let Some((ids, before)) = self.paste_log.last() {
                 if ids.iter().all(|id| !self.shapes.iter().any(|s| s.id == *id)) {
                     self.toolpaths.truncate((*before).min(self.toolpaths.len()));
@@ -1371,15 +1369,14 @@ impl App {
                     break;
                 }
             }
-            // bound sizes follow their variables again (to change those, change the variable)
             self.vars_dirty = true;
             self.recompute_all();
         }
     }
 
     fn do_redo(&mut self) {
-        if let Some(s) = self.redo.pop() {
-            self.undo.push(std::mem::replace(&mut self.shapes, s));
+        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths) {
+            self.edit.retain_existing(&self.shapes);
             self.vars_dirty = true;
             self.recompute_all();
         }
@@ -1399,13 +1396,12 @@ impl App {
         }
         let id = self.edit.selection[0];
         let Some(idx) = self.shapes.iter().position(|s| s.id == id) else { return };
-        let before = self.shapes.clone();
+        let before = (self.shapes.clone(), self.layers.clone());
         if crate::props::edit(ui, &mut self.shapes[idx].shape) {
             // typed in the panel: a plain number now, a formula would only undo it
             self.shapes[idx].bound.clear();
             if !ui.ctx().input(|i| i.pointer.any_down()) {
-                self.undo.push(before);
-                self.redo.clear();
+                self.push_undo_from(before);
             }
         }
     }
@@ -1667,6 +1663,18 @@ impl App {
     fn canvas(&mut self, ui: &mut egui::Ui) {
         let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
         let rect = resp.rect;
+        let old = self.canvas_rect;
+        if self.fitted && old.width() > 0.0 && old.height() > 0.0 && (old.width() != rect.width() || old.height() != rect.height()) {
+            let half_w = self.job.width as f32 * self.zoom / 2.0;
+            let half_h = self.job.height as f32 * self.zoom / 2.0;
+            let cx = self.origin.x + half_w;
+            let cy = self.origin.y - half_h;
+            let rel_x = (cx - old.left()) / old.width();
+            let rel_y = (cy - old.top()) / old.height();
+            let new_cx = rect.left() + rel_x * rect.width();
+            let new_cy = rect.top() + rel_y * rect.height();
+            self.origin = Pos2::new(new_cx - half_w, new_cy + half_h);
+        }
         self.canvas_rect = rect;
         if !self.fitted {
             self.fit(rect);
@@ -2139,7 +2147,7 @@ impl App {
                         return;
                     }
                     if self.gesture_undo && !outcome.changed_shapes() {
-                        self.undo.pop();
+                        self.undo.pop_last();
                     }
                     self.gesture_undo = false;
                     match outcome {
@@ -2328,7 +2336,7 @@ impl App {
             d
         });
         if nudge != [0.0, 0.0] {
-            let before = self.shapes.clone();
+            let before = (self.shapes.clone(), self.layers.clone());
             let tool = self.edit_tool();
             if self.edit.nudge(&mut self.shapes, tool, nudge[0], nudge[1]) {
                 self.push_undo_from(before);
@@ -2356,7 +2364,7 @@ impl App {
             Action::Apply | Action::ClosePolyline | Action::NextLine => {}
             Action::Delete if self.delete_selected_constraint() => {}
             Action::Delete => {
-                let before = self.shapes.clone();
+                let before = (self.shapes.clone(), self.layers.clone());
                 if self.tool == DrawTool::NodeEdit && self.edit.active_node.is_some() {
                     if self.edit.delete_active_node(&mut self.shapes) {
                         self.push_undo_from(before);
@@ -2450,7 +2458,7 @@ impl App {
         if self.edit.is_busy() {
             self.edit.cancel(&mut self.shapes);
             if self.gesture_undo {
-                self.undo.pop();
+                self.undo.pop_last();
                 self.gesture_undo = false;
             }
         } else if self.edit.rotate_mode {

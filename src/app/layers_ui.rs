@@ -180,8 +180,7 @@ impl App {
                     if !ui.input(|i| i.pointer.primary_down()) {
                         self.layer_drag = None;
                         if from < self.layers.list.len() {
-                            self.push_undo();
-                            self.layers.move_to(from, to);
+                            self.execute_command(Box::new(crate::commandstack::LayerReorderCommand::new(from, to)));
                         }
                     }
                 }
@@ -226,10 +225,27 @@ impl App {
                 Id::new("layer_opacity_bar"),
                 Sense::click_and_drag(),
             );
+            if slider_resp.drag_started() {
+                self.opacity_before_drag = Some(opacity);
+            }
             if slider_resp.dragged() || slider_resp.clicked() {
                 if let Some(pos) = slider_resp.interact_pointer_pos() {
                     let t = ((pos.x - bar_left) / bar_w).clamp(0.0, 1.0);
                     self.layers.set_opacity(active, t);
+                }
+            }
+            let commit_opacity = if slider_resp.drag_stopped() {
+                self.opacity_before_drag.take()
+            } else if slider_resp.clicked() && self.opacity_before_drag.is_none() {
+                Some(opacity)
+            } else {
+                None
+            };
+            if let Some(old) = commit_opacity {
+                let new_opacity = self.layers.opacity(active);
+                if (old - new_opacity).abs() > 0.001 {
+                    self.layers.set_opacity(active, old);
+                    self.execute_command(Box::new(crate::commandstack::LayerOpacityCommand::new(active, new_opacity)));
                 }
             }
             let knob_col = if slider_resp.hovered() || slider_resp.dragged() { ink() } else { crate::theme::icon_line() };
@@ -253,8 +269,7 @@ impl App {
                 let dup_btn = ui.allocate_exact_size(Vec2::new(26.0, 22.0), Sense::click());
                 paint_op_icon(ui.painter(), dup_btn.0.center(), "duplicate", tone);
                 if dup_btn.1.on_hover_text(t!("Ebene duplizieren")).clicked() {
-                    self.push_undo();
-                    self.layers.duplicate(active_id, &mut self.shapes);
+                    self.execute_command(Box::new(crate::commandstack::LayerDuplicateCommand::new(active_id)));
                     self.recompute_all();
                 }
 
@@ -262,8 +277,7 @@ impl App {
                 let merge_btn = ui.allocate_exact_size(Vec2::new(26.0, 22.0), Sense::click());
                 paint_op_icon(ui.painter(), merge_btn.0.center(), "merge", if can_merge { tone } else { disabled_tone });
                 if can_merge && merge_btn.1.on_hover_text(t!("Auf darunterliegende Ebene reduzieren")).clicked() {
-                    self.push_undo();
-                    self.layers.merge_down(active_id, &mut self.shapes);
+                    self.execute_command(Box::new(crate::commandstack::LayerMergeCommand::new(active_id)));
                     self.recompute_all();
                 }
 
@@ -271,8 +285,7 @@ impl App {
                 let flatten_btn = ui.allocate_exact_size(Vec2::new(26.0, 22.0), Sense::click());
                 paint_op_icon(ui.painter(), flatten_btn.0.center(), "flatten", if layer_count > 1 { tone } else { disabled_tone });
                 if layer_count > 1 && flatten_btn.1.on_hover_text(t!("Alle Ebenen zusammenfassen")).clicked() {
-                    self.push_undo();
-                    self.layers.flatten(&mut self.shapes);
+                    self.execute_command(Box::new(crate::commandstack::LayerFlattenCommand::new()));
                     self.recompute_all();
                 }
 
@@ -372,11 +385,11 @@ impl App {
 
         // Interactions
         if eye.on_hover_text(if visible { t!("Sichtbar (klicken zum Ausblenden: Formen werden dann nicht gezeigt, nicht gefräst und nicht exportiert)") } else { t!("Ausgeblendet (klicken zum Einblenden)") }).clicked() {
-            self.layers.set_visible(id, !visible);
+            self.execute_command(Box::new(crate::commandstack::LayerVisibilityCommand::new(id, !visible)));
         } else if lock.on_hover_text(if locked { t!("Gesperrt (klicken zum Entsperren)") } else { t!("Entsperrt (klicken zum Sperren: bleibt sichtbar, aber nichts darauf lässt sich anklicken oder ändern)") }).clicked() {
-            self.layers.set_locked(id, !locked);
+            self.execute_command(Box::new(crate::commandstack::LayerLockCommand::new(id, !locked)));
         } else if dot.on_hover_text(t!("Ebenenfarbe wechseln")).clicked() {
-            self.layers.cycle_colour(id);
+            self.execute_command(Box::new(crate::commandstack::LayerColourCommand::new(id)));
         } else if resp.double_clicked() {
             self.layer_dialog = Some(LayerDialog::Rename { id, text: name.to_string(), fresh: true });
             self.layer_open = false;
@@ -470,12 +483,10 @@ impl App {
 
     pub(in crate::app) fn delete_layer(&mut self, id: u32, leftovers: Leftovers) {
         let name = self.layers.name(id).to_string();
-        self.push_undo();
-        if self.layers.delete(id, leftovers, &mut self.shapes) {
-            self.image_textures.remove(&id);
-            self.edit.retain_existing(&self.shapes);
-            self.recompute_all();
-            self.status = format!("Ebene \u{201e}{}\u{201c} gelöscht", name);
-        }
+        self.execute_command(Box::new(crate::commandstack::LayerDeleteCommand::new(id, leftovers)));
+        self.image_textures.remove(&id);
+        self.edit.retain_existing(&self.shapes);
+        self.recompute_all();
+        self.status = format!("Ebene \u{201e}{}\u{201c} gelöscht", name);
     }
 }

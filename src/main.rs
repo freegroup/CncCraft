@@ -22,6 +22,7 @@ macro_rules! tr {
 
 mod app;
 mod appicon;
+mod commandstack;
 mod gcode;
 mod layers;
 mod export;

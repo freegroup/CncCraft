@@ -47,7 +47,7 @@ impl App {
     }
 
     fn edit_menu(&mut self, ui: &mut egui::Ui) {
-        let (can_undo, can_redo, any) = (!self.undo.is_empty(), !self.redo.is_empty(), !self.edit.selection.is_empty());
+        let (can_undo, can_redo, any) = (self.undo.can_undo(), self.undo.can_redo(), !self.edit.selection.is_empty());
         self.menu_item(ui, &t!("Rückgängig"), Action::Undo, can_undo);
         self.menu_item(ui, &t!("Wiederholen"), Action::Redo, can_redo);
         ui.separator();
