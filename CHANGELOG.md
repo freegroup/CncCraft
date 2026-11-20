@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/freegroup/CncCraft/compare/v1.14.0...v1.15.0) (2026-11-20)
+
+
+### Features
+
+* tint layer selector with the active layer's colour ([93c65ee](https://github.com/freegroup/CncCraft/commit/93c65eef70a1c4285138929b8f1b01e2cdd7713d))
+
 # [1.14.0](https://github.com/freegroup/CncCraft/compare/v1.13.1...v1.14.0) (2026-11-20)
 
 
