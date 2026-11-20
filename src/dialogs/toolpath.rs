@@ -161,7 +161,7 @@ impl App {
                             ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
                         }
                         ui.end_row();
-                        if !matches!(tp.strategy, Strategy::Drill) {
+                        if !matches!(tp.strategy, Strategy::Drill | Strategy::Slot { .. }) {
                             ui.label(t!("Querzustellung"));
                             let pct = if tp.tool.diameter > 0.0 { tp.tool.stepover / tp.tool.diameter * 100.0 } else { 0.0 };
                             ui.horizontal(|ui| {
@@ -205,8 +205,8 @@ impl App {
                                 ui.end_row();
                                 ui.label(t!("Fräsrichtung"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")));
-                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")));
+                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")).icon(Icon::ClimbMilling).big());
+                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")).icon(Icon::ConventionalMilling).big());
                                 });
                                 ui.end_row();
                             }
@@ -214,9 +214,9 @@ impl App {
                                 ui.label(t!("Ausräumen"));
                                 let mut clearing = Clearing::of(*raster, *spiral);
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(&mut clearing, Clearing::Offset, t!("Versatz")).tip(&Tip::new(t!("Versatz"), t!("Ringe von innen nach außen. Zwischen benachbarten Ringen bleibt der Fräser unten.")).icon(Icon::Pocket));
-                                    ui.radio_value(&mut clearing, Clearing::Raster, t!("Raster")).tip(&Tip::new(t!("Raster"), t!("Hin und her in Bahnen im Rasterwinkel, danach eine Runde an der Wand entlang.")).icon(Icon::Pocket));
-                                    ui.radio_value(&mut clearing, Clearing::Spiral, t!("Spirale")).tip(&Tip::new(t!("Spirale"), t!("Eine durchgehende Spirale von innen nach außen: kein neuer Ansatz, jede Runde geht stufenlos in die nächste über.")).icon(Icon::Pocket));
+                                    ui.radio_value(&mut clearing, Clearing::Offset, t!("Versatz")).tip(&Tip::new(t!("Versatz"), t!("Ringe von innen nach außen. Zwischen benachbarten Ringen bleibt der Fräser unten.")).icon(Icon::ClearOffset).big());
+                                    ui.radio_value(&mut clearing, Clearing::Raster, t!("Raster")).tip(&Tip::new(t!("Raster"), t!("Hin und her in Bahnen im Rasterwinkel, danach eine Runde an der Wand entlang.")).icon(Icon::ClearRaster).big());
+                                    ui.radio_value(&mut clearing, Clearing::Spiral, t!("Spirale")).tip(&Tip::new(t!("Spirale"), t!("Eine durchgehende Spirale von innen nach außen: kein neuer Ansatz, jede Runde geht stufenlos in die nächste über.")).icon(Icon::ClearSpiral).big());
                                 });
                                 (*raster, *spiral) = clearing.switches();
                                 ui.end_row();
@@ -227,8 +227,8 @@ impl App {
                                 }
                                 ui.label(t!("Fräsrichtung"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")));
-                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")));
+                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")).icon(Icon::ClimbMilling).big());
+                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")).icon(Icon::ConventionalMilling).big());
                                 });
                                 ui.end_row();
                             }
@@ -245,22 +245,22 @@ impl App {
                             Strategy::Slot { side, climb, caps } => {
                                 ui.label(t!("Seite"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(side, Side::On, t!("Auf der Linie"));
-                                    ui.radio_value(side, Side::Outside, t!("Links"));
-                                    ui.radio_value(side, Side::Inside, t!("Rechts"));
+                                    ui.radio_value(side, Side::On, t!("Auf der Linie")).tip(&Tip::new(t!("Auf der Linie"), t!("Der Fräser folgt genau dem Vektor: die Mitte der Nut liegt auf der Linie.")).icon(Icon::SlotOnLine).big());
+                                    ui.radio_value(side, Side::Outside, t!("Links")).tip(&Tip::new(t!("Links"), t!("Der Fräser fährt links neben dem Vektor: die rechte Kante der Nut liegt auf der Linie.")).icon(Icon::SlotLeft).big());
+                                    ui.radio_value(side, Side::Inside, t!("Rechts")).tip(&Tip::new(t!("Rechts"), t!("Der Fräser fährt rechts neben dem Vektor: die linke Kante der Nut liegt auf der Linie.")).icon(Icon::SlotRight).big());
                                 });
                                 ui.end_row();
                                 ui.label(t!("Kappe"));
                                 ui.horizontal(|ui| {
                                     use crate::toolpath::Cap;
-                                    ui.radio_value(caps, Cap::Outer, t!("Außen")).tip(&Tip::new(t!("Außen"), t!("Der Fräser reicht bis zum Endpunkt der Linie: die Nut wird so lang wie der Vektor.")));
-                                    ui.radio_value(caps, Cap::Inner, t!("Innen")).tip(&Tip::new(t!("Innen"), t!("Der Fräser stoppt vor dem Endpunkt: die Nut endet um den Werkzeugradius kürzer.")));
+                                    ui.radio_value(caps, Cap::Outer, t!("Außen")).tip(&Tip::new(t!("Außen"), t!("Der Fräser fährt über den Endpunkt hinaus: die Nut wird um den Werkzeugradius länger als der Vektor.")).icon(Icon::SlotCapOuter).big());
+                                    ui.radio_value(caps, Cap::Inner, t!("Innen")).tip(&Tip::new(t!("Innen"), t!("Der Fräser stoppt einen halben Durchmesser vor dem Endpunkt: die Nut wird genau so lang wie der Vektor.")).icon(Icon::SlotCapInner).big());
                                 });
                                 ui.end_row();
                                 ui.label(t!("Fräsrichtung"));
                                 ui.horizontal(|ui| {
-                                    ui.radio_value(climb, true, t!("Gleichlauf"));
-                                    ui.radio_value(climb, false, t!("Gegenlauf"));
+                                    ui.radio_value(climb, true, t!("Gleichlauf")).tip(&Tip::new(t!("Gleichlauf"), t!("Die Schneide greift dick ein und läuft dünn aus: glattere Kante, weniger Ausfransen.")).icon(Icon::ClimbMilling).big());
+                                    ui.radio_value(climb, false, t!("Gegenlauf")).tip(&Tip::new(t!("Gegenlauf"), t!("Die Schneide greift dünn ein und läuft dick aus: ruhiger auf wackligen Maschinen.")).icon(Icon::ConventionalMilling).big());
                                 });
                                 ui.end_row();
                             }

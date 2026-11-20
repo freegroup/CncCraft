@@ -655,6 +655,217 @@ impl Pen<'_> {
                 self.p.line_segment([slab.p(-0.9, -half), slab.p(0.9, -half)], Stroke::new(self.w(1.4), w.groove));
                 self.p.line_segment([slab.p(-0.9, half), slab.p(0.9, half)], Stroke::new(self.w(1.0), w.lip));
             }
+            Icon::SlotOnLine => {
+                let line_s = Stroke::new(self.w(1.6), self.k.line);
+                let groove_s = Stroke::new(self.w(0.8), self.k.line.gamma_multiply(0.4));
+                self.p.line_segment([self.at(-10.0, 0.0), self.at(10.0, 0.0)], line_s);
+                self.p.line_segment([self.at(-10.0, -3.5), self.at(10.0, -3.5)], groove_s);
+                self.p.line_segment([self.at(-10.0, 3.5), self.at(10.0, 3.5)], groove_s);
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(0.0, 0.0) + Vec2::angled(i as f32 / 24.0 * TAU) * 3.5 * self.scale).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+            }
+            Icon::SlotLeft => {
+                let line_s = Stroke::new(self.w(1.6), self.k.line);
+                let groove_s = Stroke::new(self.w(0.8), self.k.line.gamma_multiply(0.4));
+                self.p.line_segment([self.at(-10.0, 3.0), self.at(10.0, 3.0)], line_s);
+                self.p.line_segment([self.at(-10.0, -0.5), self.at(10.0, -0.5)], groove_s);
+                self.p.line_segment([self.at(-10.0, -7.5), self.at(10.0, -7.5)], groove_s);
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(0.0, -4.0) + Vec2::angled(i as f32 / 24.0 * TAU) * 3.5 * self.scale).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+            }
+            Icon::SlotRight => {
+                let line_s = Stroke::new(self.w(1.6), self.k.line);
+                let groove_s = Stroke::new(self.w(0.8), self.k.line.gamma_multiply(0.4));
+                self.p.line_segment([self.at(-10.0, -3.0), self.at(10.0, -3.0)], line_s);
+                self.p.line_segment([self.at(-10.0, 0.5), self.at(10.0, 0.5)], groove_s);
+                self.p.line_segment([self.at(-10.0, 7.5), self.at(10.0, 7.5)], groove_s);
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(0.0, 4.0) + Vec2::angled(i as f32 / 24.0 * TAU) * 3.5 * self.scale).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+            }
+            Icon::SlotCapOuter => {
+                let line_s = Stroke::new(self.w(1.6), self.k.line);
+                let groove_s = Stroke::new(self.w(0.8), self.k.line.gamma_multiply(0.4));
+                self.p.line_segment([self.at(-10.0, 0.0), self.at(4.0, 0.0)], line_s);
+                self.dot(4.0, 0.0);
+                self.p.line_segment([self.at(-10.0, -3.5), self.at(7.5, -3.5)], groove_s);
+                self.p.line_segment([self.at(-10.0, 3.5), self.at(7.5, 3.5)], groove_s);
+                let cap: Vec<Pos2> = (0..13).map(|i| {
+                    let a = -FRAC_PI_2 + i as f32 / 12.0 * PI;
+                    self.at(4.0 + a.cos() * 3.5, a.sin() * 3.5)
+                }).collect();
+                self.p.add(Shape::line(cap, groove_s));
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(4.0, 0.0) + Vec2::angled(i as f32 / 24.0 * TAU) * 3.5 * self.scale).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+            }
+            Icon::SlotCapInner => {
+                let line_s = Stroke::new(self.w(1.6), self.k.line);
+                let groove_s = Stroke::new(self.w(0.8), self.k.line.gamma_multiply(0.4));
+                self.p.line_segment([self.at(-10.0, 0.0), self.at(4.0, 0.0)], line_s);
+                self.dot(4.0, 0.0);
+                self.p.line_segment([self.at(-10.0, -3.5), self.at(0.5, -3.5)], groove_s);
+                self.p.line_segment([self.at(-10.0, 3.5), self.at(0.5, 3.5)], groove_s);
+                let cap: Vec<Pos2> = (0..13).map(|i| {
+                    let a = -FRAC_PI_2 + i as f32 / 12.0 * PI;
+                    self.at(0.5 + a.cos() * 3.5, a.sin() * 3.5)
+                }).collect();
+                self.p.add(Shape::line(cap, groove_s));
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(0.5, 0.0) + Vec2::angled(i as f32 / 24.0 * TAU) * 3.5 * self.scale).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+            }
+            Icon::ClimbMilling => {
+                // Climb: feed →, cutter on right edge, cleared step on right
+                // Workpiece with step cut out on the right
+                let block: Vec<Pos2> = vec![
+                    self.at(-11.0, -1.0), self.at(2.0, -1.0),
+                    self.at(2.0, -6.0), self.at(11.0, -6.0),
+                    self.at(11.0, 8.0), self.at(-11.0, 8.0),
+                ];
+                fill_gradient(self.p, &block, self.k.bottom, shade(self.k.bottom, 0.7));
+                self.p.add(Shape::closed_line(block, Stroke::new(self.w(0.8), self.k.line)));
+                // Cutter circle at the step edge
+                let cx = 2.0;
+                let cy = -6.0;
+                let r = 5.0;
+                let rs = r * self.scale;
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(cx, cy) + Vec2::angled(i as f32 / 24.0 * TAU) * rs).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+                // 4-flute cross
+                let fl = 3.2;
+                self.p.line_segment([self.at(cx - fl, cy), self.at(cx + fl, cy)], Stroke::new(self.w(0.8), self.k.line));
+                self.p.line_segment([self.at(cx, cy - fl), self.at(cx, cy + fl)], Stroke::new(self.w(0.8), self.k.line));
+                // Rotation arrow: clockwise (top-left → right → bottom)
+                let ra = r + 2.0;
+                let arc: Vec<Pos2> = (0..10).map(|i| {
+                    let a = PI * 1.15 + i as f32 / 9.0 * PI * 1.2;
+                    self.at(cx + a.cos() * ra, cy + a.sin() * ra)
+                }).collect();
+                let arc_tip = arc.last().copied();
+                self.p.add(Shape::line(arc, Stroke::new(self.w(1.2), self.k.line)));
+                if let Some(last) = arc_tip {
+                    let a_end = PI * 1.15 + PI * 1.2;
+                    self.arrow_head(last, Vec2::new(-a_end.sin(), a_end.cos()));
+                }
+                // Feed arrow: left → right, below block
+                self.p.line_segment([self.at(-9.0, 11.0), self.at(7.0, 11.0)], Stroke::new(self.w(1.2), self.k.line));
+                self.arrow_head(self.at(8.5, 11.0), Vec2::new(1.0, 0.0));
+            }
+            Icon::ConventionalMilling => {
+                // Conventional: feed →, cutter on left edge, cleared step on left
+                // Workpiece with step cut out on the left
+                let block: Vec<Pos2> = vec![
+                    self.at(-11.0, -6.0), self.at(-2.0, -6.0),
+                    self.at(-2.0, -1.0), self.at(11.0, -1.0),
+                    self.at(11.0, 8.0), self.at(-11.0, 8.0),
+                ];
+                fill_gradient(self.p, &block, self.k.bottom, shade(self.k.bottom, 0.7));
+                self.p.add(Shape::closed_line(block, Stroke::new(self.w(0.8), self.k.line)));
+                // Cutter circle at the step edge
+                let cx = -2.0;
+                let cy = -6.0;
+                let r = 5.0;
+                let rs = r * self.scale;
+                let cutter: Vec<Pos2> = (0..24).map(|i| self.at(cx, cy) + Vec2::angled(i as f32 / 24.0 * TAU) * rs).collect();
+                fill_gradient(self.p, &cutter, self.k.top, self.k.bottom);
+                self.p.add(Shape::closed_line(cutter, Stroke::new(self.w(1.0), self.k.line)));
+                // 4-flute cross
+                let fl = 3.2;
+                self.p.line_segment([self.at(cx - fl, cy), self.at(cx + fl, cy)], Stroke::new(self.w(0.8), self.k.line));
+                self.p.line_segment([self.at(cx, cy - fl), self.at(cx, cy + fl)], Stroke::new(self.w(0.8), self.k.line));
+                // Rotation arrow: clockwise, arc on right side (sweeps right→bottom→left)
+                let ra = r + 2.0;
+                let arc: Vec<Pos2> = (0..10).map(|i| {
+                    let a = -PI * 0.15 - i as f32 / 9.0 * PI * 1.2;
+                    self.at(cx + a.cos() * ra, cy + a.sin() * ra)
+                }).collect();
+                let arc_tip = arc.last().copied();
+                self.p.add(Shape::line(arc, Stroke::new(self.w(1.2), self.k.line)));
+                if let Some(last) = arc_tip {
+                    let a_end = -PI * 0.15 - PI * 1.2;
+                    self.arrow_head(last, Vec2::new(-a_end.sin(), a_end.cos()));
+                }
+                // Feed arrow: right → left, below block
+                self.p.line_segment([self.at(9.0, 11.0), self.at(-7.0, 11.0)], Stroke::new(self.w(1.2), self.k.line));
+                self.arrow_head(self.at(-8.5, 11.0), Vec2::new(-1.0, 0.0));
+            }
+            Icon::ClearOffset => {
+                // Concentric shrinking rectangles (top-down view of offset clearing)
+                let s = Stroke::new(self.w(1.0), self.k.line);
+                let dim = Stroke::new(self.w(0.7), self.k.line.gamma_multiply(0.45));
+                // outer boundary
+                self.p.add(Shape::closed_line(vec![
+                    self.at(-11.0, -9.0), self.at(11.0, -9.0),
+                    self.at(11.0, 9.0), self.at(-11.0, 9.0),
+                ], s));
+                // inner rings
+                for i in 1..=3 {
+                    let m = i as f32 * 2.8;
+                    self.p.add(Shape::closed_line(vec![
+                        self.at(-11.0 + m, -9.0 + m), self.at(11.0 - m, -9.0 + m),
+                        self.at(11.0 - m, 9.0 - m), self.at(-11.0 + m, 9.0 - m),
+                    ], dim));
+                }
+            }
+            Icon::ClearRaster => {
+                // Parallel horizontal lines with turn-arounds (top-down raster pattern)
+                let s = Stroke::new(self.w(1.0), self.k.line);
+                let dim = Stroke::new(self.w(0.7), self.k.line.gamma_multiply(0.45));
+                // outer boundary
+                self.p.add(Shape::closed_line(vec![
+                    self.at(-11.0, -9.0), self.at(11.0, -9.0),
+                    self.at(11.0, 9.0), self.at(-11.0, 9.0),
+                ], s));
+                // horizontal raster lines
+                let lines = 5;
+                let top = -7.0_f32;
+                let bot = 7.0_f32;
+                let step = (bot - top) / (lines - 1) as f32;
+                for i in 0..lines {
+                    let y = top + i as f32 * step;
+                    self.p.line_segment([self.at(-9.0, y), self.at(9.0, y)], dim);
+                }
+                // small U-turns connecting alternating ends
+                for i in 0..lines - 1 {
+                    let y0 = top + i as f32 * step;
+                    let y1 = y0 + step;
+                    let x = if i % 2 == 0 { 9.0 } else { -9.0 };
+                    let arc: Vec<Pos2> = (0..6).map(|j| {
+                        let a = if x > 0.0 { -FRAC_PI_2 + j as f32 / 5.0 * PI } else { FRAC_PI_2 - j as f32 / 5.0 * PI };
+                        self.at(x + a.cos() * step / 2.0, (y0 + y1) / 2.0 + a.sin() * step / 2.0)
+                    }).collect();
+                    self.p.add(Shape::line(arc, dim));
+                }
+            }
+            Icon::ClearSpiral => {
+                // Continuous spiral from center outward (top-down view)
+                let s = Stroke::new(self.w(1.0), self.k.line);
+                let dim = Stroke::new(self.w(0.7), self.k.line.gamma_multiply(0.45));
+                // outer boundary
+                self.p.add(Shape::closed_line(vec![
+                    self.at(-11.0, -9.0), self.at(11.0, -9.0),
+                    self.at(11.0, 9.0), self.at(-11.0, 9.0),
+                ], s));
+                // rectangular spiral from inside out
+                let steps = 3;
+                let mut pts: Vec<Pos2> = vec![self.at(0.0, 0.0)];
+                for i in 1..=steps {
+                    let f = i as f32;
+                    let mx = f * 3.2;
+                    let my = f * 2.6;
+                    // right, up, left, down — each ring goes one step further out
+                    pts.push(self.at(mx, my - 2.6));
+                    pts.push(self.at(mx, -my));
+                    pts.push(self.at(-mx, -my));
+                    pts.push(self.at(-mx, my));
+                    pts.push(self.at(mx + 3.2, my));
+                }
+                self.p.add(Shape::line(pts, dim));
+            }
         }
     }
 

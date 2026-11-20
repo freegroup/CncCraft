@@ -161,6 +161,26 @@ pub(crate) enum Icon {
     Calibrate,
     /// Slot / trace milling strategy.
     Slot,
+    /// Slot side: cutter on the line.
+    SlotOnLine,
+    /// Slot side: cutter left of the line.
+    SlotLeft,
+    /// Slot side: cutter right of the line.
+    SlotRight,
+    /// Slot cap: outer (cutter reaches endpoint).
+    SlotCapOuter,
+    /// Slot cap: inner (cutter stops before endpoint).
+    SlotCapInner,
+    /// Climb milling direction.
+    ClimbMilling,
+    /// Conventional milling direction.
+    ConventionalMilling,
+    /// Pocket clearing: offset rings from inside out.
+    ClearOffset,
+    /// Pocket clearing: raster lines back and forth.
+    ClearRaster,
+    /// Pocket clearing: continuous spiral from inside out.
+    ClearSpiral,
 }
 
 /// What the right-click menu of the canvas works on: the shape under the pointer when it opened.
