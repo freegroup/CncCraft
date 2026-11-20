@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/freegroup/CncCraft/compare/v1.17.0...v1.18.0) (2026-11-20)
+
+
+### Features
+
+* illustrative tooltip icons for toolpath options ([0752c1b](https://github.com/freegroup/CncCraft/commit/0752c1bbb99d9f67afde088005d6e3aa28013ed6))
+
 # [1.17.0](https://github.com/freegroup/CncCraft/compare/v1.16.0...v1.17.0) (2026-11-20)
 
 
