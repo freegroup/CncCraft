@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/freegroup/CncCraft/compare/v1.18.0...v1.18.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* Code-Änderungen ohne feat:/fix: automatisch als Patch freigegeben ([262058e](https://github.com/freegroup/CncCraft/commit/262058e1ec4d6eee8135bead33706ecb9dc2041a))
+
 # [1.18.0](https://github.com/freegroup/CncCraft/compare/v1.17.0...v1.18.0) (2026-11-20)
 
 
