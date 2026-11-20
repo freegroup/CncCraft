@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/freegroup/CncCraft/compare/v1.13.1...v1.14.0) (2026-11-20)
+
+
+### Features
+
+* add reference image layers and slot toolpath strategy ([582fccd](https://github.com/freegroup/CncCraft/commit/582fccdeeb24c38c60d7d2de06822b72a1dd1d78))
+
 ## [1.13.1](https://github.com/freegroup/CncCraft/compare/v1.13.0...v1.13.1) (2026-11-18)
 
 
