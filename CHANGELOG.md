@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/freegroup/CncCraft/compare/v1.15.0...v1.16.0) (2026-11-20)
+
+
+### Features
+
+* layer management — reorder, duplicate, merge, flatten, opacity ([7d5f075](https://github.com/freegroup/CncCraft/commit/7d5f0755662b30239c3001643172e33bf32b0eff))
+
 # [1.15.0](https://github.com/freegroup/CncCraft/compare/v1.14.0...v1.15.0) (2026-11-20)
 
 
