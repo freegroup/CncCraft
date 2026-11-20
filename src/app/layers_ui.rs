@@ -72,9 +72,13 @@ impl App {
         let rect = ui.max_rect();
         let resp = ui.interact(rect, Id::new("layer_selector"), Sense::click());
         let active = self.layers.active;
+        let is_image = self.layers.is_image(active);
+        let colour_idx = self.layers.get(active).map_or(0, |l| l.colour);
+        let c3 = PALETTE[colour_idx % PALETTE.len()];
+        let layer_colour = Color32::from_rgb(c3[0], c3[1], c3[2]);
         let mut name = self.layers.name(active).to_string();
-        if self.layers.is_image(active) {
-            name.push_str("  🖼");
+        if is_image {
+            name.push_str("  \u{1f5bc}");
         }
         if !self.layers.is_visible(active) {
             name.push_str(&t!("  (ausgeblendet)"));
@@ -82,14 +86,16 @@ impl App {
             name.push_str(&t!("  (gesperrt)"));
         }
         let p = ui.painter();
-        if resp.hovered() || self.layer_open {
-            p.rect_filled(rect, 5.0, crate::theme::hover());
-        }
-        super::icons::paint_layers_symbol(p, rect.left_center() + Vec2::new(16.0, 0.0), Colours::normal());
-        p.text(rect.left_center() + Vec2::new(36.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(14.0), ink());
-        // the chevron
+        let bg = if resp.hovered() || self.layer_open {
+            layer_colour.gamma_multiply(0.35)
+        } else {
+            layer_colour.gamma_multiply(0.2)
+        };
+        p.rect(rect, 6.0, bg, Stroke::new(1.0_f32, layer_colour.gamma_multiply(0.5)));
+        super::icons::paint_layers_symbol(p, rect.left_center() + Vec2::new(18.0, 0.0), Colours::normal());
+        p.text(rect.left_center() + Vec2::new(40.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(15.0), ink());
         let c = rect.right_center() - Vec2::new(16.0, 0.0);
-        p.add(egui::Shape::line(vec![c + Vec2::new(-4.5, -2.0), c + Vec2::new(0.0, 2.5), c + Vec2::new(4.5, -2.0)], Stroke::new(1.6_f32, ink())));
+        p.add(egui::Shape::line(vec![c + Vec2::new(-5.0, -2.5), c + Vec2::new(0.0, 3.0), c + Vec2::new(5.0, -2.5)], Stroke::new(1.8_f32, ink())));
         if resp.on_hover_text(t!("Ebenen")).clicked() {
             self.layer_open = !self.layer_open;
         }

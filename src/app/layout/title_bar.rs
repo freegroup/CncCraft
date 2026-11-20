@@ -11,7 +11,7 @@ const LANG_SLOT: f32 = 38.0;
 impl App {
     /// The menu bar on the left, the layer in the middle, the document's name on the right.
     pub(in crate::app) fn title_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("title").exact_height(34.0).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(egui::Margin::symmetric(10.0, 4.0)).stroke(Stroke::new(1.0_f32, hairline()))).show(ctx, |ui| {
+        egui::TopBottomPanel::top("title").exact_height(40.0).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(egui::Margin::symmetric(10.0, 4.0)).stroke(Stroke::new(1.0_f32, hairline()))).show(ctx, |ui| {
             let full = ui.max_rect();
             // the start page has no menus: only the switches at the right end
             if !self.start_page {
@@ -81,7 +81,7 @@ impl App {
             }
             // the layer, centred over the window as in the original (one layer for now)
             if !self.start_page {
-                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(Rect::from_center_size(full.center(), Vec2::new(230.0, 26.0))), |ui| self.layer_selector(ui));
+                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(Rect::from_center_size(full.center(), Vec2::new(280.0, 32.0))), |ui| self.layer_selector(ui));
             }
         });
     }
