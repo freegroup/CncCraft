@@ -161,8 +161,6 @@ pub(crate) enum Icon {
     Calibrate,
     /// Slot / trace milling strategy.
     Slot,
-    /// Adjust the opacity of a reference image.
-    Transparency,
 }
 
 /// What the right-click menu of the canvas works on: the shape under the pointer when it opened.
@@ -452,6 +450,8 @@ pub struct App {
     /// was drawn last frame (for the self-test).
     tp_drag: Option<usize>,
     tp_grips: Vec<Rect>,
+    /// The layer being dragged to a new position in the layer list (its index).
+    layer_drag: Option<usize>,
     flyout: Option<(usize, Pos2)>,
     /// Named values the shape inputs can use (parametric sizes), their resolved values, and
     /// whether the variables dialog is open. `vars_dirty` triggers a re-resolve.
@@ -532,8 +532,6 @@ pub struct App {
     image_textures: HashMap<u32, (egui::TextureHandle, [u32; 2])>,
     /// The calibrate-image mode: pick two points, enter distance.
     calibrate_mode: Option<image_tools::CalibrateMode>,
-    /// Whether the transparency slider for the active image layer is open.
-    transparency_open: bool,
     /// The dark colours are in use right now.
     dark: bool,
     /// What the person chose: follow the system, light or dark (as in the original).
@@ -644,6 +642,7 @@ impl App {
             vops: vector_ops::VectorOps::new(),
             tool_choice: [0; layout::GROUP_COUNT],
             tp_drag: None,
+            layer_drag: None,
             tp_selected: None,
             preview_scope: cc.storage.and_then(|s| s.get_string("cnccraft_preview_scope")).map_or(PreviewScope::Visible, |v| match v.as_str() {
                 "All" => PreviewScope::All,
@@ -700,7 +699,6 @@ impl App {
             last_layer_image: cc.storage.and_then(|s| s.get_string("cnccraft_layer_type")).is_some_and(|v| v == "image"),
             image_textures: HashMap::new(),
             calibrate_mode: None,
-            transparency_open: false,
         };
         app.post_idx = app.post_idx.min(app.postprocs.len().saturating_sub(1));
         if cc.storage.and_then(|s| s.get_string("cnccraft_cam_perspective")).is_some_and(|v| v == "true") {
@@ -1041,7 +1039,6 @@ impl App {
                 self.layers.sync(&mut self.shapes);
                 self.image_textures.clear();
                 self.calibrate_mode = None;
-                self.transparency_open = false;
                 if !p.postprocs.is_empty() {
                     self.postprocs = p.postprocs;
                 } else {
@@ -1217,6 +1214,12 @@ impl App {
     }
 
     fn recompute_all(&mut self) {
+        self.toolpaths.retain(|tp| {
+            tp.shape_ids.iter().any(|sid| self.shapes.iter().any(|s| s.id == *sid))
+        });
+        self.image_textures.retain(|&lid, _| {
+            self.shapes.iter().any(|s| matches!(&s.shape, shape_edit::Shape::RefImage(r) if r.layer_id == lid))
+        });
         if self.toolpaths.is_empty() {
             return;
         }
@@ -1719,7 +1722,7 @@ impl App {
                 } else {
                     continue;
                 };
-                let alpha = (ib.image.opacity * 255.0) as u8;
+                let alpha = (layer.opacity * 255.0) as u8;
                 let tint = Color32::from_rgba_unmultiplied(255, 255, 255, alpha);
                 let tl = self.to_screen([lo[0], hi[1]]);
                 let br = self.to_screen([hi[0], lo[1]]);
@@ -1776,6 +1779,7 @@ impl App {
         // a ring or a line shows its selection as a solid line, not in marching dashes
         let solid_selection = self.edit.style(&self.shapes) != shape_edit::SelectionStyle::Box;
         for s in self.shapes.iter().filter(|s| !s.hidden) {
+            let layer_alpha = self.layers.opacity(s.layer);
             // RefImage shapes are rendered as textures above; only draw their selection outline
             if matches!(&s.shape, Shape::RefImage(_)) {
                 if self.edit.selection.contains(&s.id) || Some(s.id) == hover_id {
@@ -1792,6 +1796,7 @@ impl App {
             let sel = self.edit.selection.contains(&s.id);
             let base = if mark_free { free_edge } else { Color32::BLACK };
             let col = if sel { SELECT } else if Some(s.id) == hover_id { Color32::from_rgb(0xd0, 0x40, 0x40) } else { base };
+            let col = col.gamma_multiply(layer_alpha);
             for c in s.shape.contours() {
                 let mut pts: Vec<Pos2> = c.pts.iter().map(|p| self.to_screen(*p)).collect();
                 if c.closed && !pts.is_empty() {
@@ -2821,7 +2826,6 @@ impl eframe::App for App {
         self.pp_dialog_ui(ctx);
         self.tool_dialog_ui(ctx);
         self.calibrate_dialog(ctx);
-        self.transparency_dialog(ctx);
         self.save_thumbnail(ctx);
         if self.thumb_pending == 0 {
             if let Some(what) = self.after_thumb.take() {
@@ -2906,14 +2910,15 @@ fn block_sketch(ui: &mut egui::Ui) {
     p.text(o + Vec2::new(-5.0, h / 2.0), Align2::CENTER_CENTER, "Z", FontId::proportional(9.0), muted());
 }
 
-fn tp_color(s: &Strategy) -> Color32 {
-    match s {
-        Strategy::Profile { tabs: true, .. } => Color32::from_rgb(0x1e, 0x6f, 0xd9),
-        Strategy::Profile { .. } => Color32::from_rgb(0x2a, 0x8a, 0xe0),
-        Strategy::Pocket { .. } => Color32::from_rgb(0x1f, 0x9d, 0x55),
-        Strategy::Drill => Color32::from_rgb(0xd0, 0x30, 0x30),
-        Strategy::VCarve { .. } => Color32::from_rgb(0xe0, 0x7a, 0x10),
-        Strategy::Slot { .. } => Color32::from_rgb(0x9a, 0x50, 0xc8),
+impl App {
+    fn tp_layer_color(&self, tp: &crate::toolpath::Toolpath) -> Color32 {
+        let layer_id = tp.shape_ids.iter()
+            .find_map(|&sid| self.shapes.iter().find(|s| s.id == sid))
+            .map(|item| item.layer)
+            .unwrap_or(self.layers.active);
+        let colour_idx = self.layers.get(layer_id).map_or(0, |l| l.colour);
+        let c = crate::layers::PALETTE[colour_idx % crate::layers::PALETTE.len()];
+        Color32::from_rgb(c[0], c[1], c[2])
     }
 }
 

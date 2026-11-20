@@ -33,7 +33,7 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Trim), Icon::Draw(DrawTool::Erase), Icon::Draw(DrawTool::Connect), Icon::Draw(DrawTool::FilletOuter), Icon::Draw(DrawTool::FilletInner)],
     &[Icon::Union, Icon::Subtract, Icon::Intersect],
     &[Icon::Group, Icon::Ungroup],
-    &[Icon::InsertImage, Icon::Calibrate, Icon::Transparency],
+    &[Icon::InsertImage, Icon::Calibrate],
 ];
 
 /// How many groups the tool column has (one remembered choice each when folded).
@@ -91,7 +91,6 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Variables => Tip::new(t!("Variablen"), t!("Benannte Werte wie \u{201e}breite\u{201c}, die Ma\u{00df}e, Tiefen und Abst\u{00e4}nde verwenden. \u{00c4}ndert man den Wert, folgt alles.")),
         Icon::InsertImage => Tip::new(t!("Bild einfügen"), t!("Ein Bild (PNG, JPEG) als transparente Vorlage auf die Bild-Ebene laden.")),
         Icon::Calibrate => Tip::new(t!("Bild kalibrieren"), t!("Zwei Punkte im Bild anklicken und den echten Abstand eingeben. Das Bild wird danach so skaliert, dass es 1:1 zum Arbeitskoordinatensystem passt.")),
-        Icon::Transparency => Tip::new(t!("Transparenz"), t!("Die Deckkraft des Referenzbilds einstellen – von durchsichtig bis deckend.")),
         Icon::Slot => Tip::new(t!("Nut"), t!("Fräst eine Nut entlang der gewählten Vektoren: auf der Linie, links oder rechts davon versetzt.")),
         _ => Tip::new(String::new(), String::new()),
     };
@@ -103,9 +102,9 @@ impl App {
     /// Variables and the image tools are shown; all vector drawing / editing tools are hidden.
     fn icon_available_on_layer(&self, icon: Icon) -> bool {
         if self.layers.active_can_place_vectors() {
-            return !matches!(icon, Icon::InsertImage | Icon::Calibrate | Icon::Transparency);
+            return !matches!(icon, Icon::InsertImage | Icon::Calibrate);
         }
-        matches!(icon, Icon::Draw(DrawTool::Select) | Icon::Job | Icon::Variables | Icon::InsertImage | Icon::Calibrate | Icon::Transparency)
+        matches!(icon, Icon::Draw(DrawTool::Select) | Icon::Job | Icon::Variables | Icon::InsertImage | Icon::Calibrate)
     }
 
     /// The tool column. Expanded, it shows every tool, grouped in rows of up to five. Folded, it
@@ -261,7 +260,7 @@ impl App {
             Icon::Group => (false, self.selection_can_group()),
             Icon::Ungroup => (false, self.selection_has_group()),
             Icon::Job | Icon::ImportDxf | Icon::InsertImage => (false, true),
-            Icon::Calibrate | Icon::Transparency => {
+            Icon::Calibrate => {
                 let has_image = self.layers.get(self.layers.active)
                     .and_then(|l| l.as_image())
                     .is_some_and(|ib| !ib.image.bytes.is_empty());
@@ -312,7 +311,6 @@ impl App {
             Icon::Variables => self.vars_open = !self.vars_open,
             Icon::InsertImage => self.insert_image_dialog(),
             Icon::Calibrate => self.start_calibrate(),
-            Icon::Transparency => self.transparency_open = !self.transparency_open,
             _ => {}
         }
     }

@@ -2,7 +2,7 @@
 //! way from home to the first toolpath, the travel at safe_z, the hooks' moves), read back from
 //! the G-code itself, so the view shows what the machine will really do.
 
-use super::{tp_color, App};
+use super::App;
 use crate::sim;
 use crate::toolpath::Toolpath;
 use crate::transform::from_gcode::{self, Step};
@@ -60,7 +60,7 @@ impl App {
         let paths: Vec<&Toolpath> = indices.iter().map(|&i| &self.toolpaths[i]).collect();
         let (code, starts) = to_gcode::write_with_sections(&self.job, &paths, self.pp());
         let steps = from_gcode::trace_job(&code, &self.job);
-        let sections = starts.into_iter().zip(&paths).map(|(line, tp)| (line, tp_color(&tp.strategy).gamma_multiply(0.75))).collect();
+        let sections = starts.into_iter().zip(&paths).map(|(line, tp)| (line, self.tp_layer_color(tp).gamma_multiply(0.75))).collect();
         self.gcode_overlay = Some(GcodeOverlay { key, steps, sections });
     }
 

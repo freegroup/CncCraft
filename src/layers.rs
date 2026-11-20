@@ -130,6 +130,7 @@ pub struct Layer {
     #[allow(dead_code)]
     pub locked: bool,
     pub colour: usize,
+    pub opacity: f32,
     pub behavior: Box<dyn LayerBehavior>,
 }
 
@@ -141,6 +142,7 @@ impl Clone for Layer {
             visible: self.visible,
             locked: self.locked,
             colour: self.colour,
+            opacity: self.opacity,
             behavior: self.behavior.clone_behavior(),
         }
     }
@@ -151,13 +153,14 @@ impl Serialize for Layer {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
         let has_image = self.behavior.is_image();
-        let len = 5 + if has_image { 2 } else { 1 };
+        let len = 6 + if has_image { 2 } else { 1 };
         let mut st = s.serialize_struct("Layer", len)?;
         st.serialize_field("id", &self.id)?;
         st.serialize_field("name", &self.name)?;
         st.serialize_field("visible", &self.visible)?;
         st.serialize_field("locked", &self.locked)?;
         st.serialize_field("colour", &self.colour)?;
+        st.serialize_field("opacity", &self.opacity)?;
         st.serialize_field("kind", self.behavior.kind_key())?;
         if let Some(ib) = self.as_image() {
             st.serialize_field("image", &ib.image)?;
@@ -179,19 +182,22 @@ impl<'de> Deserialize<'de> for Layer {
             locked: bool,
             #[serde(default)]
             colour: usize,
+            #[serde(default = "default_layer_opacity")]
+            opacity: f32,
             #[serde(default)]
             kind: String,
             #[serde(default)]
             image: Option<ImageData>,
         }
         fn default_true() -> bool { true }
+        fn default_layer_opacity() -> f32 { 1.0 }
         let r = Raw::deserialize(d)?;
         let behavior: Box<dyn LayerBehavior> = if r.kind == "image" {
             Box::new(ImageBehavior { image: r.image.unwrap_or_default() })
         } else {
             Box::new(VectorBehavior)
         };
-        Ok(Layer { id: r.id, name: r.name, visible: r.visible, locked: r.locked, colour: r.colour, behavior })
+        Ok(Layer { id: r.id, name: r.name, visible: r.visible, locked: r.locked, colour: r.colour, opacity: r.opacity, behavior })
     }
 }
 
@@ -231,6 +237,7 @@ impl Default for Layers {
                 visible: true,
                 locked: false,
                 colour: 0,
+                opacity: 1.0,
                 behavior: Box::new(VectorBehavior),
             }],
             active: 1,
@@ -304,7 +311,7 @@ impl Layers {
         let default_name = behavior.kind_label();
         let name = self.free_name(&if name.trim().is_empty() { default_name } else { name.to_string() }, None);
         let colour = self.list.len() % PALETTE.len();
-        self.list.push(Layer { id, name, visible: true, locked: false, colour, behavior });
+        self.list.push(Layer { id, name, visible: true, locked: false, colour, opacity: 1.0, behavior });
         self.active = id;
         id
     }
@@ -358,6 +365,16 @@ impl Layers {
         }
     }
 
+    pub fn set_opacity(&mut self, id: u32, opacity: f32) {
+        if let Some(l) = self.list.iter_mut().find(|l| l.id == id) {
+            l.opacity = opacity.clamp(0.0, 1.0);
+        }
+    }
+
+    pub fn opacity(&self, id: u32) -> f32 {
+        self.get(id).map_or(1.0, |l| l.opacity)
+    }
+
     pub fn activate(&mut self, id: u32) {
         if self.get(id).is_some() {
             self.active = id;
@@ -404,6 +421,83 @@ impl Layers {
 
     pub fn count_on(&self, id: u32, items: &[Item]) -> usize {
         items.iter().filter(|i| i.layer == id).count()
+    }
+
+    pub fn duplicate(&mut self, id: u32, items: &mut Vec<Item>) -> Option<u32> {
+        let at = self.list.iter().position(|l| l.id == id)?;
+        let src = &self.list[at];
+        let new_id = self.next_id;
+        self.next_id += 1;
+        let new_name = self.free_name(&src.name, None);
+        let new_layer = Layer {
+            id: new_id,
+            name: new_name,
+            visible: src.visible,
+            locked: src.locked,
+            colour: src.colour,
+            opacity: src.opacity,
+            behavior: src.behavior.clone_behavior(),
+        };
+        self.list.insert(at + 1, new_layer);
+        let clones: Vec<Item> = items.iter().filter(|i| i.layer == id).cloned().collect();
+        let mut max_id = items.iter().map(|i| i.id).max().unwrap_or(0);
+        for mut c in clones {
+            max_id += 1;
+            c.id = max_id;
+            c.layer = new_id;
+            items.push(c);
+        }
+        self.active = new_id;
+        Some(new_id)
+    }
+
+    pub fn move_up(&mut self, id: u32) -> bool {
+        let Some(at) = self.list.iter().position(|l| l.id == id) else { return false };
+        if at == 0 { return false; }
+        self.list.swap(at, at - 1);
+        true
+    }
+
+    pub fn move_down(&mut self, id: u32) -> bool {
+        let Some(at) = self.list.iter().position(|l| l.id == id) else { return false };
+        if at + 1 >= self.list.len() { return false; }
+        self.list.swap(at, at + 1);
+        true
+    }
+
+    pub fn move_to(&mut self, from: usize, to: usize) {
+        if from >= self.list.len() { return; }
+        let target = to.min(self.list.len());
+        if from == target { return; }
+        let item = self.list.remove(from);
+        let insert_at = if target > from { target - 1 } else { target };
+        self.list.insert(insert_at.min(self.list.len()), item);
+    }
+
+    pub fn merge_down(&mut self, id: u32, items: &mut Vec<Item>) -> bool {
+        let Some(at) = self.list.iter().position(|l| l.id == id) else { return false };
+        if at + 1 >= self.list.len() { return false; }
+        let target_id = self.list[at + 1].id;
+        for i in items.iter_mut() {
+            if i.layer == id {
+                i.layer = target_id;
+            }
+        }
+        self.list.remove(at);
+        if self.active == id {
+            self.active = target_id;
+        }
+        true
+    }
+
+    pub fn flatten(&mut self, items: &mut Vec<Item>) {
+        if self.list.len() <= 1 { return; }
+        let first_id = self.list[0].id;
+        for i in items.iter_mut() {
+            i.layer = first_id;
+        }
+        self.list.truncate(1);
+        self.active = first_id;
     }
 }
 

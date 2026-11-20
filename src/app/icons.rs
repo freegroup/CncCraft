@@ -658,17 +658,6 @@ impl Pen<'_> {
                     Pos2::new(r.left(), r.bottom()),
                 ], self.k.top, self.k.bottom);
             }
-            Icon::Transparency => {
-                // a square with a gradient from opaque to transparent (checkerboard hint)
-                let r = Rect::from_center_size(self.at(0.0, 0.0), Vec2::new(18.0, 14.0));
-                self.p.rect_stroke(r, 2.0, Stroke::new(LINE, self.k.line));
-                // left half: solid fill
-                let left = Rect::from_min_max(r.min, Pos2::new(r.center().x, r.max.y)).shrink(1.0);
-                self.p.rect_filled(left, 0.0, self.k.top);
-                // right half: faded
-                let right = Rect::from_min_max(Pos2::new(r.center().x, r.min.y), r.max).shrink(1.0);
-                self.p.rect_filled(right, 0.0, self.k.top.gamma_multiply(0.3));
-            }
         }
     }
 

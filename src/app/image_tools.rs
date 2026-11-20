@@ -286,49 +286,4 @@ impl App {
         self.calibrate_mode = None;
         self.status = format!("{} {:.1}x", t!("Bild kalibriert, Faktor:"), factor);
     }
-
-    /// A small floating window with an opacity slider for the active image layer.
-    pub(in crate::app) fn transparency_dialog(&mut self, ctx: &egui::Context) {
-        if !self.transparency_open {
-            return;
-        }
-        let lid = self.layers.active;
-        let has_image = self.layers.get(lid)
-            .and_then(|l| l.as_image())
-            .is_some_and(|ib| !ib.image.bytes.is_empty());
-        if !has_image {
-            self.transparency_open = false;
-            return;
-        }
-        let mut close = false;
-        egui::Window::new(t!("Transparenz"))
-            .id(egui::Id::new("transparency_dialog"))
-            .collapsible(false)
-            .resizable(false)
-            .default_width(240.0)
-            .anchor(Align2::LEFT_TOP, Vec2::new(80.0, 120.0))
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(t!("Deckkraft")).strong());
-                    ui.add_space(8.0);
-                    if let Some(img) = self.layers.image_mut(lid) {
-                        let mut pct = (img.opacity * 100.0) as i32;
-                        if ui.add(egui::Slider::new(&mut pct, 0..=100).suffix(" %")).changed() {
-                            img.opacity = pct as f32 / 100.0;
-                        }
-                    }
-                });
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button(t!("Schließen")).clicked() {
-                            close = true;
-                        }
-                    });
-                });
-            });
-        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.transparency_open = false;
-        }
-    }
 }

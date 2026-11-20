@@ -755,5 +755,11 @@
  "Transparenz": "Transparency",
  "Die Deckkraft des Referenzbilds einstellen – von durchsichtig bis deckend.": "Adjust the opacity of the reference image – from transparent to opaque.",
  "Deckkraft": "Opacity",
+ "Ebene nach oben": "Move layer up",
+ "Ebene nach unten": "Move layer down",
+ "Ebene duplizieren": "Duplicate layer",
+ "Auf darunterliegende Ebene reduzieren": "Merge down",
+ "Alle Ebenen zusammenfassen": "Flatten all layers",
+ "Vektor": "Vector",
  "Schließen": "Close"
 }

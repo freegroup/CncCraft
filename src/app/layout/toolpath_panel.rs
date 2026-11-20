@@ -1,7 +1,7 @@
 //! The toolpath panel on the right: the list of toolpaths with their operations on top, the
 //! simulation and export below, and the editor window of one toolpath.
 
-use crate::app::{fmt_time, icon_button_tip, tp_color, App, Editor, Icon, Tip};
+use crate::app::{fmt_time, icon_button_tip, App, Editor, Icon, Tip};
 use crate::sim;
 use crate::theme::{ACCENT, hairline, ink, muted};
 use crate::toolpath::Strategy;
@@ -274,6 +274,7 @@ impl App {
         let related_rows = self.toolpaths_of_selection();
         let selection_changed = self.tp_scrolled_for != self.edit.selection;
         let bg_computing = self.bg_compute.as_ref().map(|bg| bg.computing);
+        let tp_colors: Vec<Color32> = self.toolpaths.iter().map(|tp| self.tp_layer_color(tp)).collect();
         let mut scrolled = false;
         for (i, tp) in self.toolpaths.iter_mut().enumerate() {
             if tool_entries[i] {
@@ -325,7 +326,8 @@ impl App {
                     let minutes = tp.stats().minutes;
                     let tip = t!("%{name}\n%{kind}: Start %{start} mm, Schnitt %{cut} mm\nGesamte Fräszeit: %{minutes} Minuten (%{time})\nDoppelklick: bearbeiten", name = tp.name, kind = tp.strategy.label(), start = format!("{:.1}", tp.start_depth), cut = format!("{:.1}", tp.cut_depth), minutes = format!("{minutes:.2}"), time = fmt_time(minutes));
                     let (sq, sq_resp) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
-                    ui.painter().rect_filled(sq, 2.0, tp_color(&tp.strategy));
+                    let sq_col = tp_colors[i];
+                    ui.painter().rect_filled(sq, 2.0, sq_col);
                     sq_resp.on_hover_text(&tip);
                     // what the toolpath does, as the little slab of the operation's button
                     let (pic, pic_resp) = ui.allocate_exact_size(Vec2::new(22.0, 18.0), Sense::hover());
