@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/freegroup/CncCraft/compare/v1.20.0...v1.21.0) (2026-11-21)
+
+
+### Features
+
+* construction-line guides — model and project persistence ([0312436](https://github.com/freegroup/CncCraft/commit/0312436ed25cd9460d64064824237633964e5737))
+
 # [1.20.0](https://github.com/freegroup/CncCraft/compare/v1.19.0...v1.20.0) (2026-11-21)
 
 
