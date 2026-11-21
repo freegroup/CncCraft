@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "cnccraft"
-version = "1.18.1"
+version = "1.19.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",

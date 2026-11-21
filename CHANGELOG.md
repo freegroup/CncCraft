@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/freegroup/CncCraft/compare/v1.18.1...v1.19.0) (2026-11-21)
+
+
+### Features
+
+* material library with limits, 3D looks and a manager ([5d20190](https://github.com/freegroup/CncCraft/commit/5d2019015d5fe0e3f16121b8ce7b82400a6d6e43))
+
 ## [1.18.1](https://github.com/freegroup/CncCraft/compare/v1.18.0...v1.18.1) (2026-11-20)
 
 
