@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/freegroup/CncCraft/compare/v1.19.0...v1.20.0) (2026-11-21)
+
+
+### Features
+
+* open-recent menu and operation icon in the editor header ([334c7d0](https://github.com/freegroup/CncCraft/commit/334c7d0414c5bbeceae4d5ab6a754825eb594fbe))
+
 # [1.19.0](https://github.com/freegroup/CncCraft/compare/v1.18.1...v1.19.0) (2026-11-21)
 
 
