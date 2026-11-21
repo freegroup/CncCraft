@@ -63,6 +63,27 @@ pub(in crate::app) fn header(ui: &mut egui::Ui, title: &str) -> bool {
     close
 }
 
+/// Like [`header`], but with the toolpath's own operation icon at the left instead of the app icon,
+/// so the editor shows which kind of toolpath it edits (Profil, Tasche, Nut …).
+pub(in crate::app) fn header_with_strategy(ui: &mut egui::Ui, title: &str, strategy: &crate::toolpath::Strategy) -> bool {
+    let mut close = false;
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(ICON), egui::Sense::hover());
+        crate::app::icons::operation_icon(ui.painter(), rect.center(), strategy, ICON);
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(title).size(15.0).strong().color(ink()));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if close_button(ui).on_hover_text(t!("Schließen")).clicked() {
+                close = true;
+            }
+        });
+    });
+    ui.add_space(4.0);
+    ui.separator();
+    ui.add_space(4.0);
+    close
+}
+
 /// The close button of the header: a drawn cross (the font has no "✕"), darker under the pointer.
 pub(in crate::app) fn close_button(ui: &mut egui::Ui) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON), egui::Sense::click());

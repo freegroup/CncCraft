@@ -924,7 +924,7 @@ pub(super) fn paint_layers_symbol(p: &Painter, c: Pos2, k: Colours) {
 
 /// The small picture of what a toolpath does, for a row of the toolpath list: the same slab as the
 /// operation buttons, smaller (`size` is its width in points).
-pub(super) fn operation_icon(p: &Painter, c: Pos2, strategy: &crate::toolpath::Strategy, size: f32) {
+pub(in crate::app) fn operation_icon(p: &Painter, c: Pos2, strategy: &crate::toolpath::Strategy, size: f32) {
     use crate::toolpath::Strategy;
     let icon = match strategy {
         Strategy::Profile { tabs: true, .. } => Icon::Cutout,

@@ -5,7 +5,7 @@ use crate::app::*;
 impl App {
     /// The question "Save the changes?" when closing or replacing a document with changes.
     pub(in crate::app) fn unsaved_ui(&mut self, ctx: &egui::Context) {
-        let Some(what) = self.unsaved else { return };
+        let Some(what) = self.unsaved.clone() else { return };
         let mut answer: Option<u8> = None;
         dialogs::window("Änderungen speichern?", ctx)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
@@ -25,6 +25,7 @@ impl App {
                     Pending::Close => t!("Wenn Sie nicht speichern, gehen die Änderungen verloren."),
                     Pending::NewJob => t!("Ein neuer Job ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
                     Pending::Open => t!("Die andere Datei ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
+                    Pending::OpenRecent(_) => t!("Die andere Datei ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
                     Pending::Example => t!("Das Beispiel ersetzt die Zeichnung; ohne Speichern gehen die Änderungen verloren."),
                 };
                 ui.label(egui::RichText::new(ask).strong().color(ink()));

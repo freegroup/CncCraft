@@ -29,7 +29,12 @@ impl App {
             .show(ctx, |ui| {
                 // the width first, so the header's line ends where the contents do
                 ui.set_width(EDITOR_WIDTH);
-                close = dialogs::header(ui, &title);
+                // the header shows the operation's own icon, not the app icon
+                let strategy = self.editor.as_ref().map(|ed| ed.tp.strategy.clone());
+                close = match &strategy {
+                    Some(s) => dialogs::header_with_strategy(ui, &title, s),
+                    None => dialogs::header(ui, &title),
+                };
                 self.editor_ui(ui);
             });
         // the cross does what "Schließen" does: the window goes, nothing is computed

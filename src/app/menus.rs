@@ -28,6 +28,27 @@ impl App {
             self.guarded(Some(ui.ctx()), super::Pending::Example);
             ui.close_menu();
         }
+        // the recently opened projects, like "Open Recent" in Word (newest first)
+        ui.add_enabled_ui(!self.recent_files.is_empty(), |ui| {
+            ui.menu_button(t!("Zuletzt verwendet öffnen"), |ui| {
+                let mut open: Option<std::path::PathBuf> = None;
+                for path in &self.recent_files {
+                    let name = path.file_stem().map_or_else(|| path.display().to_string(), |s| s.to_string_lossy().into_owned());
+                    if ui.button(name).on_hover_text(path.display().to_string()).clicked() {
+                        open = Some(path.clone());
+                    }
+                }
+                ui.separator();
+                if ui.button(t!("Liste leeren")).clicked() {
+                    self.recent_files.clear();
+                    ui.close_menu();
+                }
+                if let Some(path) = open {
+                    self.guarded(Some(ui.ctx()), super::Pending::OpenRecent(path));
+                    ui.close_menu();
+                }
+            });
+        });
         ui.separator();
         self.menu_item(ui, &t!("Speichern"), Action::Save, true);
         self.menu_item(ui, &t!("Speichern unter…"), Action::SaveAs, true);

@@ -233,11 +233,13 @@ pub(crate) enum OutputScope {
 
 /// What waits for the answer to "save the changes first?": closing the program, or something
 /// that replaces the document.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Pending {
     Close,
     NewJob,
     Open,
+    /// Open a recently used project by its path.
+    OpenRecent(PathBuf),
     Example,
 }
 
@@ -809,6 +811,12 @@ impl App {
                 app.editor = Some(Editor::new(tp, None, "cutout"));
                 app.vars_dirty = true;
             }
+            // the toolpath editor of a pocket, to review its operation icon in the header
+            if std::env::var("CNCCRAFT_SHOW_POCKET").is_ok() {
+                let tp = default_toolpath("pocket", &app.lib, &app.job, vec![]);
+                app.editor = Some(Editor::new(tp, Some(0), "pocket"));
+                app.vars_dirty = true;
+            }
             // a line or a circle selected, to review their selection feedback
             if let Ok(what) = std::env::var("CNCCRAFT_SHOW_STYLE") {
                 let id = if what == "circle" { app.add_shape(Circle::new([200.0, 150.0], 20.0)) } else { app.add_shape(shape_edit::Path::new(vec![[170.0, 140.0], [260.0, 165.0]], false)) };
@@ -1000,6 +1008,7 @@ impl App {
     }
 
     fn run_pending(&mut self, ctx: Option<&egui::Context>, what: Pending) {
+        let was_close = what == Pending::Close;
         match what {
             Pending::Close => {
                 self.discard = true;
@@ -1010,9 +1019,10 @@ impl App {
             // a new job starts without a material: the person has to choose one
             Pending::NewJob => self.job_dialog = Some((Job { material: String::new(), ..Job::default() }, true)),
             Pending::Open => self.open_project(),
+            Pending::OpenRecent(path) => self.open_path(path),
             Pending::Example => self.load_example(),
         }
-        if what != Pending::Close {
+        if !was_close {
             // leaving things as they are (a cancelled window) keeps the warning for later
             self.discard = false;
         }
