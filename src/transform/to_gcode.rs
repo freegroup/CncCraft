@@ -84,6 +84,9 @@ pub struct ExportMeta {
     /// The tool number of each toolpath, when the file is part of a bigger job (one file for each
     /// tool); else they are counted in this file.
     pub tool_numbers: Option<Vec<u32>>,
+    /// The job's material: its name goes into the header, and toolpaths that feed faster than it
+    /// takes are warned about. Without it the material's key is written.
+    pub material: Option<crate::materials::Material>,
 }
 
 #[cfg(test)]
@@ -142,7 +145,7 @@ fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta)
     h.push_str(&format!(";   {}\n", t!("WERKSTÜCK")));
     h.push_str(&thin);
     h.push_str(&row(t!("Größe (X × Y × Z)"), format!("{:.1} × {:.1} × {:.1} mm", job.width, job.height, job.thickness)));
-    h.push_str(&row(t!("Material"), crate::tools::material_label(&job.material)));
+    h.push_str(&row(t!("Material"), meta.material.as_ref().map_or_else(|| job.material.clone(), |m| m.shown_name())));
     h.push_str(&row(
         t!("Nullpunkt XY"),
         match job.datum {
@@ -213,8 +216,48 @@ fn header(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, meta: &ExportMeta)
     }
     h.push_str(";\n");
     h.push_str(&format!(";     {}  {}\n", t!("Gesamte Fräszeit:"), minutes_text(total)));
+    if let Some(material) = &meta.material {
+        let warnings = beyond_material(paths, material);
+        if !warnings.is_empty() {
+            h.push_str(";\n");
+            h.push_str(&format!(";   {}\n", t!("ACHTUNG: ZU SCHNELL ODER ZU TIEF FÜR DAS MATERIAL")));
+            h.push_str(&thin);
+            h.push_str(&format!(
+                ";     {}\n",
+                t!("%{material} verträgt höchstens %{max} mm/min und %{pct} % des Fräser-Ø je Durchgang.", material = material.shown_name(), max = format!("{:.0}", material.max_feed), pct = format!("{:.0}", material.depth_ratio * 100.0))
+            ));
+            for w in warnings {
+                h.push_str(&format!(";     {w}\n"));
+            }
+        }
+    }
     h.push_str(&rule);
     h
+}
+
+/// One line for each toolpath that feeds or plunges faster than `material` takes, or cuts deeper
+/// per pass than it takes (only too fast or too deep: slower and shallower are never a problem).
+fn beyond_material(paths: &[&Toolpath], material: &crate::materials::Material) -> Vec<String> {
+    let mut out = vec![];
+    for (n, tp) in paths.iter().enumerate() {
+        let mut what = vec![];
+        if material.feed_exceeded(tp.tool.feed).is_some() {
+            what.push(t!("Vorschub %{v} mm/min", v = format!("{:.0}", tp.tool.feed)));
+        }
+        if material.feed_exceeded(tp.tool.plunge).is_some() {
+            what.push(t!("Eintauchen %{v} mm/min", v = format!("{:.0}", tp.tool.plunge)));
+        }
+        // a drill's depth per stroke is not a cut along the material
+        if tp.tool.kind != crate::tools::ToolKind::Drill {
+            if let Some(max) = material.depth_exceeded(tp.tool.stepdown, tp.tool.diameter) {
+                what.push(t!("Zustellung %{v} mm (höchstens %{max} mm)", v = format!("{:.1}", tp.tool.stepdown), max = format!("{:.1}", max)));
+            }
+        }
+        if !what.is_empty() {
+            out.push(format!("{} {} „{}“: {}", t!("Nr."), n + 1, tp.name, what.join(", ")));
+        }
+    }
+    out
 }
 
 /// The tool number of each toolpath: given by the caller, else every different tool numbered in
@@ -447,7 +490,7 @@ mod tests {
         let tp = simple_toolpath();
         let mut pp = builtins()[0].clone();
         pp.before_path = "( Vor dem Weg )\nM8 (Kühlung)".into();
-        let meta = ExportMeta { scope: Some("Sichtbare Werkzeugwege (1)".into()), file: Some((1, 2)), tool_numbers: None };
+        let meta = ExportMeta { scope: Some("Sichtbare Werkzeugwege (1)".into()), file: Some((1, 2)), tool_numbers: None, material: None };
         let code = write_with_meta(&j, &[&tp], &pp, &meta);
         println!("{code}");
         assert!(code.lines().all(|l| !l.contains('(') || l.trim_start().starts_with(';') || l.contains(" ; ")), "a parenthesis comment is left:\n{code}");
@@ -495,4 +538,22 @@ mod tests {
         assert!(code.contains("G0 Z5.000\n"), "must lower to safe_z first");
         assert!(code.contains("G0 X50.000 Y30.000\n"), "then travel XY at safe_z");
     }
+    #[test]
+    fn header_warns_when_feeding_faster_or_cutting_deeper_than_the_material_takes() {
+        let lib = crate::materials::MaterialLibrary::load();
+        let alu = lib.get("Aluminium").unwrap().clone();
+        let tp = simple_toolpath();
+        let meta = ExportMeta { material: Some(alu.clone()), ..Default::default() };
+        let text = write_with_meta(&job(), &[&tp], &builtins()[0], &meta);
+        assert!(text.contains(&alu.shown_name()));
+        assert!(text.contains("ZU SCHNELL") && text.contains("Vorschub 1000 mm/min"), "{text}");
+        assert!(text.contains("Zustellung 2.0 mm (höchstens 1.5 mm)"), "2 mm with a 6 mm cutter is too deep for aluminium: {text}");
+        assert!(!text.contains("Eintauchen 300"), "a plunge within the limit is not named");
+        let mut slow = simple_toolpath();
+        slow.tool.feed = 500.0;
+        slow.tool.stepdown = 1.0;
+        let text = write_with_meta(&job(), &[&slow], &builtins()[0], &meta);
+        assert!(!text.contains("ACHTUNG"), "slower and shallower than allowed is never warned about");
+    }
+
 }

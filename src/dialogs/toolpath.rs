@@ -49,6 +49,8 @@ impl App {
         let mut open_tool_dlg = false;
         let sel_count = self.edit.selection.len();
         let tools: Vec<Tool> = self.lib.tools_for(&self.job.material).into_iter().cloned().collect();
+        // the job's material: the cutting values are checked against its limits
+        let material = self.materials.get(&self.job.material).cloned();
         let thickness = self.job.thickness;
         // for the depth fields: the variables they may use, and their values
         let names = self.var_names();
@@ -158,7 +160,23 @@ impl App {
                         } else {
                             let tip = Tip::new(t!("Zustellung"), t!("So tief schneidet der Fräser je Durchgang. Die Zieltiefe wird in gleich große Durchgänge geteilt."));
                             ui.label(t!("Zustellung")).tip(&tip);
-                            ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                            ui.vertical(|ui| {
+                                ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                                if let Some(m) = &material {
+                                    if let Some(max) = m.depth_exceeded(tp.tool.stepdown, tp.tool.diameter) {
+                                        limit_note(
+                                            ui,
+                                            t!(
+                                                "Tiefer als für %{material} empfohlen: höchstens %{max} mm je Durchgang (%{pct} % von Ø %{dia} mm).",
+                                                material = m.shown_name(),
+                                                max = format!("{max:.1}"),
+                                                pct = format!("{:.0}", m.depth_ratio * 100.0),
+                                                dia = format!("{}", tp.tool.diameter)
+                                            ),
+                                        );
+                                    }
+                                }
+                            });
                         }
                         ui.end_row();
                         if !matches!(tp.strategy, Strategy::Drill | Strategy::Slot { .. }) {
@@ -171,14 +189,26 @@ impl App {
                             ui.end_row();
                         }
                         ui.label(t!("Drehzahl"));
-                        ui.add(egui::DragValue::new(&mut tp.tool.rpm).speed(100).range(0..=60000).suffix(t!(" U/min")));
+                        ui.vertical(|ui| {
+                            ui.add(egui::DragValue::new(&mut tp.tool.rpm).speed(100).range(0..=60000).suffix(t!(" U/min")));
+                            if let Some((lo, hi)) = material.as_ref().and_then(|m| m.rpm_outside(tp.tool.rpm)) {
+                                let name = material.as_ref().map_or_else(String::new, |m| m.shown_name());
+                                limit_note(ui, t!("Für %{material} werden %{lo} – %{hi} U/min empfohlen.", material = name, lo = lo, hi = hi));
+                            }
+                        });
                         ui.end_row();
-                        ui.label(t!("Vorschub"));
-                        ui.add(egui::DragValue::new(&mut tp.tool.feed).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
-                        ui.end_row();
-                        ui.label(t!("Eintauchen"));
-                        ui.add(egui::DragValue::new(&mut tp.tool.plunge).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
-                        ui.end_row();
+                        for (label, value) in [(t!("Vorschub"), &mut tp.tool.feed), (t!("Eintauchen"), &mut tp.tool.plunge)] {
+                            ui.label(label);
+                            ui.vertical(|ui| {
+                                ui.add(egui::DragValue::new(value).speed(10).range(1.0..=20000.0).suffix(" mm/min"));
+                                if let Some(m) = &material {
+                                    if let Some(max) = m.feed_exceeded(*value) {
+                                        limit_note(ui, t!("Schneller als für %{material} empfohlen: höchstens %{max} mm/min.", material = m.shown_name(), max = format!("{max:.0}")));
+                                    }
+                                }
+                            });
+                            ui.end_row();
+                        }
                     });
                 });
                 gap(ui);
@@ -389,4 +419,11 @@ fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr
       }
     });
     ui.end_row();
+}
+
+/// A value beyond what the job's material takes: a warning under its field, wrapped to the field
+/// column.
+fn limit_note(ui: &mut egui::Ui, text: String) {
+    ui.set_max_width(230.0);
+    ui.add(egui::Label::new(egui::RichText::new(format!("⚠ {text}")).small().color(crate::theme::warning())).wrap());
 }

@@ -1823,7 +1823,7 @@ fn tool_changes(app: &mut App) -> (Vec<Event>, Check) {
     let asked_for_one = app.export_choice(&indices[..1]);
     let per_tool = {
         let paths: Vec<&crate::toolpath::Toolpath> = indices.iter().map(|&i| &app.toolpaths[i]).collect();
-        crate::toolgroups::files(&app.job, &paths, app.pp(), "schild", None)
+        crate::toolgroups::files(&app.job, &paths, app.pp(), "schild", &crate::transform::to_gcode::ExportMeta::default())
     };
     let check: Check = Box::new(move |_| {
         let names: Vec<&str> = per_tool.iter().map(|f| f.0.as_str()).collect();

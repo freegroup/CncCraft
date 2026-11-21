@@ -40,6 +40,9 @@ impl App {
         for &i in indices {
             let tp = &self.toolpaths[i];
             (&tp.name, &tp.tool.name, tp.tool.rpm, tp.tool.feed.to_bits(), tp.tool.plunge.to_bits(), tp.strategy.label()).hash(&mut h);
+            // the toolpath's colour follows its layer, so a layer recolour redraws the overlay
+            let c = self.tp_layer_color(tp);
+            (c.r(), c.g(), c.b()).hash(&mut h);
             for m in &tp.moves {
                 m.rapid.hash(&mut h);
                 for c in m.to {

@@ -104,6 +104,11 @@ impl App {
         if part.is_empty() { "werkzeugwege".into() } else { part }
     }
 
+    /// What every exported file's header says besides the job: which toolpaths and the material.
+    fn export_meta(&self, count: usize) -> crate::transform::to_gcode::ExportMeta {
+        crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(count)), material: self.materials.get(&self.job.material).cloned(), ..Default::default() }
+    }
+
     fn write_export(&mut self, indices: &[usize], per_tool: bool) {
         if self.selftest.is_some() {
             return;
@@ -118,8 +123,8 @@ impl App {
                 return;
             };
             let stem = file.file_stem().map(|s| crate::toolgroups::file_part(&s.to_string_lossy())).filter(|s| !s.is_empty()).unwrap_or_else(|| "werkzeugwege".into());
-            let scope = self.export_scope_text(indices.len());
-            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.pp(), &stem, Some(&scope)).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
+            let base = self.export_meta(indices.len());
+            let files: Vec<(String, Vec<u8>)> = crate::toolgroups::files(&self.job, &paths, self.pp(), &stem, &base).into_iter().map(|(n, t)| (n, t.into_bytes())).collect();
             let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
             match std::fs::write(&file, crate::zipfile::stored(&files, seconds)) {
                 Ok(()) => {}
@@ -135,7 +140,7 @@ impl App {
         else {
             return;
         };
-        let meta = crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(indices.len())), file: None, tool_numbers: None };
+        let meta = self.export_meta(indices.len());
         let text = crate::transform::to_gcode::write_with_meta(&self.job, &paths, &pp, &meta);
         match std::fs::write(&file, text) {
             Ok(()) => {}

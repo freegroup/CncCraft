@@ -1,6 +1,7 @@
 //! Tool library: the metric cutters and cutting data shipped with the original
 //! (ProgramData/ToolDatabase/tools.vtdb.vectric), see MECHANICS.md.  Every tool is editable.
 
+use crate::materials::Material;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -81,8 +82,6 @@ pub struct ToolEntry {
     pub tool: Tool,
 }
 
-pub const MATERIALS: [&str; 4] = ["Softwood", "Hardwood", "MDF", "Acrylic"];
-
 /// A tool's name as shown: the standard names start with the cutter's kind ("Schaftfräser (6 mm)"),
 /// and that kind is translated; a name the person typed stays as it is.
 pub fn shown_name(name: &str) -> String {
@@ -95,16 +94,6 @@ pub fn shown_name(name: &str) -> String {
         }
     }
     name.to_string()
-}
-
-pub fn material_label(m: &str) -> String {
-    match m {
-        "Softwood" => t!("Weichholz"),
-        "Hardwood" => t!("Hartholz"),
-        "MDF" => "MDF".to_string(),
-        "Acrylic" => t!("Acryl"),
-        _ => t!("Material"),
-    }
 }
 
 pub struct ToolLibrary {
@@ -150,6 +139,25 @@ impl ToolLibrary {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string(&self.entries).unwrap_or_default()
+    }
+
+    /// Give `material` the tools of the material `from`, held within its limits (pass depth, feed,
+    /// spindle speed); a material that has tools already keeps them.
+    pub fn add_material(&mut self, from: &str, material: &Material) {
+        if self.entries.iter().any(|e| e.material == material.key) {
+            return;
+        }
+        let copies: Vec<ToolEntry> = self
+            .entries
+            .iter()
+            .filter(|e| e.material == from)
+            .map(|e| ToolEntry { material: material.key.clone(), tool: within_limits(&e.tool, material) })
+            .collect();
+        self.entries.extend(copies);
+    }
+
+    pub fn remove_material(&mut self, key: &str) {
+        self.entries.retain(|e| e.material != key);
     }
 
     pub fn tools_for(&self, material: &str) -> Vec<&Tool> {
@@ -203,5 +211,63 @@ impl ToolLibrary {
             stepdown: dia / 3.0,
             stepover: dia * 0.4,
         }
+    }
+}
+
+/// `tool` with its cutting values brought within what `material` allows.
+fn within_limits(tool: &Tool, material: &Material) -> Tool {
+    let mut t = tool.clone();
+    if t.kind != ToolKind::Drill {
+        t.stepdown = t.stepdown.min(material.max_depth(t.diameter));
+    }
+    if material.max_feed > 0.0 {
+        t.feed = t.feed.min(material.max_feed);
+        t.plunge = t.plunge.min(t.feed);
+    }
+    t.rpm = t.rpm.clamp(material.rpm_min, material.rpm_max.max(material.rpm_min));
+    t
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::materials::MaterialLibrary;
+
+    #[test]
+    fn the_originals_own_tools_never_trip_their_materials_warnings() {
+        let materials = MaterialLibrary::load();
+        let lib = ToolLibrary::load();
+        for key in ["Softwood", "Hardwood", "MDF", "Acrylic"] {
+            let m = materials.get(key).unwrap();
+            let tools = lib.tools_for(key);
+            assert!(!tools.is_empty(), "{key} has tools");
+            for t in tools {
+                assert!(m.feed_exceeded(t.feed).is_none() && m.feed_exceeded(t.plunge).is_none(), "{key}: {} too fast", t.name);
+                assert!(m.rpm_outside(t.rpm).is_none(), "{key}: {} at {} rpm", t.name, t.rpm);
+                if t.kind != ToolKind::Drill {
+                    assert!(m.depth_exceeded(t.stepdown, t.diameter).is_none(), "{key}: {} too deep", t.name);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_new_material_gets_tools_within_its_limits() {
+        let materials = MaterialLibrary::load();
+        let alu = materials.get("Aluminium").unwrap();
+        let mut lib = ToolLibrary::load();
+        lib.add_material("Hardwood", alu);
+        let tools = lib.tools_for("Aluminium");
+        assert_eq!(tools.len(), lib.tools_for("Hardwood").len());
+        for t in tools {
+            assert!(t.feed <= alu.max_feed && t.plunge <= t.feed);
+            assert!((alu.rpm_min..=alu.rpm_max).contains(&t.rpm));
+            if t.kind != ToolKind::Drill {
+                assert!(alu.depth_exceeded(t.stepdown, t.diameter).is_none(), "{} cuts too deep", t.name);
+            }
+        }
+        let before = lib.entries.len();
+        lib.add_material("Softwood", alu);
+        assert_eq!(lib.entries.len(), before, "a material with tools keeps them");
     }
 }

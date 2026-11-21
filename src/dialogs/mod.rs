@@ -13,6 +13,7 @@ mod export_toolpaths;
 mod import_missing;
 mod job;
 mod layer;
+mod materials;
 mod new_variable;
 mod postprocessor;
 pub(in crate::app) mod shortcuts;

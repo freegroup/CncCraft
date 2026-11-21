@@ -267,6 +267,12 @@ impl Projection {
     }
 
     /// A light from the upper left, fixed relative to the viewer, in job coordinates.
+    /// The direction towards the viewer, in job space (for highlights on shiny materials).
+    pub fn eye_dir(&self) -> [f32; 3] {
+        // the opposite of the view's depth row (sy·sp, cy·sp, −cp)
+        [-self.sy * self.sp, -self.cy * self.sp, self.cp]
+    }
+
     pub fn light(&self) -> [f32; 3] {
         let l = [-0.45f32, 0.65, -0.62]; // right, up, depth (towards the viewer is negative)
         let n = (l[0] * l[0] + l[1] * l[1] + l[2] * l[2]).sqrt();

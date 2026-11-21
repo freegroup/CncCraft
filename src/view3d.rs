@@ -1,23 +1,27 @@
 //! The 3D preview, drawn on the graphics card (OpenGL through eframe) with a depth buffer:
 //! the carved height map at full resolution with smooth shading, side walls that follow the
-//! carved edges, the bottom face, and cut-through areas shown as cut out.
+//! carved edges, the bottom face, and cut-through areas shown as cut out. The board wears the
+//! job material's look (see `materials::Look`): one picture from above, one for the long sides and
+//! one for the ends, laid onto each face by the way it faces, so carved walls show the grain or
+//! layers the material has inside.
 
 use crate::sim::{HeightMap, Projection};
 use eframe::egui_glow::{self, ShaderVersion};
 use eframe::glow::{self, HasContext};
 use std::sync::{Arc, Mutex};
 
-/// Uncut top of the board.
-const WOOD: [f32; 3] = [0.86, 0.71, 0.50];
-/// Freshly cut surfaces are a little darker.
-const CUT: [f32; 3] = [0.78, 0.61, 0.40];
-/// End grain on the sides.
-const SIDE: [f32; 3] = [0.74, 0.58, 0.38];
-/// Where the cutter went right through.
+/// The material's own colour, untouched.
+const UNCUT: [f32; 3] = [1.0, 1.0, 1.0];
+/// Freshly cut floors are a little darker than the board's top.
+const CUT: [f32; 3] = [0.9, 0.9, 0.9];
+/// Where the cutter went right through: the spoil board below, not the material.
 const THROUGH: [f32; 3] = [0.80, 0.82, 0.85];
 
-/// Floats per vertex: position (3), normal (3), colour (3).
-const STRIDE: usize = 9;
+/// Floats per vertex: position (3), normal (3), colour (3), whether the material's look is laid on
+/// (1; the colour then tints it) or the colour is all (0).
+const STRIDE: usize = 10;
+/// The pictures of a look are baked this many pixels square.
+const LOOK_SIZE: usize = 512;
 
 /// Triangles ready for the GPU, built on the CPU from a height map.
 #[derive(Default)]
@@ -29,9 +33,19 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    /// A point in a plain colour (the cutter, the spoil board).
     pub fn vertex(&mut self, p: [f32; 3], n: [f32; 3], c: [f32; 3]) -> u32 {
+        self.push(p, n, c, 0.0)
+    }
+
+    /// A point of the material: its look, tinted by `tint`.
+    fn surface(&mut self, p: [f32; 3], n: [f32; 3], tint: [f32; 3]) -> u32 {
+        self.push(p, n, tint, 1.0)
+    }
+
+    fn push(&mut self, p: [f32; 3], n: [f32; 3], c: [f32; 3], textured: f32) -> u32 {
         let i = (self.vertices.len() / STRIDE) as u32;
-        self.vertices.extend_from_slice(&[p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2]]);
+        self.vertices.extend_from_slice(&[p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], textured]);
         i
     }
 
@@ -55,14 +69,12 @@ impl Mesh {
                 let dzdx = (hm.at(i + 1, j) - hm.at(i.saturating_sub(1), j)) / (cell * if i == 0 || i == nx - 1 { 1.0 } else { 2.0 });
                 let dzdy = (hm.at(i, j + 1) - hm.at(i, j.saturating_sub(1))) / (cell * if j == 0 || j == ny - 1 { 1.0 } else { 2.0 });
                 let n = normalize([-dzdx, -dzdy, 1.0]);
-                let colour = if z <= through {
-                    THROUGH
-                } else if z < -0.01 {
-                    CUT
+                let p = proj.centered([x_of(i), y_of(j), z]);
+                if z <= through {
+                    m.vertex(p, n, THROUGH);
                 } else {
-                    WOOD
-                };
-                m.vertex(proj.centered([x_of(i), y_of(j), z]), n, colour);
+                    m.surface(p, n, if z < -0.01 { CUT } else { UNCUT });
+                }
             }
         }
         for j in 0..ny - 1 {
@@ -95,8 +107,8 @@ impl Mesh {
                 let (i, j) = at(k);
                 let top = hm.at(i, j);
                 let (x, y) = (x_of(i), y_of(j));
-                let t = m.vertex(proj.centered([x, y, top]), n, SIDE);
-                let b = m.vertex(proj.centered([x, y, bottom]), n, SIDE);
+                let t = m.surface(proj.centered([x, y, top]), n, UNCUT);
+                let b = m.surface(proj.centered([x, y, bottom]), n, UNCUT);
                 if let Some((pt, pb)) = prev {
                     m.quad(pt, t, b, pb);
                 }
@@ -105,7 +117,7 @@ impl Mesh {
         }
         let (w, h) = (x_of(nx - 1), y_of(ny - 1));
         let down = [0.0, 0.0, -1.0];
-        let c = [m.vertex(proj.centered([0.0, 0.0, bottom]), down, SIDE), m.vertex(proj.centered([w, 0.0, bottom]), down, SIDE), m.vertex(proj.centered([w, h, bottom]), down, SIDE), m.vertex(proj.centered([0.0, h, bottom]), down, SIDE)];
+        let c = [m.surface(proj.centered([0.0, 0.0, bottom]), down, UNCUT), m.surface(proj.centered([w, 0.0, bottom]), down, UNCUT), m.surface(proj.centered([w, h, bottom]), down, UNCUT), m.surface(proj.centered([0.0, h, bottom]), down, UNCUT)];
         m.quad(c[0], c[3], c[2], c[1]);
         m
     }
@@ -114,6 +126,25 @@ impl Mesh {
 fn normalize(v: [f32; 3]) -> [f32; 3] {
     let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-9);
     [v[0] / l, v[1] / l, v[2] / l]
+}
+
+/// The job material's look, baked into pixels for the graphics card.
+struct Surface {
+    /// The material key the look belongs to (none before the first one is set).
+    key: Option<String>,
+    /// Counts up with every new look, so the card's copy is replaced.
+    version: u64,
+    size: usize,
+    /// RGBA pixels: from above, long sides, ends.
+    pictures: [Vec<u8>; 3],
+    shine: f32,
+    tile: f32,
+}
+
+impl Default for Surface {
+    fn default() -> Self {
+        Surface { key: None, version: 0, size: 1, pictures: [vec![255; 4], vec![255; 4], vec![255; 4]], shine: 0.0, tile: 100.0 }
+    }
 }
 
 /// GPU objects, made on first use inside the paint callback.
@@ -128,6 +159,9 @@ struct Gpu {
     tool_ebo: glow::Buffer,
     tool_count: i32,
     tool_version: Option<u64>,
+    /// The three pictures of the look, and which version of it they hold.
+    textures: [glow::Texture; 3],
+    surface_version: Option<u64>,
 }
 
 /// Shared between the app (which builds the mesh) and the paint callback (which draws it).
@@ -135,6 +169,7 @@ struct Gpu {
 pub struct Renderer {
     mesh: Arc<Mutex<Mesh>>,
     tool_mesh: Arc<Mutex<Mesh>>,
+    surface: Arc<Mutex<Surface>>,
     gpu: Arc<Mutex<Option<Gpu>>>,
 }
 
@@ -143,24 +178,59 @@ uniform mat4 u_mvp;
 IN vec3 a_pos;
 IN vec3 a_normal;
 IN vec3 a_color;
+IN float a_textured;
+OUT vec3 v_pos;
 OUT vec3 v_normal;
 OUT vec3 v_color;
+OUT float v_textured;
 void main() {
+    v_pos = a_pos;
     v_normal = a_normal;
     v_color = a_color;
+    v_textured = a_textured;
     gl_Position = u_mvp * vec4(a_pos, 1.0);
 }
 "#;
 
+// the look's picture is chosen by the way the face looks: up or down the top picture, along X the
+// long-side picture, along Y the end picture; v runs down into the material
 const FRAGMENT: &str = r#"
 uniform vec3 u_light;
+uniform vec3 u_eye;
+uniform sampler2D u_top;
+uniform sampler2D u_edge;
+uniform sampler2D u_end;
+uniform float u_tile;
+uniform float u_shine;
+IN vec3 v_pos;
 IN vec3 v_normal;
 IN vec3 v_color;
+IN float v_textured;
 void main() {
     vec3 n = normalize(v_normal);
-    float diffuse = max(dot(n, u_light), 0.0);
-    float sky = 0.5 + 0.5 * n.z;
-    vec3 c = v_color * (0.30 + 0.62 * diffuse + 0.12 * sky);
+    vec3 base = v_color;
+    float textured = step(0.5, v_textured);
+    if (textured > 0.5) {
+        vec3 a = abs(n);
+        vec3 t;
+        if (a.z >= a.x && a.z >= a.y) {
+            t = TEX(u_top, v_pos.xy / u_tile).rgb;
+        } else if (a.y >= a.x) {
+            t = TEX(u_edge, vec2(v_pos.x, -v_pos.z) / u_tile).rgb;
+        } else {
+            t = TEX(u_end, vec2(v_pos.y, -v_pos.z) / u_tile).rgb;
+        }
+        // the original's relief shader takes the picture a little towards grey (0x1009b6454)
+        base = (0.85 * t + 0.15 * 0.5) * v_color;
+    }
+    // the original's lighting (0x1009b6454): ambient 0.35, diffuse 0.65, a broad highlight of
+    // strength 0.5 with shininess 2.5; its light's intensity isn't known, 0.8 is estimated
+    float diffuse = 0.65 * max(dot(n, u_light), 0.0);
+    float broad = 0.5 * pow(max(dot(u_eye, reflect(-u_light, n)), 0.0), 2.5);
+    vec3 c = base * (0.35 + diffuse + broad) * 0.8;
+    // CncCraft's own: polished materials get a tight white highlight on top
+    vec3 h = normalize(u_light + u_eye);
+    c += vec3(pow(max(dot(n, h), 0.0), mix(6.0, 48.0, u_shine)) * u_shine * 0.45 * textured);
     FRAG_COLOR = vec4(min(c, vec3(1.0)), 1.0);
 }
 "#;
@@ -170,9 +240,9 @@ fn shader_source(version: ShaderVersion, body: &str, vertex: bool) -> String {
     let mut s = String::from(version.version_declaration());
     s.push_str("\n#ifdef GL_ES\nprecision highp float;\n#endif\n");
     if new {
-        s.push_str(if vertex { "#define IN in\n#define OUT out\n" } else { "#define IN in\nout vec4 frag_color;\n#define FRAG_COLOR frag_color\n" });
+        s.push_str(if vertex { "#define IN in\n#define OUT out\n" } else { "#define IN in\nout vec4 frag_color;\n#define FRAG_COLOR frag_color\n#define TEX texture\n" });
     } else {
-        s.push_str(if vertex { "#define IN attribute\n#define OUT varying\n" } else { "#define IN varying\n#define FRAG_COLOR gl_FragColor\n" });
+        s.push_str(if vertex { "#define IN attribute\n#define OUT varying\n" } else { "#define IN varying\n#define FRAG_COLOR gl_FragColor\n#define TEX texture2D\n" });
     }
     s.push_str(body);
     s
@@ -206,20 +276,56 @@ unsafe fn compile(gl: &glow::Context) -> Result<Gpu, String> {
     gl.bind_vertex_array(Some(vao));
     gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
     gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(ebo));
-    let stride = (STRIDE * 4) as i32;
-    for (name, offset) in [("a_pos", 0), ("a_normal", 12), ("a_color", 24)] {
+    for (name, size, offset) in ATTRIBUTES {
         if let Some(loc) = gl.get_attrib_location(program, name) {
             gl.enable_vertex_attrib_array(loc);
-            gl.vertex_attrib_pointer_f32(loc, 3, glow::FLOAT, false, stride, offset);
+            gl.vertex_attrib_pointer_f32(loc, size, glow::FLOAT, false, (STRIDE * 4) as i32, offset);
         }
     }
     gl.bind_vertex_array(None);
     let tool_vbo = gl.create_buffer()?;
     let tool_ebo = gl.create_buffer()?;
-    Ok(Gpu { program, vao, vbo, ebo, count: 0, version: None, tool_vbo, tool_ebo, tool_count: 0, tool_version: None })
+    let textures = [gl.create_texture()?, gl.create_texture()?, gl.create_texture()?];
+    Ok(Gpu { program, vao, vbo, ebo, count: 0, version: None, tool_vbo, tool_ebo, tool_count: 0, tool_version: None, textures, surface_version: None })
+}
+
+/// The vertex attributes: name, floats, byte offset.
+const ATTRIBUTES: [(&str, i32, i32); 4] = [("a_pos", 3, 0), ("a_normal", 3, 12), ("a_color", 3, 24), ("a_textured", 1, 36)];
+
+unsafe fn point_attributes(gl: &glow::Context, program: glow::Program) {
+    for (name, size, offset) in ATTRIBUTES {
+        if let Some(loc) = gl.get_attrib_location(program, name) {
+            gl.vertex_attrib_pointer_f32(loc, size, glow::FLOAT, false, (STRIDE * 4) as i32, offset);
+        }
+    }
+}
+
+/// Give the card the look's three pictures (repeating, smoothed when seen from afar).
+unsafe fn upload_surface(gl: &glow::Context, textures: &[glow::Texture; 3], s: &Surface) {
+    for (tex, pixels) in textures.iter().zip(&s.pictures) {
+        gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
+        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, s.size as i32, s.size as i32, 0, glow::RGBA, glow::UNSIGNED_BYTE, Some(pixels));
+        gl.generate_mipmap(glow::TEXTURE_2D);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR_MIPMAP_LINEAR as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+    }
+    gl.bind_texture(glow::TEXTURE_2D, None);
 }
 
 impl Renderer {
+    /// Dress the board in the look `key`; the look is asked for and baked only when it changes.
+    pub fn set_look(&self, key: &str, look: impl FnOnce() -> crate::materials::Look) {
+        let mut s = self.surface.lock().unwrap();
+        if s.key.as_deref() == Some(key) {
+            return;
+        }
+        let look = look();
+        let pictures = [look.top, look.edge, look.end].map(|p| crate::materials::bake(p, LOOK_SIZE));
+        *s = Surface { key: Some(key.to_string()), version: s.version + 1, size: LOOK_SIZE, pictures, shine: look.shine, tile: look.tile };
+    }
+
     /// Rebuild the mesh if the height map changed since the last time.
     pub fn update(&self, hm: &HeightMap, proj: &Projection, layout_key: u64) {
         let key = hm.version ^ layout_key.rotate_left(17);
@@ -245,8 +351,8 @@ impl Renderer {
 
     /// A paint callback that draws the board and (optionally) the tool into `rect`.
     pub fn callback(&self, rect: egui::Rect, proj: &Projection) -> egui::PaintCallback {
-        let (mesh, tool_mesh, gpu) = (self.mesh.clone(), self.tool_mesh.clone(), self.gpu.clone());
-        let (mvp, light) = (proj.matrix(), proj.light());
+        let (mesh, tool_mesh, surface, gpu) = (self.mesh.clone(), self.tool_mesh.clone(), self.surface.clone(), self.gpu.clone());
+        let (mvp, light, eye) = (proj.matrix(), proj.light(), proj.eye_dir());
         let cb = egui_glow::CallbackFn::new(move |_info, painter| {
             let gl = painter.gl();
             let mut slot = gpu.lock().unwrap();
@@ -271,9 +377,24 @@ impl Renderer {
                     g.count = mesh.indices.len() as i32;
                     g.version = Some(mesh.version);
                 }
+                let s = surface.lock().unwrap();
+                if g.surface_version != Some(s.version) {
+                    upload_surface(gl, &g.textures, &s);
+                    g.surface_version = Some(s.version);
+                }
                 gl.use_program(Some(g.program));
-                gl.uniform_matrix_4_f32_slice(gl.get_uniform_location(g.program, "u_mvp").as_ref(), false, &mvp);
-                gl.uniform_3_f32(gl.get_uniform_location(g.program, "u_light").as_ref(), light[0], light[1], light[2]);
+                let uniform = |name: &str| gl.get_uniform_location(g.program, name);
+                gl.uniform_matrix_4_f32_slice(uniform("u_mvp").as_ref(), false, &mvp);
+                gl.uniform_3_f32(uniform("u_light").as_ref(), light[0], light[1], light[2]);
+                gl.uniform_3_f32(uniform("u_eye").as_ref(), eye[0], eye[1], eye[2]);
+                gl.uniform_1_f32(uniform("u_tile").as_ref(), s.tile);
+                gl.uniform_1_f32(uniform("u_shine").as_ref(), s.shine);
+                for (unit, (tex, name)) in g.textures.iter().zip(["u_top", "u_edge", "u_end"]).enumerate() {
+                    gl.active_texture(glow::TEXTURE0 + unit as u32);
+                    gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
+                    gl.uniform_1_i32(uniform(name).as_ref(), unit as i32);
+                }
+                drop(s);
                 // our own depth test, cleared inside this view only (egui keeps the scissor set)
                 gl.enable(glow::DEPTH_TEST);
                 gl.depth_func(glow::LEQUAL);
@@ -298,21 +419,17 @@ impl Renderer {
                         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(g.tool_ebo));
                     }
                     // re-bind vertex attributes to the tool buffers
-                    let stride = (STRIDE * 4) as i32;
-                    for (name, offset) in [("a_pos", 0), ("a_normal", 12), ("a_color", 24)] {
-                        if let Some(loc) = gl.get_attrib_location(g.program, name) {
-                            gl.vertex_attrib_pointer_f32(loc, 3, glow::FLOAT, false, stride, offset);
-                        }
-                    }
+                    point_attributes(gl, g.program);
                     gl.draw_elements(glow::TRIANGLES, g.tool_count, glow::UNSIGNED_INT, 0);
                     // restore board buffers for next frame
                     gl.bind_buffer(glow::ARRAY_BUFFER, Some(g.vbo));
                     gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(g.ebo));
-                    for (name, offset) in [("a_pos", 0), ("a_normal", 12), ("a_color", 24)] {
-                        if let Some(loc) = gl.get_attrib_location(g.program, name) {
-                            gl.vertex_attrib_pointer_f32(loc, 3, glow::FLOAT, false, stride, offset);
-                        }
-                    }
+                    point_attributes(gl, g.program);
+                }
+                // leave the texture units as egui expects them
+                for unit in (0..3).rev() {
+                    gl.active_texture(glow::TEXTURE0 + unit);
+                    gl.bind_texture(glow::TEXTURE_2D, None);
                 }
                 gl.disable(glow::DEPTH_TEST);
                 gl.enable(glow::BLEND);

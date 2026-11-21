@@ -25,6 +25,7 @@ mod appicon;
 mod commandstack;
 mod gcode;
 mod layers;
+mod materials;
 mod export;
 mod geom;
 mod import;

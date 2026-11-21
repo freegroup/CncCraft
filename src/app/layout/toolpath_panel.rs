@@ -98,6 +98,8 @@ impl App {
                 ui.label(egui::RichText::new(t!("Platten-Setup")).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(format!("{:.0} × {:.0} × {:.1} mm", self.job.width, self.job.height, self.job.thickness)).color(muted()));
+                    ui.label(egui::RichText::new(self.materials.label(&self.job.material)).color(muted()));
+                    crate::widgets::material_swatch(ui, self.materials.get(&self.job.material).map_or("", |m| m.look.as_str()), 16.0);
                 });
             });
         });

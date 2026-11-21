@@ -13,6 +13,7 @@ impl App {
         let mut close = false;
 
         let mat = dlg.material.clone();
+        let mat_name = self.materials.label(&mat);
         let mut open = true;
         let screen = ctx.screen_rect();
         super::window("tool_dialog_win", ctx)
@@ -40,7 +41,7 @@ impl App {
                 egui::SidePanel::left("tool_list_panel").exact_width(160.0).resizable(false).frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 4.0, top: 0.0, bottom: 0.0 })).show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(t!("Werkzeuge")).strong());
-                        ui.label(egui::RichText::new(format!("({})", crate::tools::material_label(&mat))).small().color(muted()));
+                        ui.label(egui::RichText::new(format!("({mat_name})")).small().color(muted()));
                     });
                     egui::TopBottomPanel::bottom("tool_list_buttons").frame(egui::Frame::none().inner_margin(egui::Margin { left: 0.0, right: 0.0, top: 4.0, bottom: 0.0 })).show_separator_line(false).show_inside(ui, |ui| {
                         ui.horizontal(|ui| {

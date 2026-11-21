@@ -73,7 +73,8 @@ pub fn file_part(name: &str) -> String {
 
 /// One machine file per stretch of the same tool: `<stem>_<nn>_<tool>.<ext>` with the running number
 /// counted from 01 in the order the stretches are cut, and its G-code.
-pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, scope: Option<&str>) -> Vec<(String, String)> {
+/// `base` holds what every file's header shares (the export scope, the material's name).
+pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, base: &to_gcode::ExportMeta) -> Vec<(String, String)> {
     let tools: Vec<&Tool> = paths.iter().map(|t| &t.tool).collect();
     let all = groups(&tools);
     let numbers = numbers(&tools);
@@ -85,7 +86,7 @@ pub fn files(job: &Job, paths: &[&Toolpath], pp: &PostProcessor, stem: &str, sco
         .map(|(n, group)| {
             let part: Vec<&Toolpath> = group.iter().map(|&i| paths[i]).collect();
             let name = format!("{stem}_{:0width$}_{}.{}", n + 1, file_part(&paths[group[0]].tool.name), pp.ext);
-            let meta = to_gcode::ExportMeta { scope: scope.map(str::to_string), file: Some((n + 1, count)), tool_numbers: Some(group.iter().map(|&i| numbers[i]).collect()) };
+            let meta = to_gcode::ExportMeta { file: Some((n + 1, count)), tool_numbers: Some(group.iter().map(|&i| numbers[i]).collect()), ..base.clone() };
             (name, to_gcode::write_with_meta(job, &part, pp, &meta))
         })
         .collect()
@@ -141,7 +142,7 @@ mod tests {
         let c = path(&lib, "vcarve", None);
         rust_i18n::set_locale("de");
         let pp = &builtins()[0];
-        let list = files(&Job::default(), &[&a, &b, &c], pp, "schild", None);
+        let list = files(&Job::default(), &[&a, &b, &c], pp, "schild", &to_gcode::ExportMeta::default());
         assert_eq!(list.len(), 2);
         assert!(list[0].0.starts_with("schild_01_Schaftfraeser") && list[0].0.ends_with(".nc"), "{}", list[0].0);
         assert!(list[1].0.starts_with("schild_02_V-Fraeser") && list[1].0.ends_with(".nc"), "{}", list[1].0);
@@ -157,7 +158,7 @@ mod tests {
         let a = path(&lib, "profile", Some((ToolKind::EndMill, 3.0)));
         let c = path(&lib, "vcarve", None);
         let pp = &builtins()[1]; // GRBL
-        let list = files(&Job::default(), &[&a, &c], pp, "x", None);
+        let list = files(&Job::default(), &[&a, &c], pp, "x", &to_gcode::ExportMeta::default());
         assert_eq!(list.iter().map(|f| f.0.rsplit('.').next().unwrap()).collect::<Vec<_>>(), vec!["gcode", "gcode"]);
     }
 }

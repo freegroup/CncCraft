@@ -40,7 +40,8 @@ use crate::gcode;
 use crate::geom::{dist, Item, Pt, Region};
 use crate::sheet;
 use crate::sim::{self, Camera, HeightMap};
-use crate::tools::{material_label, Tool, ToolKind, ToolLibrary, MATERIALS};
+use crate::materials::{Material, MaterialLibrary};
+use crate::tools::{Tool, ToolKind, ToolLibrary};
 use crate::toolpath::{default_toolpath, Clearing, Datum, Job, Move, Side, Strategy, Toolpath, ZZero};
 use crate::theme::{ink, muted, canvas, separator, ACCENT, ACCENT_DEEP, CONSTRAINT, INK, MUTED, PRIMARY, SELECT};
 use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Stroke, Vec2};
@@ -269,6 +270,17 @@ struct PpDialog {
     hook_tab: usize,
 }
 
+/// The material manager: a working copy of the whole list, applied when it is saved.
+struct MaterialDialog {
+    list: Vec<Material>,
+    /// The material shown in the editor.
+    index: usize,
+    /// Materials added here, each with the material whose tools it starts from.
+    added: Vec<(String, String)>,
+    /// Materials deleted here (their tools go with them).
+    removed: Vec<String>,
+}
+
 struct ToolDialog {
     editing: Tool,
     /// The tool values when the dialog opened, for change-highlight in the list.
@@ -363,6 +375,7 @@ pub struct App {
     /// Incremented whenever toolpaths are added, removed or reordered; stale batches are dropped.
     tp_gen: u64,
     lib: ToolLibrary,
+    materials: MaterialLibrary,
     tool: DrawTool,
     drawing: Option<Drawing>,
     /// Selection plus move / resize / node gestures.
@@ -387,6 +400,7 @@ pub struct App {
     post_idx: usize,
     pp_dialog: Option<PpDialog>,
     tool_dialog: Option<ToolDialog>,
+    material_dialog: Option<MaterialDialog>,
     undo: crate::commandstack::CommandStack,
     path: Option<PathBuf>,
     recent_files: Vec<PathBuf>,
@@ -593,6 +607,7 @@ impl App {
             bg_compute: None,
             tp_gen: 0,
             lib: cc.storage.and_then(|s| s.get_string("cnccraft_tools")).map_or_else(ToolLibrary::load, |json| ToolLibrary::load_from(&json)),
+            materials: cc.storage.and_then(|s| s.get_string("cnccraft_materials")).map_or_else(MaterialLibrary::load, |json| MaterialLibrary::load_from(&json)),
             tool: DrawTool::Select,
             drawing: None,
             edit: ShapeEditor::default(),
@@ -612,6 +627,7 @@ impl App {
             post_idx: cc.storage.and_then(|s| s.get_string("cnccraft_post_idx")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0),
             pp_dialog: None,
             tool_dialog: None,
+            material_dialog: None,
             undo: crate::commandstack::CommandStack::new(100),
             path: None,
             recent_files: cc.storage
@@ -724,6 +740,11 @@ impl App {
             image_textures: HashMap::new(),
             calibrate_mode: None,
         };
+        // shipped materials the tool library has no tools for start from the hardwood tools, held
+        // within their own limits
+        for m in app.materials.list.iter().filter(|m| m.builtin) {
+            app.lib.add_material("Hardwood", m);
+        }
         app.post_idx = app.post_idx.min(app.postprocs.len().saturating_sub(1));
         if cc.storage.and_then(|s| s.get_string("cnccraft_cam_perspective")).is_some_and(|v| v == "true") {
             app.cam.perspective = true;
@@ -735,8 +756,17 @@ impl App {
                 app.start_page = true;
             }
             // for the review screenshot: show the job dialog if asked, so its look is visible
+            // the example cut from another material (its key), to review its look
+            if let Ok(key) = std::env::var("CNCCRAFT_MATERIAL") {
+                app.job.material = key;
+            }
             if std::env::var("CNCCRAFT_SHOW_DIALOG").is_ok() {
                 app.job_dialog = Some((app.job.clone(), true));
+            }
+            // the material manager on the job's material
+            if std::env::var("CNCCRAFT_SHOW_MATERIALS").is_ok() {
+                let key = app.job.material.clone();
+                app.open_material_dialog(&key);
             }
             // the variables dialog with a few variables (one broken), to review it
             if std::env::var("CNCCRAFT_SHOW_VARS").is_ok() {
@@ -977,7 +1007,8 @@ impl App {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
-            Pending::NewJob => self.job_dialog = Some((Job::default(), true)),
+            // a new job starts without a material: the person has to choose one
+            Pending::NewJob => self.job_dialog = Some((Job { material: String::new(), ..Job::default() }, true)),
             Pending::Open => self.open_project(),
             Pending::Example => self.load_example(),
         }
@@ -1920,6 +1951,9 @@ impl App {
         if let Some(sim) = &self.sim {
             let proj = sim::Projection::new(rect, &self.job, &self.cam);
             let layout = self.job.width.to_bits() ^ self.job.height.to_bits().rotate_left(21) ^ self.job.thickness.to_bits().rotate_left(42);
+            // a material no one knows (a project from another computer) shows as softwood
+            let look_key = self.materials.get(&self.job.material).map_or("", |m| m.look.as_str());
+            self.gl3d.set_look(look_key, || crate::materials::look(look_key));
             self.gl3d.update(&sim.hm, &proj, layout);
             painter.add(self.gl3d.callback(rect, &proj));
             if overlay {
@@ -2225,6 +2259,7 @@ impl eframe::App for App {
         storage.set_string("cnccraft_cam_perspective", self.cam.perspective.to_string());
         storage.set_string("cnccraft_layer_type", (if self.last_layer_image { "image" } else { "vector" }).into());
         storage.set_string("cnccraft_tools", self.lib.to_json());
+        storage.set_string("cnccraft_materials", self.materials.to_json());
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
@@ -2334,6 +2369,7 @@ impl eframe::App for App {
         self.import_missing_ui(ctx);
         self.pp_dialog_ui(ctx);
         self.tool_dialog_ui(ctx);
+        self.material_dialog_ui(ctx);
         self.calibrate_dialog(ctx);
         self.save_thumbnail(ctx);
         if self.thumb_pending == 0 {
