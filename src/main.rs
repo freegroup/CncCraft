@@ -28,6 +28,7 @@ mod layers;
 mod materials;
 mod export;
 mod geom;
+mod guides;
 mod import;
 mod lang;
 mod props;

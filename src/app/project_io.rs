@@ -11,7 +11,7 @@ impl App {
             self.path.clone()
         };
         let Some(path) = path else { return };
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone() };
         match serde_json::to_string_pretty(&proj).map_err(|e| e.to_string()).and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string())) {
             Ok(()) => {
                 self.add_recent(&path);
@@ -42,6 +42,10 @@ impl App {
                 self.vars = p.vars;
                 self.distances = p.constraints;
                 self.aligns = p.aligns;
+                self.guides = p.guides;
+                self.next_guide_id = self.guides.iter().map(|g| g.id).max().unwrap_or(0) + 1;
+                self.guide_selected = None;
+                self.guide_drag = None;
                 self.layers = p.layers.repaired();
                 self.layers.sync(&mut self.shapes);
                 self.image_textures.clear();

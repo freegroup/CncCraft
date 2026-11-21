@@ -264,6 +264,9 @@ struct Project {
     hooks: gcode::OldPostHooks,
     #[serde(default)]
     postprocs: Vec<gcode::PostProcessor>,
+    /// Construction lines. Old project files have none.
+    #[serde(default)]
+    guides: Vec<crate::guides::Guide>,
 }
 
 struct PpDialog {
@@ -521,6 +524,14 @@ pub struct App {
     aligns: Vec<shape_edit::Align>,
     align_mode: Option<align::AlignMode>,
     align_labels: Vec<(usize, Rect)>,
+    /// Construction lines and the shapes soft-attached to each (see `guides`). The guide a shape
+    /// is being dragged along, while a ruler drag lasts.
+    guides: Vec<crate::guides::Guide>,
+    next_guide_id: u64,
+    /// The guide grabbed on the ruler right now (its id), and the offset where the drag began.
+    guide_drag: Option<(u64, f64)>,
+    /// The guide selected on the ruler (deletable with Delete), if any.
+    guide_selected: Option<u64>,
     distance_edit: Option<distance::DistanceEdit>,
     distance_labels: Vec<(usize, Rect)>,
     /// The dimension lines of the distances shown without their value (the faint view): they can
@@ -711,6 +722,10 @@ impl App {
             aligns: Vec::new(),
             align_mode: None,
             align_labels: Vec::new(),
+            guides: Vec::new(),
+            next_guide_id: 1,
+            guide_drag: None,
+            guide_selected: None,
             distance_edit: None,
             distance_labels: Vec::new(),
             distance_lines: Vec::new(),
