@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/freegroup/CncCraft/compare/v1.21.0...v1.22.0) (2026-11-22)
+
+
+### Features
+
+* interactive construction-line guides on the rulers ([b93903e](https://github.com/freegroup/CncCraft/commit/b93903e4e9abe0e719b3d24c6247e081465f9d51))
+
 # [1.21.0](https://github.com/freegroup/CncCraft/compare/v1.20.0...v1.21.0) (2026-11-21)
 
 
