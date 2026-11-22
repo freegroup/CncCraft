@@ -2,7 +2,7 @@
 //! small ones between, as the original draws them; the pointer shows as a mark on each.
 
 use super::{Decoration, Layer, SheetView};
-use crate::theme::ink;
+use crate::theme::{RULER_FILL, RULER_INK};
 use egui::{Align2, FontId, Painter, Pos2, Rect, Stroke};
 
 /// Thickness of a ruler in screen pixels.
@@ -24,9 +24,9 @@ impl Decoration for Rulers {
         let top = Rect::from_min_max(Pos2::new(board.left(), board.top() - RULER), Pos2::new(board.right(), board.top()));
         let left = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top()), Pos2::new(board.left(), board.bottom()));
         for r in [top, left] {
-            painter.rect_filled(r, 0.0, crate::theme::surface());
+            painter.rect_filled(r, 0.0, RULER_FILL);
         }
-        let line = Stroke::new(1.0_f32, ink());
+        let line = Stroke::new(1.0_f32, RULER_INK);
         painter.line_segment([top.left_bottom(), top.right_bottom()], line);
         painter.line_segment([left.right_top(), left.right_bottom()], line);
         let step = SheetView::nice_step(70.0 / view.zoom as f64);
@@ -37,7 +37,7 @@ impl Decoration for Rulers {
             let major = k % 5 == 0;
             painter.line_segment([Pos2::new(sx, top.bottom() - if major { 8.0 } else { 3.0 }), Pos2::new(sx, top.bottom())], line);
             if major {
-                painter.text(Pos2::new(sx, top.top() + 1.0), Align2::CENTER_TOP, format!("{x:.0}"), FontId::proportional(10.0), ink());
+                painter.text(Pos2::new(sx, top.top() + 1.0), Align2::CENTER_TOP, format!("{x:.0}"), FontId::proportional(10.0), RULER_INK);
             }
         }
         for (k, y) in ticks(view.height) {
@@ -46,14 +46,14 @@ impl Decoration for Rulers {
             painter.line_segment([Pos2::new(left.right() - if major { 8.0 } else { 3.0 }, sy), Pos2::new(left.right(), sy)], line);
             if major {
                 // numbers read upwards along the left ruler, as in the original
-                let galley = painter.layout_no_wrap(format!("{y:.0}"), FontId::proportional(10.0), ink());
+                let galley = painter.layout_no_wrap(format!("{y:.0}"), FontId::proportional(10.0), RULER_INK);
                 let at = Pos2::new(left.left() + 1.0, sy + galley.size().x / 2.0);
-                painter.add(egui::epaint::TextShape::new(at, galley, ink()).with_angle(-std::f32::consts::FRAC_PI_2));
+                painter.add(egui::epaint::TextShape::new(at, galley, RULER_INK).with_angle(-std::f32::consts::FRAC_PI_2));
             }
         }
         if let Some(m) = view.pointer {
             let p = view.to_screen(m);
-            let mark = Stroke::new(1.5_f32, ink());
+            let mark = Stroke::new(1.5_f32, RULER_INK);
             if p.x >= top.left() && p.x <= top.right() {
                 painter.line_segment([Pos2::new(p.x, top.top() + 4.0), Pos2::new(p.x, top.bottom())], mark);
             }

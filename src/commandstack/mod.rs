@@ -13,6 +13,9 @@ mod layer_lock;
 mod layer_colour;
 mod toolpath_reorder;
 mod toolpath_delete;
+mod guide_add;
+mod guide_move;
+mod guide_remove;
 
 pub use stack::{Command, CommandStack, Snapshot};
 pub use snapshot::SnapshotCommand;
@@ -29,3 +32,6 @@ pub use layer_lock::LayerLockCommand;
 pub use layer_colour::LayerColourCommand;
 pub use toolpath_reorder::ToolpathReorderCommand;
 pub use toolpath_delete::ToolpathDeleteCommand;
+pub use guide_add::GuideAddCommand;
+pub use guide_move::GuideMoveCommand;
+pub use guide_remove::GuideRemoveCommand;

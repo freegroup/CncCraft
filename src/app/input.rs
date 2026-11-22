@@ -143,6 +143,56 @@ impl ConstraintInput {
     }
 }
 
+/// What a run of the shared number field did this frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum NumberOutcome {
+    /// Still open (keep the field's state).
+    Open,
+    /// Enter, or a click beside the field, with a usable value: commit it.
+    Commit,
+    /// Escape: close without committing.
+    Cancel,
+}
+
+/// One frame of a single-line number field that takes a number, a variable or a formula — drawn,
+/// with the suggestion list, the cursor, the error line under it, and Tab/Enter/Escape handled.
+/// Every inline editor (shape sizes, distance values, fillet radii, construction lines) runs this,
+/// so they all behave the same. `tab` is the Tab press taken out of the input by `take_tabs`.
+/// `positive` rejects values of zero or less. Returns what the frame did; the caller reads the
+/// committed `text` and applies it.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn edit_number_field(ctx: &Context, id: Id, at: egui::Pos2, text: &mut String, input: &mut ConstraintInput, names: &[String], value: &dyn Fn(&str) -> Option<f64>, lookup: &dyn calc::Lookup, positive: bool, tab: bool, error: bool) -> (NumberOutcome, Rect) {
+    let why = problem(text, lookup, positive);
+    let resp = super::fields::field(ctx, id, at, text, error || why.is_some());
+    // a click on one of last frame's suggestions takes that name
+    if let Some((_, name)) = input.click(ctx) {
+        *text = vars::apply_completion(text, &name);
+    }
+    input.cursor(ctx, 0, id, text);
+    let (enter, esc) = ctx.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+    let mut keys = Keys::read(ctx, tab);
+    let focused = ctx.memory(|m| m.has_focus(id)) || (resp.lost_focus() && enter);
+    let suggested = input.suggest(ctx, 0, id, resp.rect, text, names, value, &mut keys, focused, 4.0);
+    if let Some(why) = &why {
+        ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, id.with("problem")))
+            .text(resp.rect.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, why, egui::FontId::proportional(11.5), crate::theme::error());
+    }
+    // a press beside the field (not on it or its list) commits, like Enter
+    let press_beside = ctx.input(|i| if i.pointer.primary_pressed() { i.pointer.press_origin() } else { None })
+        .is_some_and(|p| !resp.rect.expand(6.0).contains(p) && !suggested.area.is_some_and(|a| a.contains(p)));
+    if esc && suggested.listing {
+        // the first Esc closes the list (by leaving the field), the next one cancels
+        ctx.memory_mut(|m| m.surrender_focus(id));
+        (NumberOutcome::Open, resp.rect)
+    } else if esc {
+        (NumberOutcome::Cancel, resp.rect)
+    } else if (enter && !suggested.taken) || press_beside {
+        (if why.is_some() { NumberOutcome::Open } else { NumberOutcome::Commit }, resp.rect)
+    } else {
+        (NumberOutcome::Open, resp.rect)
+    }
+}
+
 /// Why `text` can't be worked out yet (an unknown variable, a broken formula, or a result that
 /// must be above zero when `positive`), for the line under a field.
 pub(super) fn problem(text: &str, lookup: &dyn calc::Lookup, positive: bool) -> Option<String> {

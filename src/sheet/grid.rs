@@ -17,6 +17,11 @@ impl Decoration for Grid {
 
     fn paint(&self, view: &SheetView, painter: &Painter) {
         let board = view.board();
+        // the board edge is always drawn; the grid lines only when snapping to the grid is on
+        if !view.snap_grid {
+            painter.rect_stroke(board, 0.0, Stroke::new(1.0_f32, Color32::from_gray(150)));
+            return;
+        }
         let step = SheetView::nice_step(30.0 / view.zoom as f64);
         let stroke = |k: usize| Stroke::new(1.0_f32, if k % 5 == 0 { Color32::from_gray(222) } else { Color32::from_gray(240) });
         for k in 0..=((view.width / step + 1e-6).floor() as usize) {

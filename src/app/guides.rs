@@ -6,18 +6,35 @@
 //! only while the user drags that shape onto it (within the snap radius); the guide then owns the
 //! attachment. Dragging the shape away releases it. Moving a guide never attaches a resting shape.
 
+use super::input::ConstraintInput;
 use super::App;
 use crate::guides::{Guide, GuideAxis, Side};
 use crate::sheet::rulers::RULER;
-use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke};
+use egui::{Color32, Pos2, Rect, Stroke};
 use shape_edit::Editable;
 
-/// How close (screen pixels) the pointer must be to a guide on the ruler to grab it.
-const GRAB_PX: f32 = 6.0;
+/// Width (screen pixels) of a guide's handle tab on the ruler.
+const HANDLE_W: f32 = 9.0;
+/// How far (screen pixels) outside its tab a handle still reacts to the pointer.
+const GRAB_PX: f32 = 1.0;
+/// How thick (screen pixels) a guide's number label is across its ruler.
+const LABEL_THICK: f32 = 20.0;
+/// Space (screen pixels) between the ruler and a guide's number label.
+const LABEL_GAP: f32 = 8.0;
 /// How close (mm on screen, in pixels) a shape edge must come to a guide to snap while dragging.
 const SNAP_PX: f32 = 8.0;
+/// A guide's number while it is being typed.
+pub(super) struct GuideEdit {
+    pub(super) id: u64,
+    pub(super) text: String,
+    /// Where the number's label was: the field opens there.
+    pub(super) rect: Rect,
+    /// Suggestions and the cursor, shared with every number field (see `input.rs`).
+    pub(super) input: ConstraintInput,
+}
+
 /// Red of the construction lines, like Sketch's ruler guides.
-fn guide_colour() -> Color32 {
+pub(super) fn guide_colour() -> Color32 {
     Color32::from_rgb(0xe0, 0x30, 0x30)
 }
 
@@ -35,39 +52,230 @@ impl App {
     }
 
     /// Whether the `Ruler` decoration is shown (guides only exist with it).
-    fn rulers_shown(&mut self) -> bool {
-        self.sheet.switches().any(|(name, shown)| name == "Lineale" && *shown)
+    pub(in crate::app) fn rulers_shown(&self) -> bool {
+        self.sheet.is_shown("Lineale")
     }
 
-    /// Draw the guides across the whole board, and their distance labels outside it, on the ruler.
-    /// Called from the canvas after the sheet's `Over` layer (so guides sit above the design but
-    /// their handles live on the ruler).
+    /// Show or hide the rulers (and, with them, the construction lines).
+    pub(in crate::app) fn set_rulers_shown(&mut self, on: bool) {
+        for (name, shown) in self.sheet.switches() {
+            if name == "Lineale" {
+                *shown = on;
+            }
+        }
+        if !on {
+            self.guide_selected = None;
+            self.guide_drag = None;
+        }
+        self.status = if on { "Lineale werden gezeigt".into() } else { "Lineale ausgeblendet".into() };
+    }
+
+    /// The colour a guide is drawn in: its line, its handle on the ruler and its number all share
+    /// it (selected guides in full red).
+    fn guide_tone(&self, g: &Guide) -> Color32 {
+        if self.guide_selected == Some(g.id) { guide_colour() } else { guide_colour().gamma_multiply(0.85) }
+    }
+
+    /// Where a guide's number label sits: outside the ruler, a little apart from it.
+    fn guide_label_pos(&self, g: &Guide) -> Pos2 {
+        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        match g.axis {
+            // both sit outside their ruler, the same gap away, centred on the line; the label of a
+            // horizontal guide stands upright (like the left ruler's numbers), so it needs no more
+            // room beside the ruler than the other needs above it
+            GuideAxis::Vertical => Pos2::new(self.to_screen([g.offset, 0.0]).x, board.top() - RULER - LABEL_GAP - LABEL_THICK / 2.0),
+            GuideAxis::Horizontal => Pos2::new(board.left() - RULER - LABEL_GAP - LABEL_THICK / 2.0, self.to_screen([0.0, g.offset]).y),
+        }
+    }
+
+    /// Draw the guides across the whole board, in the guide's colour (their handles and numbers
+    /// come after the rulers, in `paint_guide_labels`).
     pub(super) fn paint_guides(&self, painter: &egui::Painter) {
         let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        // the guide a dragged shape would snap to is drawn thicker
+        let target = self.guide_snap_preview();
         for g in &self.guides {
             let selected = self.guide_selected == Some(g.id);
-            let col = if selected { guide_colour() } else { guide_colour().gamma_multiply(0.85) };
-            let stroke = Stroke::new(if selected { 1.6 } else { 1.0 }, col);
+            let tone = if target.contains(&g.id) { guide_colour() } else { self.guide_tone(g) };
+            let width = if target.contains(&g.id) { 2.4_f32 } else if selected { 1.6 } else { 1.0 };
+            let line = Stroke::new(width, tone);
             match g.axis {
                 GuideAxis::Vertical => {
                     let x = self.to_screen([g.offset, 0.0]).x;
-                    painter.line_segment([Pos2::new(x, board.top()), Pos2::new(x, board.bottom())], stroke);
-                    // the distance label on the top ruler, outside the drawing area
-                    painter.text(Pos2::new(x, board.top() - RULER / 2.0), Align2::CENTER_CENTER, format!("{:.0}", g.offset), FontId::proportional(10.0), col);
+                    painter.line_segment([Pos2::new(x, board.top()), Pos2::new(x, board.bottom())], line);
                 }
                 GuideAxis::Horizontal => {
                     let y = self.to_screen([0.0, g.offset]).y;
-                    painter.line_segment([Pos2::new(board.left(), y), Pos2::new(board.right(), y)], stroke);
-                    painter.text(Pos2::new(board.left() - RULER / 2.0, y), Align2::CENTER_CENTER, format!("{:.0}", g.offset), FontId::proportional(10.0), col);
+                    painter.line_segment([Pos2::new(board.left(), y), Pos2::new(board.right(), y)], line);
                 }
             }
         }
     }
 
-    /// Handle the ruler: a click on the top or left ruler adds a guide; a drag on a guide's handle
-    /// moves it (and the shapes attached to it); a click selects it. Only runs when the rulers are
-    /// shown. Returns whether the ruler took the interaction (so the canvas ignores it).
-    pub(super) fn guide_ruler_interact(&mut self, resp: &egui::Response, ui: &egui::Ui) -> bool {
+    /// The guides' handles on the ruler and their numbers (the same label the constraints use),
+    /// drawn after the rulers so a ruler never covers them. Remembers where the numbers are, for
+    /// the long press that edits them.
+    pub(super) fn paint_guide_labels(&mut self, painter: &egui::Painter) {
+        for g in &self.guides {
+            // the handle: a filled tab across the ruler in the line's colour, with grip lines
+            let tone = self.guide_tone(g);
+            let r = self.guide_handle_rect(g);
+            painter.rect_filled(r, 2.0, tone);
+            let grip = Stroke::new(1.0_f32, Color32::WHITE.gamma_multiply(0.85));
+            let c = r.center();
+            for k in [-2.0_f32, 2.0] {
+                match g.axis {
+                    GuideAxis::Vertical => painter.line_segment([Pos2::new(c.x + k * 0.6, c.y - 4.0), Pos2::new(c.x + k * 0.6, c.y + 4.0)], grip),
+                    GuideAxis::Horizontal => painter.line_segment([Pos2::new(c.x - 4.0, c.y + k * 0.6), Pos2::new(c.x + 4.0, c.y + k * 0.6)], grip),
+                };
+            }
+        }
+        let mut labels = Vec::with_capacity(self.guides.len());
+        for g in &self.guides {
+            if self.guide_edit.as_ref().is_some_and(|e| e.id == g.id) {
+                continue;
+            }
+            // written like a distance constraint's value: a formula shows itself and its result
+            let text = match &g.expr {
+                Some(e) => format!("ƒ {e} = {} mm", super::fields::fmt(g.offset)),
+                None => format!("{} mm", super::fields::fmt(g.offset)),
+            };
+            let (at, tone) = (self.guide_label_pos(g), self.guide_tone(g));
+            let rect = match g.axis {
+                GuideAxis::Vertical => super::fields::value_label(painter, at, text, tone),
+                GuideAxis::Horizontal => upright_label(painter, at, text, tone),
+            };
+            labels.push((g.id, rect));
+        }
+        self.guide_labels = labels;
+    }
+
+    /// A guide's handle on the ruler: a tab across the ruler, centred on the line. It is what is
+    /// drawn, hovered and grabbed.
+    fn guide_handle_rect(&self, g: &Guide) -> Rect {
+        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        match g.axis {
+            GuideAxis::Vertical => {
+                let x = self.to_screen([g.offset, 0.0]).x;
+                Rect::from_min_max(Pos2::new(x - HANDLE_W / 2.0, board.top() - RULER + 2.0), Pos2::new(x + HANDLE_W / 2.0, board.top() - 1.0))
+            }
+            GuideAxis::Horizontal => {
+                let y = self.to_screen([0.0, g.offset]).y;
+                Rect::from_min_max(Pos2::new(board.left() - RULER + 2.0, y - HANDLE_W / 2.0), Pos2::new(board.left() - 1.0, y + HANDLE_W / 2.0))
+            }
+        }
+    }
+
+    /// Every frame, over the ruler: the resize cursor over a handle, and a long press on a guide's
+    /// number opens it for typing, exactly like the constraints' values (same hold time, same
+    /// filling bar under the value).
+    pub(super) fn guides_overlay(&mut self, ui: &mut egui::Ui) {
+        if !self.rulers_shown() {
+            self.guide_edit = None;
+            self.guide_press = None;
+            return;
+        }
+        let now = ui.input(|i| i.time);
+        let pointer = ui.input(|i| i.pointer.hover_pos());
+        if self.guide_edit.is_none() {
+            let over_handle = pointer.and_then(|p| self.guides.iter().find(|g| self.guide_handle_rect(g).expand(GRAB_PX).contains(p)).map(|g| g.axis));
+            let over_label = pointer.is_some_and(|p| self.guide_labels.iter().any(|(_, r)| r.contains(p)));
+            if let Some(axis) = over_handle {
+                ui.ctx().set_cursor_icon(if axis == GuideAxis::Vertical { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical });
+            } else if over_label {
+                // the number can be edited (long press)
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+        }
+        // the long press belongs to the number, not the handle
+        let label = pointer.and_then(|p| self.guide_labels.iter().find(|(_, r)| r.contains(p)).copied());
+        let down = ui.input(|i| i.pointer.primary_down());
+        if !down || self.guide_drag.is_some() || self.guide_edit.is_some() {
+            self.guide_press = None;
+        } else if let Some((id, rect)) = label {
+            match self.guide_press {
+                Some((pid, since)) if pid == id => {
+                    if now - since >= super::distance::HOLD_SECS {
+                        if let Some(g) = self.guides.iter().find(|g| g.id == id) {
+                            let text = g.expr.clone().unwrap_or_else(|| super::fields::fmt(g.offset));
+                            self.guide_edit = Some(GuideEdit { id, text, rect, input: ConstraintInput::selecting(0) });
+                            self.guide_selected = Some(id);
+                        }
+                        self.guide_press = None;
+                    } else {
+                        // the same thin bar the constraints show: "keep holding"
+                        let progress = ((now - since) / super::distance::HOLD_SECS).clamp(0.0, 1.0) as f32;
+                        let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("guide_hold_progress")));
+                        painter.line_segment([rect.left_bottom() + egui::vec2(0.0, 3.0), rect.left_bottom() + egui::vec2(rect.width() * progress, 3.0)], Stroke::new(2.5_f32, guide_colour()));
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(30));
+                    }
+                }
+                _ => {
+                    self.guide_press = Some((id, now));
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(30));
+                }
+            }
+        } else {
+            self.guide_press = None;
+        }
+        self.show_guide_edit(ui);
+    }
+
+    /// The open guide-number field: runs the shared number field (same as the shape sizes, the
+    /// distance values and the fillet radii), so it behaves the same everywhere. It takes a number,
+    /// a variable or a formula ("rand", "platte_b/2"); a formula is kept and the line follows its
+    /// variables.
+    fn show_guide_edit(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        let id = egui::Id::new("guide_value_field");
+        let Some(mut e) = self.guide_edit.take() else {
+            // the field is gone: so is its keyboard focus (tool keys must not type into it)
+            ctx.memory_mut(|m| {
+                if m.has_focus(id) {
+                    m.surrender_focus(id);
+                }
+            });
+            return;
+        };
+        if !self.guides.iter().any(|g| g.id == e.id) {
+            return;
+        }
+        let names = self.var_names();
+        let value = |n: &str| self.vars_resolved.value(n).ok();
+        let tab = std::mem::take(&mut self.guide_tab);
+        let (outcome, _) = super::input::edit_number_field(&ctx, id, e.rect.center(), &mut e.text, &mut e.input, &names, &value, &self.vars_resolved, false, tab, false);
+        match outcome {
+            super::input::NumberOutcome::Open => self.guide_edit = Some(e),
+            super::input::NumberOutcome::Cancel => self.status = "Abgebrochen".into(),
+            super::input::NumberOutcome::Commit => self.take_guide_value(&e),
+        }
+    }
+
+    /// Put the typed value on its guide: a plain number is just a distance; a variable or formula
+    /// is kept, and the line (with its attached shapes) moves to its value.
+    fn take_guide_value(&mut self, e: &GuideEdit) {
+        let text = e.text.trim().trim_end_matches('=').trim().to_string();
+        let Ok(v) = shape_edit::calc::eval(&text, &self.vars_resolved) else { return };
+        let expr = shape_edit::calc::is_formula(&text).then_some(text);
+        self.move_guide_with(e.id, v, expr);
+    }
+
+    /// Lines given as formulas follow their variables (and the job's size): each is worked out
+    /// again and moved there, its attached shapes with it. Returns whether any line moved.
+    pub(super) fn resolve_guides(&mut self) -> bool {
+        let wanted: Vec<(u64, f64)> = self
+            .guides
+            .iter()
+            .filter_map(|g| g.expr.as_ref().and_then(|e| shape_edit::calc::eval(e, &self.vars_resolved).ok()).map(|v| (g.id, v)))
+            .filter(|(id, v)| self.guides.iter().any(|g| g.id == *id && (g.offset - v).abs() > 1e-9))
+            .collect();
+        for (id, v) in &wanted {
+            self.apply_guide_move(*id, *v);
+        }
+        !wanted.is_empty()
+    }
+
+    pub(super) fn guide_ruler_interact(&mut self, resp: &egui::Response) -> bool {
         if !self.rulers_shown() {
             return false;
         }
@@ -75,22 +283,28 @@ impl App {
         let top = Rect::from_min_max(Pos2::new(board.left(), board.top() - RULER), Pos2::new(board.right(), board.top()));
         let left = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top()), Pos2::new(board.left(), board.bottom()));
         let Some(p) = resp.interact_pointer_pos().or_else(|| resp.hover_pos()) else { return false };
-        let on_top = top.contains(p);
-        let on_left = left.contains(p);
+        // where the button first went down (a drag only reports once the pointer has moved a bit,
+        // by then it may be off the thin handle); fall back to the current position
+        let grab = resp.ctx.input(|i| i.pointer.press_origin()).unwrap_or(p);
+        // a press on a guide's number belongs to its long press, never to the drawing
+        if self.guide_labels.iter().any(|(_, r)| r.contains(grab)) {
+            return true;
+        }
+        let on_top = top.contains(p) || top.contains(grab);
+        let on_left = left.contains(p) || left.contains(grab);
 
         // pointer in mm, clamped to the board
         let at_v = (((p.x - self.origin.x) / self.zoom) as f64).clamp(0.0, self.job.width);
         let at_h = (((self.origin.y - p.y) / self.zoom) as f64).clamp(0.0, self.job.height);
 
-        // which existing guide's handle is under the pointer on the ruler?
+        // which existing guide's handle is under the press point on the ruler?
         let near = self.guides.iter().find(|g| match g.axis {
-            GuideAxis::Vertical => on_top && (self.to_screen([g.offset, 0.0]).x - p.x).abs() <= GRAB_PX,
-            GuideAxis::Horizontal => on_left && (self.to_screen([0.0, g.offset]).y - p.y).abs() <= GRAB_PX,
+            GuideAxis::Vertical | GuideAxis::Horizontal => self.guide_handle_rect(g).expand(GRAB_PX).contains(grab),
         }).map(|g| g.id);
 
         if resp.drag_started_by(egui::PointerButton::Primary) {
             if let Some(id) = near {
-                // grab an existing guide
+                // grab an existing guide; the drag's final command makes it a plain number
                 let off = self.guides.iter().find(|g| g.id == id).map(|g| g.offset).unwrap_or(0.0);
                 self.guide_drag = Some((id, off));
                 self.guide_selected = Some(id);
@@ -107,25 +321,44 @@ impl App {
             }
         }
 
-        if let Some((id, _)) = self.guide_drag {
+        if let Some((id, start)) = self.guide_drag {
             if resp.dragged() {
                 let axis = self.guides.iter().find(|g| g.id == id).map(|g| g.axis);
                 if let Some(axis) = axis {
                     let offset = if axis == GuideAxis::Vertical { at_v } else { at_h };
-                    self.move_guide(id, offset);
+                    // live, without an undo step; the whole drag becomes one command when it ends
+                    self.apply_guide_move(id, offset);
                 }
-                ui.ctx().set_cursor_icon(if matches!(axis, Some(GuideAxis::Vertical)) { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical });
+                resp.ctx.set_cursor_icon(if matches!(axis, Some(GuideAxis::Vertical)) { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical });
                 return true;
             }
             if resp.drag_stopped() {
+                // one undo step for the whole drag: put the line back to where the drag began,
+                // then let the command move it to where it was dropped (shapes follow both ways)
+                let end = self.guides.iter().find(|g| g.id == id).map(|g| g.offset);
                 self.guide_drag = None;
+                if let Some(end) = end {
+                    if (end - start).abs() > 1e-9 {
+                        self.apply_guide_move(id, start);
+                        self.move_guide(id, end);
+                    }
+                }
                 return true;
             }
         }
 
-        // a plain click on a ruler handle selects it; a click on empty ruler clears the selection
+        // a plain click on a ruler handle selects it; a click on the empty ruler adds a new guide
+        // there (and selects it)
         if resp.clicked() && (on_top || on_left) {
-            self.guide_selected = near;
+            match near {
+                Some(id) => self.guide_selected = Some(id),
+                None => {
+                    let axis = if on_top { GuideAxis::Vertical } else { GuideAxis::Horizontal };
+                    let offset = if on_top { at_v } else { at_h };
+                    let id = self.add_guide(axis, offset);
+                    self.guide_selected = Some(id);
+                }
+            }
             return true;
         }
         // a click anywhere else clears a guide selection (the drawing has no guide interaction)
@@ -135,16 +368,37 @@ impl App {
         self.guide_drag.is_some()
     }
 
-    /// Add a guide and return its id.
+    /// Add a guide through the command stack (undoable) and return its id.
     fn add_guide(&mut self, axis: GuideAxis, offset: f64) -> u64 {
         let id = self.next_guide_id;
         self.next_guide_id += 1;
-        self.guides.push(Guide::new(id, axis, offset));
+        self.execute_command(Box::new(crate::commandstack::GuideAddCommand::new(Guide::new(id, axis, offset))));
         id
     }
 
-    /// Move a guide to a new offset and drag its attached shapes along by the same amount.
+    /// Move a guide through the command stack (undoable): its attached shapes move with it, and a
+    /// hand move drops any formula. Recomputes if shapes followed.
     fn move_guide(&mut self, id: u64, offset: f64) {
+        self.move_guide_with(id, offset, None);
+    }
+
+    /// Like [`move_guide`], but also sets the line's formula (so typing a formula is one undo
+    /// step); `None` makes it a plain number.
+    fn move_guide_with(&mut self, id: u64, offset: f64, expr: Option<String>) {
+        let Some(g) = self.guides.iter().find(|g| g.id == id) else { return };
+        if (g.offset - offset).abs() < 1e-9 && g.expr == expr {
+            return;
+        }
+        let (from, had_attached) = (g.offset, !g.attached.is_empty());
+        self.execute_command(Box::new(crate::commandstack::GuideMoveCommand::new(id, from, offset).with_expr(expr)));
+        if had_attached {
+            self.recompute_all();
+        }
+    }
+
+    /// Move a guide without an undo step: used when variables or the job size change, so the whole
+    /// recompute is one action. Its attached shapes move with it.
+    fn apply_guide_move(&mut self, id: u64, offset: f64) {
         let Some(g) = self.guides.iter().find(|g| g.id == id) else { return };
         let (axis, old, attached) = (g.axis, g.offset, g.attached.clone());
         let delta = offset - old;
@@ -160,15 +414,12 @@ impl App {
         if let Some(g) = self.guides.iter_mut().find(|g| g.id == id) {
             g.offset = offset;
         }
-        if !attached.is_empty() {
-            self.recompute_all();
-        }
     }
 
-    /// Delete the selected guide (its attachments go with it; the shapes stay put).
+    /// Delete the selected guide through the command stack (undoable); its shapes stay put.
     pub(super) fn delete_selected_guide(&mut self) -> bool {
         let Some(id) = self.guide_selected else { return false };
-        self.guides.retain(|g| g.id != id);
+        self.execute_command(Box::new(crate::commandstack::GuideRemoveCommand::new(id)));
         self.guide_selected = None;
         true
     }
@@ -180,20 +431,7 @@ impl App {
         if self.guides.is_empty() || moved.is_empty() {
             return [0.0, 0.0];
         }
-        let tol = SNAP_PX as f64 / self.zoom as f64;
-        let mut best: [Option<(f64, f64, u64, Side)>; 2] = [None, None]; // per axis: (dist, snap_delta, guide, side)
-        for &shape in moved {
-            for g in &self.guides {
-                let k = if g.axis == GuideAxis::Vertical { 0 } else { 1 };
-                for side in [Side::Low, Side::Centre, Side::High] {
-                    let Some(v) = self.part_value(shape, g.axis, side) else { continue };
-                    let d = (g.offset - v).abs();
-                    if d <= tol && best[k].is_none_or(|(bd, ..)| d < bd) {
-                        best[k] = Some((d, g.offset - v, g.id, side));
-                    }
-                }
-            }
-        }
+        let best = self.guide_snap_candidates(moved);
         // apply: attach the snapped shapes to their guides, detach from others
         let mut delta = [0.0, 0.0];
         for (k, slot) in best.iter().enumerate() {
@@ -213,6 +451,36 @@ impl App {
         delta
     }
 
+    /// For each axis (X, Y), the guide `moved` would snap to now: the closest edge or centre of any
+    /// of the shapes within the snap radius of a guide, as (distance, the shift that puts it on the
+    /// guide, the guide, which part). Only looks, changes nothing.
+    fn guide_snap_candidates(&self, moved: &[u64]) -> [Option<(f64, f64, u64, Side)>; 2] {
+        let tol = SNAP_PX as f64 / self.zoom as f64;
+        let mut best: [Option<(f64, f64, u64, Side)>; 2] = [None, None];
+        for &shape in moved {
+            for g in &self.guides {
+                let k = if g.axis == GuideAxis::Vertical { 0 } else { 1 };
+                for side in [Side::Low, Side::Centre, Side::High] {
+                    let Some(v) = self.part_value(shape, g.axis, side) else { continue };
+                    let d = (g.offset - v).abs();
+                    if d <= tol && best[k].is_none_or(|(bd, ..)| d < bd) {
+                        best[k] = Some((d, g.offset - v, g.id, side));
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    /// While the user drags shapes: the guides they would snap to if released now (empty when
+    /// none, or when nothing is being moved). Drives the visual feedback, attaches nothing.
+    pub(super) fn guide_snap_preview(&self) -> Vec<u64> {
+        if self.guides.is_empty() || !matches!(self.edit.gesture(), Some(shape_edit::Gesture::Move { .. })) {
+            return vec![];
+        }
+        self.guide_snap_candidates(&self.edit.selection).iter().flatten().map(|(_, _, g, _)| *g).collect()
+    }
+
     /// Attach `shape` to `guide` by `side`, removing it from any other guide of the same axis.
     fn attach_shape(&mut self, shape: u64, guide: u64, side: Side) {
         let axis = self.guides.iter().find(|g| g.id == guide).map(|g| g.axis);
@@ -227,10 +495,9 @@ impl App {
 
     /// Release `shape` from every guide of `axis`.
     fn detach_shape_from_axis(&mut self, shape: u64, axis: GuideAxis) {
-        let mut changed = false;
         for g in &mut self.guides {
             if g.axis == axis {
-                changed |= g.detach(shape);
+                g.detach(shape);
             }
         }
     }
@@ -243,4 +510,17 @@ impl App {
         }
     }
 
+}
+
+/// The constraints' value label (`fields::value_label`: same font, fill, frame and corners),
+/// standing upright and reading upwards, centred on `at`; for numbers beside the left ruler.
+fn upright_label(painter: &egui::Painter, at: Pos2, text: String, tone: Color32) -> Rect {
+    let galley = painter.layout_no_wrap(text, egui::FontId::monospace(12.0), tone);
+    let size = galley.size();
+    // a quarter turn of the label's box: width and height swap
+    let r = Rect::from_center_size(at, egui::vec2(size.y + 4.0, size.x + 10.0));
+    painter.rect(r, 4.0, crate::theme::SHEET_LABEL, Stroke::new(1.0_f32, tone));
+    let origin = Pos2::new(r.left() + 2.0, r.bottom() - 5.0);
+    painter.add(egui::epaint::TextShape::new(origin, galley, tone).with_angle(-std::f32::consts::FRAC_PI_2));
+    r
 }

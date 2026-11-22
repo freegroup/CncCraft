@@ -29,11 +29,11 @@ impl LayerReorderCommand {
 }
 
 impl Command for LayerReorderCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         layers.move_to(self.from, self.to);
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         let (from, to) = self.reverse_target();
         layers.move_to(from, to);
     }

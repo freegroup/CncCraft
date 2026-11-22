@@ -8,7 +8,7 @@ mod axes;
 mod board;
 mod grid;
 mod hints;
-mod rulers;
+pub(crate) mod rulers;
 
 pub use axes::AxisCross;
 pub use board::Board;
@@ -49,6 +49,9 @@ pub struct SheetView {
     pub datum: [f64; 2],
     /// The pointer in mm, when it is over the drawing.
     pub pointer: Option<[f64; 2]>,
+    /// Whether snapping to the grid is on. The grid decoration only draws then, so the grid is
+    /// visible exactly when it snaps (the original couples both in `vcSnapGrid`).
+    pub snap_grid: bool,
 }
 
 impl SheetView {
@@ -129,6 +132,11 @@ impl Decorations {
     pub fn switches(&mut self) -> impl Iterator<Item = (&'static str, &mut bool)> {
         self.items.iter_mut().map(|(d, shown)| (d.name(), shown))
     }
+
+    /// Whether the decoration named `name` is present and shown.
+    pub fn is_shown(&self, name: &str) -> bool {
+        self.items.iter().any(|(d, shown)| *shown && d.name() == name)
+    }
 }
 
 #[cfg(test)]
@@ -153,7 +161,7 @@ mod tests {
     }
 
     fn view() -> SheetView {
-        SheetView { canvas: Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0)), zoom: 2.0, origin: Pos2::new(100.0, 500.0), width: 300.0, height: 200.0, datum: [0.0, 0.0], pointer: None }
+        SheetView { canvas: Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0)), zoom: 2.0, origin: Pos2::new(100.0, 500.0), width: 300.0, height: 200.0, datum: [0.0, 0.0], pointer: None, snap_grid: false }
     }
 
     #[test]

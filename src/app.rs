@@ -29,6 +29,7 @@ mod clipboard;
 mod preview;
 mod project_io;
 mod start_page;
+mod guides;
 
 use icons::{icon_button, icon_button_tip};
 use tooltip::{Tip, WithTip};
@@ -160,6 +161,8 @@ pub(crate) enum Icon {
     Align,
     /// Show or hide the origin: the axis cross of the sheet and the zero cross of the 3D view.
     Origin,
+    /// Show or hide the rulers (and, with them, the construction lines).
+    Ruler,
     /// Insert a reference image on the active image layer.
     InsertImage,
     /// Calibrate the reference image (click two points, enter distance).
@@ -532,6 +535,16 @@ pub struct App {
     guide_drag: Option<(u64, f64)>,
     /// The guide selected on the ruler (deletable with Delete), if any.
     guide_selected: Option<u64>,
+    /// Editing a guide's distance (its id, the text, the label rect). Opened by a long press on
+    /// the number, like the distance constraints.
+    guide_edit: Option<guides::GuideEdit>,
+    /// Tab was pressed while the guide's number field was open (taken out of the input, it takes
+    /// a suggestion there, as in the distance field).
+    guide_tab: bool,
+    /// A long press on a guide number in progress: the guide id and when it began.
+    guide_press: Option<(u64, f64)>,
+    /// Where each guide's number label was drawn last frame (for the long press).
+    guide_labels: Vec<(u64, Rect)>,
     distance_edit: Option<distance::DistanceEdit>,
     distance_labels: Vec<(usize, Rect)>,
     /// The dimension lines of the distances shown without their value (the faint view): they can
@@ -726,6 +739,10 @@ impl App {
             next_guide_id: 1,
             guide_drag: None,
             guide_selected: None,
+            guide_edit: None,
+            guide_tab: false,
+            guide_press: None,
+            guide_labels: Vec::new(),
             distance_edit: None,
             distance_labels: Vec::new(),
             distance_lines: Vec::new(),
@@ -890,6 +907,17 @@ impl App {
             if std::env::var("CNCCRAFT_SHOW_GCODE").is_ok() {
                 app.paths_in_3d = true;
             }
+            // a couple of construction lines, to review them on the ruler
+            if std::env::var("CNCCRAFT_SHOW_GUIDES").is_ok() {
+                app.guides.push(crate::guides::Guide::new(1, crate::guides::GuideAxis::Vertical, 120.0));
+                // the horizontal one follows a formula: it must end up at half the board's length
+                let mut by_formula = crate::guides::Guide::new(2, crate::guides::GuideAxis::Horizontal, 80.0);
+                by_formula.expr = Some("platte_l/2".into());
+                app.guides.push(by_formula);
+                app.vars_dirty = true;
+                app.next_guide_id = 3;
+                app.guide_selected = Some(1);
+            }
         }
         app.mark_clean();
         // a change that is not saved and the question about it, to review them
@@ -919,7 +947,7 @@ impl App {
     }
 
     fn execute_command(&mut self, cmd: Box<dyn crate::commandstack::Command>) {
-        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths);
+        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides);
     }
 
     fn add_shape(&mut self, shape: impl Into<Shape>) -> u64 {
@@ -996,7 +1024,7 @@ impl App {
 
     /// The document as project text, to tell whether it changed since it was last saved.
     fn project_text(&self) -> String {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone() };
         serde_json::to_string(&proj).unwrap_or_default()
     }
 
@@ -1074,6 +1102,10 @@ impl App {
 
     /// The question about more than one tool: everything in one file, or one file for each tool.
     fn delete_selection(&mut self) {
+        // a selected construction line (picked on the ruler) is deleted first; its shapes stay
+        if self.delete_selected_guide() {
+            return;
+        }
         if self.edit.selection.is_empty() {
             return;
         }
@@ -1081,6 +1113,7 @@ impl App {
         let sel = std::mem::take(&mut self.edit.selection);
         self.shapes.retain(|s| !sel.contains(&s.id));
         self.edit.retain_existing(&self.shapes);
+        self.prune_guide_attachments();
         self.recompute_all();
     }
 
@@ -1282,7 +1315,7 @@ impl App {
     // ---------------- UI ----------------
 
     fn do_undo(&mut self) {
-        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths) {
+        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides) {
             self.edit.retain_existing(&self.shapes);
             while let Some((ids, before)) = self.paste_log.last() {
                 if ids.iter().all(|id| !self.shapes.iter().any(|s| s.id == *id)) {
@@ -1301,7 +1334,7 @@ impl App {
     }
 
     fn do_redo(&mut self) {
-        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths) {
+        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides) {
             self.edit.retain_existing(&self.shapes);
             self.vars_dirty = true;
             self.recompute_all();
@@ -1467,6 +1500,9 @@ impl App {
         let free_edge = Color32::from_rgb(0x4f, 0x86, 0xd6);
         // a ring or a line shows its selection as a solid line, not in marching dashes
         let solid_selection = self.edit.style(&self.shapes) != shape_edit::SelectionStyle::Box;
+        // dragged shapes that would snap onto a construction line if released now show it: they
+        // turn the guides' red (and the guide they'd hang on is drawn thicker)
+        let snaps = !self.guide_snap_preview().is_empty();
         for s in self.shapes.iter().filter(|s| !s.hidden) {
             let layer_alpha = self.layers.opacity(s.layer);
             // RefImage shapes are rendered as textures above; only draw their selection outline
@@ -1491,7 +1527,9 @@ impl App {
                 if c.closed && !pts.is_empty() {
                     pts.push(pts[0]);
                 }
-                if sel && solid_selection {
+                if sel && snaps {
+                    painter.add(egui::Shape::line(pts, Stroke::new(2.5_f32, guides::guide_colour())));
+                } else if sel && solid_selection {
                     painter.add(egui::Shape::line(pts, Stroke::new(2.0_f32, col)));
                 } else if sel {
                     painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5_f32, col), 6.0, 4.0));
@@ -1716,8 +1754,18 @@ impl App {
         self.custom_cursor(ui.ctx(), &painter, rect, resp.hovered());
         // calibrate mode: crosshairs and measurement line
         self.calibrate_paint(&painter);
+        // construction lines across the workpiece, below the rulers (only with the rulers shown)
+        if self.sheet.is_shown("Lineale") {
+            self.paint_guides(&painter);
+        }
         // the worksheet over the design (rulers, axis cross…), with the pointer as it is now
         self.sheet.paint(sheet::Layer::Over, &self.sheet_view(rect), &painter);
+        // construction-line numbers over the rulers; hover cursor on a handle, long press on the
+        // number to edit it
+        if self.sheet.is_shown("Lineale") {
+            self.paint_guide_labels(&painter);
+            self.guides_overlay(ui);
+        }
     }
 
     /// The worksheet as its decorations see it.
@@ -1726,7 +1774,7 @@ impl App {
             Datum::LowerLeft => [0.0, 0.0],
             Datum::Center => [self.job.width / 2.0, self.job.height / 2.0],
         };
-        sheet::SheetView { canvas, zoom: self.zoom, origin: self.origin, width: self.job.width, height: self.job.height, datum, pointer: self.mouse_mm }
+        sheet::SheetView { canvas, zoom: self.zoom, origin: self.origin, width: self.job.width, height: self.job.height, datum, pointer: self.mouse_mm, snap_grid: self.snap_grid }
     }
 
     /// The shape a drawing tool makes from a drag between `a` and `b`.
@@ -1745,6 +1793,11 @@ impl App {
     }
 
     fn canvas_input(&mut self, resp: &Response, mouse: Option<Pt>) {
+        // construction lines: grabbed and moved only on the ruler, never in the drawing. A ruler
+        // interaction takes precedence over everything else.
+        if self.guide_ruler_interact(resp) {
+            return;
+        }
         // the level/upright mode takes the clicks the same way (a drag still moves shapes)
         if self.align_mode.is_some() {
             let dragging_shape = resp.drag_started_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Primary) || resp.drag_stopped() || self.edit.is_busy();
@@ -1844,6 +1897,19 @@ impl App {
                         Outcome::Reshaped => self.status = "Form angepasst".into(),
                         Outcome::Selected if self.edit.rotate_mode => self.status = "Drehen: an einer Ecke ziehen oder Winkel eingeben · erneut klicken zum Skalieren".into(),
                         _ => {}
+                    }
+                    // a move that lands near a construction line snaps the selection onto it and
+                    // attaches it (soft constraint). Only on an actual user move, not a copy.
+                    if outcome == Outcome::Moved {
+                        let sel = self.edit.selection.clone();
+                        let off = self.guide_snap_offset(&sel);
+                        if off != [0.0, 0.0] {
+                            for id in &sel {
+                                if let Some(item) = self.shapes.iter_mut().find(|s| s.id == *id) {
+                                    *item = item.translated(off[0], off[1]);
+                                }
+                            }
+                        }
                     }
                     if outcome.changed_shapes() {
                         self.sync_image_from_shape();

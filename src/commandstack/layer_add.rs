@@ -17,7 +17,7 @@ impl LayerAddCommand {
 }
 
 impl Command for LayerAddCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         let id = if self.image {
             layers.add_image(&self.name)
         } else {
@@ -26,7 +26,7 @@ impl Command for LayerAddCommand {
         self.added_id = Some(id);
     }
 
-    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if let Some(id) = self.added_id {
             layers.delete(id, crate::layers::Leftovers::Delete, shapes);
         }

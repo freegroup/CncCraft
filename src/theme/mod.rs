@@ -57,6 +57,11 @@ pub const INK: Color32 = Color32::from_rgb(0x1f, 0x29, 0x37);
 pub const MUTED: Color32 = Color32::from_rgb(0x6b, 0x72, 0x80);
 pub const SELECT: Color32 = Color32::from_rgb(0xe0, 0x20, 0xa0);
 pub const SHEET_LABEL: Color32 = Color32::WHITE;
+/// The rulers along the board: a light grey a little darker than the white board, in both themes,
+/// so they belong to the sheet and the red guide handles stand out on them.
+pub const RULER_FILL: Color32 = Color32::from_gray(232);
+/// Ticks and numbers on the rulers (dark on the light ruler, in both themes).
+pub const RULER_INK: Color32 = Color32::from_gray(70);
 pub const SHEET_LABEL_EDGE: Color32 = Color32::from_rgb(0xb4, 0xb8, 0xc0);
 pub const CONSTRAINT: Color32 = Color32::from_rgb(0x1e, 0x6f, 0xd9);
 pub const PRIMARY: Color32 = Color32::from_rgb(0x2a, 0x6c, 0xf0);

@@ -40,6 +40,10 @@ impl App {
                     if icon_button_tip(ui, Icon::Dimensions, self.show_dims, Tip::new(t!("Maße anzeigen"), t!("Blaue Maße sind Constraints. Linien: blau = frei, schwarz = Länge festgelegt."))).clicked() {
                         self.show_dims = !self.show_dims;
                     }
+                    let rulers = self.rulers_shown();
+                    if icon_button_tip(ui, Icon::Ruler, rulers, Tip::new(t!("Lineale"), t!("Zeigt die Lineale am Rand. Ein Klick darauf legt eine Hilfslinie an, die man zum Einrasten nutzen kann."))).clicked() {
+                        self.set_rulers_shown(!rulers);
+                    }
                 });
                 toolbar_group(ui, &t!("Constraints"), |ui| {
                     if icon_button_tip(ui, Icon::Distance, self.dim_mode.is_some(), Tip::new(t!("Abstand bemaßen"), t!("Zwei Punkte oder einen Punkt und eine Linie wählen, dann den Abstand eingeben.")).shortcut("D")).clicked() {

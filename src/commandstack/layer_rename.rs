@@ -17,12 +17,12 @@ impl LayerRenameCommand {
 }
 
 impl Command for LayerRenameCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         self.old_name = Some(layers.name(self.id).to_string());
         layers.rename(self.id, &self.new_name);
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if let Some(old) = &self.old_name {
             layers.rename(self.id, old);
         }

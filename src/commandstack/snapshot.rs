@@ -26,14 +26,14 @@ impl SnapshotCommand {
 }
 
 impl Command for SnapshotCommand {
-    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if let Some((s, l)) = &self.after {
             *shapes = s.clone();
             *layers = l.clone();
         }
     }
 
-    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if self.after.is_none() {
             self.after = Some((shapes.clone(), layers.clone()));
         }

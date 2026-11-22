@@ -18,13 +18,13 @@ impl LayerDeleteCommand {
 }
 
 impl Command for LayerDeleteCommand {
-    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         self.before_layers = Some(layers.clone());
         self.before_shapes = Some(shapes.clone());
         layers.delete(self.id, self.leftovers, shapes);
     }
 
-    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if let (Some(l), Some(s)) = (self.before_layers.take(), self.before_shapes.take()) {
             *layers = l;
             *shapes = s;

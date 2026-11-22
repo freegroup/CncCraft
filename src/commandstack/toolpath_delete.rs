@@ -16,13 +16,13 @@ impl ToolpathDeleteCommand {
 }
 
 impl Command for ToolpathDeleteCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if self.index < toolpaths.len() {
             self.removed = Some(toolpaths.remove(self.index));
         }
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
         if let Some(tp) = self.removed.take() {
             toolpaths.insert(self.index.min(toolpaths.len()), tp);
         }

@@ -49,6 +49,10 @@ pub struct Guide {
     pub axis: GuideAxis,
     /// Distance from the left edge (vertical) or the bottom edge (horizontal), in mm.
     pub offset: f64,
+    /// The distance typed as a formula or variable ("rand", "platte_b/2"): the source of truth;
+    /// `offset` is worked out from it whenever the variables change. None for a plain number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expr: Option<String>,
     /// The shapes soft-attached to this guide. The guide owns these; a shape doesn't know.
     #[serde(default)]
     pub attached: Vec<Attachment>,
@@ -56,7 +60,28 @@ pub struct Guide {
 
 impl Guide {
     pub fn new(id: u64, axis: GuideAxis, offset: f64) -> Guide {
-        Guide { id, axis, offset, attached: vec![] }
+        Guide { id, axis, offset, expr: None, attached: vec![] }
+    }
+
+    /// Follow a renamed variable; returns whether the formula used it.
+    pub fn rename_variable(&mut self, from: &str, to: &str) -> bool {
+        match &self.expr {
+            Some(e) if shape_edit::calc::names_in(e).iter().any(|n| n == from) => {
+                self.expr = Some(shape_edit::calc::rename_in(e, from, to));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// A variable the formula used is gone: the guide keeps its place as a plain number. Returns
+    /// whether it used it.
+    pub fn release_variable(&mut self, name: &str) -> bool {
+        let uses = self.expr.as_ref().is_some_and(|e| shape_edit::calc::names_in(e).iter().any(|n| n == name));
+        if uses {
+            self.expr = None;
+        }
+        uses
     }
 
     /// Attach `shape` by `side` (or move it to this side if already attached).
@@ -88,5 +113,16 @@ mod tests {
         assert!(g.detach(7));
         assert!(!g.detach(7));
         assert!(g.attached.is_empty());
+    }
+
+    #[test]
+    fn a_formula_follows_a_rename_and_is_released_with_its_variable() {
+        let mut g = Guide::new(1, GuideAxis::Horizontal, 40.0);
+        g.expr = Some("rand*2".into());
+        assert!(g.rename_variable("rand", "abstand"));
+        assert_eq!(g.expr.as_deref(), Some("abstand*2"));
+        assert!(!g.release_variable("rand"));
+        assert!(g.release_variable("abstand"));
+        assert_eq!((g.expr, g.offset), (None, 40.0));
     }
 }

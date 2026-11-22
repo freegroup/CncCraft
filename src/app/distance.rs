@@ -10,13 +10,13 @@
 //! whenever "Maße anzeigen" is on or the mode is active; click a value to change it, right-click
 //! it to delete the constraint.
 
-use super::fields::{field, fmt, value_label};
-use super::input::{ConstraintInput, Keys};
+use super::fields::{fmt, value_label};
+use super::input::ConstraintInput;
 use super::{App, DrawTool};
 use crate::theme::{CONSTRAINT, MUTED, SELECT};
 use egui::{Color32, Id, Pos2, Rect, Stroke, Vec2};
 use shape_edit::constraints::{self, axis_for_placement, Anchor, Axis, Distance, Measured};
-use shape_edit::{calc, vars, Constrains, ConstraintView, Item, Pt};
+use shape_edit::{calc, Constrains, ConstraintView, Item, Pt};
 
 /// The dimension mode: the picks so far, and the tool to go back to when another is chosen.
 pub(super) struct DimMode {
@@ -54,7 +54,7 @@ impl DimMode {
 const PICK_PX: f64 = 10.0;
 /// How long a press on a dimension value must stay still before its value can be changed, and how
 /// far it may wander (screen px) before it counts as a drag (estimated; Fusion-like).
-const HOLD_SECS: f64 = 0.45;
+pub(super) const HOLD_SECS: f64 = 0.45;
 const MOVE_PX: f32 = 8.0;
 
 /// What a press on a drawn value is on.
@@ -751,53 +751,32 @@ impl App {
             }
         };
         let id = Id::new("distance_value_field");
-        let invalid = e.error.is_some() || self.field_problem(&e.text).is_some();
-        let resp = field(ctx, id, at, &mut e.text, invalid);
-        e.rect = resp.rect;
-        // a click on one of last frame's suggestions takes that name
-        if let Some((_, name)) = e.input.click(ctx) {
-            e.text = vars::apply_completion(&e.text, &name);
-        }
-        e.input.cursor(ctx, 0, id, &e.text);
-        if resp.changed() {
-            e.error = None;
-        }
-        let (enter, esc) = ctx.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
-        // suggestions (the same for every number field): Tab is taken out of the input by
-        // `take_tabs` (the field would type it); Enter takes the cursor out of a one-line field in
-        // the same frame, so that counts as having it
+        // the shared number field: same suggestions, cursor, error line and Tab/Enter/Escape as
+        // the shape sizes, the fillet radii and the construction lines
         let tab = std::mem::take(&mut self.distance_tab);
-        let mut keys = Keys::read(ctx, tab);
-        let focused = ctx.memory(|m| m.has_focus(id)) || (resp.lost_focus() && enter);
         let names = self.var_names();
         let value = |n: &str| self.vars_resolved.value(n).ok();
-        let suggested = e.input.suggest(ctx, 0, id, resp.rect, &mut e.text, &names, &value, &mut keys, focused, 4.0);
-        let (listing, taken) = (suggested.listing, suggested.taken);
-        if let Some(why) = self.field_problem(&e.text) {
-            // the reason, under the field
-            painter.text(resp.rect.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, why, egui::FontId::proportional(11.5), crate::theme::error());
-        }
+        let lookup = self.vars_resolved.clone();
+        let (outcome, rect) = super::input::edit_number_field(ctx, id, at, &mut e.text, &mut e.input, &names, &value, &lookup, true, tab, e.error.is_some());
+        e.rect = rect;
         self.distance_edit = Some(e);
-        if esc && listing {
-            // the first Esc closes the list (by leaving the field), the next one cancels
-            ctx.memory_mut(|m| m.surrender_focus(id));
-        } else if esc {
-            self.distance_edit = None;
-            self.status = "Abgebrochen".into();
-        } else if enter && !taken {
-            if let Err(why) = self.take_distance() {
-                if let Some(e) = &mut self.distance_edit {
-                    e.error = Some(why.clone());
-                    e.input.select = Some(0);
+        match outcome {
+            super::input::NumberOutcome::Open => {}
+            super::input::NumberOutcome::Cancel => {
+                self.distance_edit = None;
+                self.status = "Abgebrochen".into();
+            }
+            super::input::NumberOutcome::Commit => {
+                if let Err(why) = self.take_distance() {
+                    if let Some(e) = &mut self.distance_edit {
+                        e.error = Some(why.clone());
+                        e.input.select = Some(0);
+                    }
+                    self.status = format!("Eingabe nicht übernommen: {why}");
                 }
-                self.status = format!("Eingabe nicht übernommen: {why}");
             }
         }
-        let _ = MUTED;
+        let _ = (MUTED, painter);
     }
 
-    /// Why typed text can't be a distance yet (shown under the field).
-    fn field_problem(&self, text: &str) -> Option<String> {
-        super::input::problem(text, &self.vars_resolved, true)
-    }
 }

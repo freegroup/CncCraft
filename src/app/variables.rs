@@ -60,6 +60,9 @@ impl App {
                     for item in &mut self.shapes {
                         users_changed |= item.rename_variable(from, to);
                     }
+                    for g in &mut self.guides {
+                        users_changed |= g.rename_variable(from, to);
+                    }
                 }
                 VarEvent::Removed(name) => {
                     for tp in &mut self.toolpaths {
@@ -72,6 +75,10 @@ impl App {
                     for item in &mut self.shapes {
                         users_changed |= item.release_variable(name);
                     }
+                    // a construction line that used it stays where it is, as a plain number
+                    for g in &mut self.guides {
+                        users_changed |= g.release_variable(name);
+                    }
                 }
                 VarEvent::Added(_) | VarEvent::ValueChanged(_) => {}
             }
@@ -83,13 +90,15 @@ impl App {
         // 3. a new value reaches the shapes bound to it and the toolpaths made from them
         let value_changed = events.iter().any(|e| matches!(e, VarEvent::ValueChanged(_)));
         let bound_changed = (value_changed || users_changed) && self.apply_bindings();
+        // construction lines given as formulas follow, and drag their attached shapes along
+        let guides_moved = self.resolve_guides();
         // depths of toolpaths that are formulas ("platte_d/2") follow the variables and the job
         let mut depth_changed = false;
         for tp in &mut self.toolpaths {
             depth_changed |= tp.resolve_depths(&self.vars_resolved);
         }
         let needs_initial = self.toolpaths.iter().any(|tp| tp.moves.is_empty() && !tp.shape_ids.is_empty());
-        if bound_changed || depth_changed || needs_initial {
+        if bound_changed || depth_changed || needs_initial || guides_moved {
             self.recompute_all();
         }
         self.var_log = events;

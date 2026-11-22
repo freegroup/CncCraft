@@ -114,9 +114,13 @@ impl App {
             }
         });
         ui.separator();
-        // every worksheet decoration can be shown or hidden on its own
+        // every worksheet decoration can be shown or hidden on its own; the grid isn't listed
+        // here — it follows "snap to grid" (shown exactly when it snaps)
         ui.label(egui::RichText::new(t!("Arbeitsfläche")).strong());
         for (name, shown) in self.sheet.switches() {
+            if name == "Raster" {
+                continue;
+            }
             ui.checkbox(shown, t!(name));
         }
         ui.separator();

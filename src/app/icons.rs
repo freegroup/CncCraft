@@ -582,6 +582,14 @@ impl Pen<'_> {
                 self.solid(self.disc(-9.0, 9.0, 3.2));
                 self.dashed(&[self.at(-9.0, 9.0), self.at(5.0, -5.0)]);
             }
+            Icon::Ruler => {
+                // a ruler: a long bar with tick marks, like the edge of a measuring rule
+                self.hollow(self.rrect(0.0, 0.0, 22.0, 9.0, 1.0));
+                for (i, x) in [-8.0, -4.0, 0.0, 4.0, 8.0].into_iter().enumerate() {
+                    let long = i % 2 == 0;
+                    self.line(&[(x, -4.5), (x, if long { 0.5 } else { -1.5 })]);
+                }
+            }
             Icon::Group => {
                 // two shapes held together by a dashed frame
                 self.dashed_rect(Rect::from_center_size(self.c, Vec2::splat(22.0 * self.scale)));
