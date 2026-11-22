@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/freegroup/CncCraft/compare/v1.22.0...v1.23.0) (2026-11-22)
+
+
+### Features
+
+* lock for construction lines and a toast widget ([93be30e](https://github.com/freegroup/CncCraft/commit/93be30ef420f5d919e13a5ee3e3f471b952f7596))
+
 # [1.22.0](https://github.com/freegroup/CncCraft/compare/v1.21.0...v1.22.0) (2026-11-22)
 
 
