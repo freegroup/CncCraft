@@ -270,6 +270,9 @@ struct Project {
     /// Construction lines. Old project files have none.
     #[serde(default)]
     guides: Vec<crate::guides::Guide>,
+    /// Whether the construction lines are locked. Old project files: open.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    guides_locked: bool,
 }
 
 struct PpDialog {
@@ -535,6 +538,9 @@ pub struct App {
     guide_drag: Option<(u64, f64)>,
     /// The guide selected on the ruler (deletable with Delete), if any.
     guide_selected: Option<u64>,
+    /// The lock in the rulers' corner: locked guides can't be added, moved, edited or deleted
+    /// (they still catch shapes). Open by default; saved with the project.
+    guides_locked: bool,
     /// Editing a guide's distance (its id, the text, the label rect). Opened by a long press on
     /// the number, like the distance constraints.
     guide_edit: Option<guides::GuideEdit>,
@@ -739,6 +745,7 @@ impl App {
             next_guide_id: 1,
             guide_drag: None,
             guide_selected: None,
+            guides_locked: false,
             guide_edit: None,
             guide_tab: false,
             guide_press: None,
@@ -916,6 +923,11 @@ impl App {
                 app.guides.push(by_formula);
                 app.vars_dirty = true;
                 app.next_guide_id = 3;
+                // and locked, to review how locked lines step back
+                if std::env::var("CNCCRAFT_GUIDES_LOCKED").is_ok() {
+                    app.guides_locked = true;
+                    app.guide_selected = None;
+                }
                 app.guide_selected = Some(1);
             }
         }
@@ -1024,7 +1036,7 @@ impl App {
 
     /// The document as project text, to tell whether it changed since it was last saved.
     fn project_text(&self) -> String {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked };
         serde_json::to_string(&proj).unwrap_or_default()
     }
 
@@ -2296,6 +2308,10 @@ impl App {
         let Some((path, frames)) = &mut self.shot else { return };
         *frames += 1;
         ctx.request_repaint();
+        // a toast just before the picture, to review its look
+        if *frames == 100 && std::env::var("CNCCRAFT_SHOW_TOAST").is_ok() {
+            crate::widgets::toast::post(ctx, t!("Hilfslinien gesperrt: Sie können nicht mehr verschoben, bearbeitet oder gelöscht werden. Formen rasten weiter an ihnen ein."));
+        }
         if *frames == 110 {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
         }
@@ -2468,6 +2484,7 @@ impl eframe::App for App {
                 self.run_pending(Some(ctx), what);
             }
         }
+        crate::widgets::toast::show(ctx);
         self.screenshot(ctx);
     }
 }

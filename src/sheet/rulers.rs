@@ -23,7 +23,9 @@ impl Decoration for Rulers {
         let board = view.board();
         let top = Rect::from_min_max(Pos2::new(board.left(), board.top() - RULER), Pos2::new(board.right(), board.top()));
         let left = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top()), Pos2::new(board.left(), board.bottom()));
-        for r in [top, left] {
+        // the corner where they meet belongs to the rulers too (it holds the guides' lock)
+        let corner = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top() - RULER), board.left_top());
+        for r in [top, left, corner] {
             painter.rect_filled(r, 0.0, RULER_FILL);
         }
         let line = Stroke::new(1.0_f32, RULER_INK);

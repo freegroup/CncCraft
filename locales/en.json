@@ -844,5 +844,12 @@
  "2 Schneiden, Hartmetall, scharf und poliert (wie für Aluminium).": "2 flutes, carbide, sharp and polished (as for aluminium).",
  "Schneidöl oder Isopropanol, Späne wegblasen.": "Cutting oil or isopropyl alcohol, blow the chips away.",
  "Zuletzt verwendet öffnen": "Open recent",
- "Liste leeren": "Clear list"
+ "Liste leeren": "Clear list",
+ "Hilfslinien gesperrt: Sie können nicht mehr verschoben, bearbeitet oder gelöscht werden. Formen rasten weiter an ihnen ein.": "Guides locked: they can no longer be moved, edited or deleted. Shapes still snap to them.",
+ "Hilfslinien entsperrt: Sie können wieder verschoben, bearbeitet und gelöscht werden.": "Guides unlocked: they can be moved, edited and deleted again.",
+ "Hilfslinien gesperrt": "Guides locked",
+ "Klicken, um die Hilfslinien wieder zu entsperren.": "Click to unlock the guides again.",
+ "Hilfslinien sperren": "Lock guides",
+ "Klicken, damit Hilfslinien nicht mehr verschoben, bearbeitet oder gelöscht werden können. Formen rasten weiter an ihnen ein.": "Click so guides can no longer be moved, edited or deleted. Shapes still snap to them.",
+ "Zeigt die Lineale am Rand. Ein Klick darauf legt eine Hilfslinie an, die man zum Einrasten nutzen kann.": "Shows the rulers at the edge. A click on one adds a guide that shapes can snap to."
 }

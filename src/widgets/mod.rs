@@ -4,6 +4,7 @@ mod combo_with_manage;
 mod eye;
 mod material_swatch;
 mod slide_toggle;
+pub mod toast;
 
 pub use combo_with_manage::combo_with_manage;
 pub use eye::eye;

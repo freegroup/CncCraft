@@ -73,7 +73,37 @@ impl App {
     /// The colour a guide is drawn in: its line, its handle on the ruler and its number all share
     /// it (selected guides in full red).
     fn guide_tone(&self, g: &Guide) -> Color32 {
-        if self.guide_selected == Some(g.id) { guide_colour() } else { guide_colour().gamma_multiply(0.85) }
+        if self.guides_locked {
+            // locked lines step back: half transparent
+            guide_colour().gamma_multiply(0.4)
+        } else if self.guide_selected == Some(g.id) {
+            guide_colour()
+        } else {
+            guide_colour().gamma_multiply(0.85)
+        }
+    }
+
+    /// The square where the two rulers meet: it holds the lock of the construction lines.
+    fn ruler_corner(&self) -> Rect {
+        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        Rect::from_min_max(Pos2::new(board.left() - RULER, board.top() - RULER), Pos2::new(board.left(), board.top()))
+    }
+
+    /// Lock or open the construction lines. Locked lines can't be added, moved, edited or deleted
+    /// (they still catch shapes); a toast says what changed.
+    fn set_guides_locked(&mut self, ctx: &egui::Context, locked: bool) {
+        self.guides_locked = locked;
+        self.guide_selected = None;
+        self.guide_edit = None;
+        self.guide_drag = None;
+        self.guide_press = None;
+        let text = if locked {
+            t!("Hilfslinien gesperrt: Sie können nicht mehr verschoben, bearbeitet oder gelöscht werden. Formen rasten weiter an ihnen ein.")
+        } else {
+            t!("Hilfslinien entsperrt: Sie können wieder verschoben, bearbeitet und gelöscht werden.")
+        };
+        self.status = text.clone();
+        crate::widgets::toast::post(ctx, text);
     }
 
     /// Where a guide's number label sits: outside the ruler, a little apart from it.
@@ -97,7 +127,7 @@ impl App {
         for g in &self.guides {
             let selected = self.guide_selected == Some(g.id);
             let tone = if target.contains(&g.id) { guide_colour() } else { self.guide_tone(g) };
-            let width = if target.contains(&g.id) { 2.4_f32 } else if selected { 1.6 } else { 1.0 };
+            let width = if target.contains(&g.id) { 2.4_f32 } else if self.guides_locked { 0.7 } else if selected { 1.6 } else { 1.0 };
             let line = Stroke::new(width, tone);
             match g.axis {
                 GuideAxis::Vertical => {
@@ -130,6 +160,9 @@ impl App {
                 };
             }
         }
+        // the lock in the rulers' corner
+        let corner = self.ruler_corner();
+        paint_lock(painter, corner.center(), self.guides_locked, if self.guides_locked { guide_colour() } else { crate::theme::RULER_INK });
         let mut labels = Vec::with_capacity(self.guides.len());
         for g in &self.guides {
             if self.guide_edit.as_ref().is_some_and(|e| e.id == g.id) {
@@ -175,8 +208,31 @@ impl App {
             self.guide_press = None;
             return;
         }
+        // the lock in the corner: a click locks or opens the construction lines
+        let corner = ui.interact(self.ruler_corner(), egui::Id::new("guides_lock"), egui::Sense::click());
+        let tip = if self.guides_locked {
+            super::Tip::new(t!("Hilfslinien gesperrt"), t!("Klicken, um die Hilfslinien wieder zu entsperren."))
+        } else {
+            super::Tip::new(t!("Hilfslinien sperren"), t!("Klicken, damit Hilfslinien nicht mehr verschoben, bearbeitet oder gelöscht werden können. Formen rasten weiter an ihnen ein."))
+        };
+        let corner = super::WithTip::tip(corner.on_hover_cursor(egui::CursorIcon::PointingHand), &tip);
+        if corner.clicked() {
+            let ctx = ui.ctx().clone();
+            self.set_guides_locked(&ctx, !self.guides_locked);
+        }
         let now = ui.input(|i| i.time);
         let pointer = ui.input(|i| i.pointer.hover_pos());
+        if self.guides_locked {
+            // locked: no editing; handles and numbers say so
+            let over = pointer.is_some_and(|p| self.guides.iter().any(|g| self.guide_handle_rect(g).expand(GRAB_PX).contains(p)) || self.guide_labels.iter().any(|(_, r)| r.contains(p)));
+            if over {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+            }
+            self.guide_press = None;
+            self.guide_edit = None;
+            self.show_guide_edit(ui);
+            return;
+        }
         if self.guide_edit.is_none() {
             let over_handle = pointer.and_then(|p| self.guides.iter().find(|g| self.guide_handle_rect(g).expand(GRAB_PX).contains(p)).map(|g| g.axis));
             let over_label = pointer.is_some_and(|p| self.guide_labels.iter().any(|(_, r)| r.contains(p)));
@@ -292,6 +348,11 @@ impl App {
         }
         let on_top = top.contains(p) || top.contains(grab);
         let on_left = left.contains(p) || left.contains(grab);
+        if self.guides_locked {
+            // locked: the rulers add, move and pick no lines (the press is still theirs)
+            self.guide_drag = None;
+            return on_top || on_left;
+        }
 
         // pointer in mm, clamped to the board
         let at_v = (((p.x - self.origin.x) / self.zoom) as f64).clamp(0.0, self.job.width);
@@ -418,6 +479,9 @@ impl App {
 
     /// Delete the selected guide through the command stack (undoable); its shapes stay put.
     pub(super) fn delete_selected_guide(&mut self) -> bool {
+        if self.guides_locked {
+            return false;
+        }
         let Some(id) = self.guide_selected else { return false };
         self.execute_command(Box::new(crate::commandstack::GuideRemoveCommand::new(id)));
         self.guide_selected = None;
@@ -523,4 +587,20 @@ fn upright_label(painter: &egui::Painter, at: Pos2, text: String, tone: Color32)
     let origin = Pos2::new(r.left() + 2.0, r.bottom() - 5.0);
     painter.add(egui::epaint::TextShape::new(origin, galley, tone).with_angle(-std::f32::consts::FRAC_PI_2));
     r
+}
+
+/// A small padlock centred on `c`: closed when `locked`, its shackle lifted open otherwise.
+fn paint_lock(painter: &egui::Painter, c: Pos2, locked: bool, colour: Color32) {
+    let body = Rect::from_min_max(Pos2::new(c.x - 4.5, c.y - 0.5), Pos2::new(c.x + 4.5, c.y + 5.5));
+    painter.rect_filled(body, 1.5, colour);
+    let lift = if locked { 0.0 } else { 3.0 };
+    let top = c.y - 4.0 - lift;
+    let mut shackle = vec![Pos2::new(c.x - 3.0, c.y - 0.5)];
+    shackle.extend((0..=10).map(|i| {
+        let a = std::f32::consts::PI * (1.0 + i as f32 / 10.0);
+        Pos2::new(c.x + 3.0 * a.cos(), top + 3.0 * a.sin())
+    }));
+    // open: the right leg stops short of the body
+    shackle.push(Pos2::new(c.x + 3.0, if locked { c.y - 0.5 } else { top + 1.5 }));
+    painter.add(egui::Shape::line(shackle, Stroke::new(1.6_f32, colour)));
 }
