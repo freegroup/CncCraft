@@ -9,15 +9,25 @@ from . import erste_schritte, entwurf, parametrisch, werkzeugwege, versionen
 
 CATEGORIES = [
     {"id": "erste-schritte", "title": "Erste Schritte", "symbol": "▶",
-     "text": "Programm kennenlernen, einen Job einrichten, sich in der Entwurfsansicht zurechtfinden."},
+     "title_en": "Getting started",
+     "text": "Programm kennenlernen, einen Job einrichten, sich in der Entwurfsansicht zurechtfinden.",
+     "text_en": "Get to know the program, set up a job and find your way around the design view."},
     {"id": "entwurf", "title": "Entwurfswerkzeuge", "symbol": "✎",
-     "text": "Formen zeichnen, bearbeiten, ausrichten und mit Booleschen Operationen kombinieren."},
+     "title_en": "Design tools",
+     "text": "Formen zeichnen, bearbeiten, ausrichten und mit Booleschen Operationen kombinieren.",
+     "text_en": "Draw, edit and align shapes and combine them with boolean operations."},
     {"id": "parametrisch", "title": "Parametrisch entwerfen", "symbol": "ƒ",
-     "text": "Variablen, Formeln und Bedingungen: Maße, die sich mit der Zeichnung ändern."},
+     "title_en": "Parametric design",
+     "text": "Variablen, Formeln und Bedingungen: Maße, die sich mit der Zeichnung ändern.",
+     "text_en": "Variables, formulas and constraints: dimensions that change with the drawing."},
     {"id": "werkzeugwege", "title": "Werkzeugwege", "symbol": "⛭",
-     "text": "Profil, Ausschnitt, Tasche, Bohren, V-Carving – berechnen, ansehen, ausgeben."},
+     "title_en": "Toolpaths",
+     "text": "Profil, Ausschnitt, Tasche, Bohren, V-Carving – berechnen, ansehen, ausgeben.",
+     "text_en": "Profile, cut-out, pocket, drilling, V-carving – compute, preview, output."},
     {"id": "versionen", "title": "Versionen", "symbol": "★",
-     "text": "Der Funktionsumfang der aktuellen Version und was gegenüber dem Original neu ist."},
+     "title_en": "Versions",
+     "text": "Der Funktionsumfang der aktuellen Version und was gegenüber dem Original neu ist.",
+     "text_en": "What the current version can do and what is new compared with the original."},
 ]
 
 PAGES = erste_schritte.PAGES + entwurf.PAGES + parametrisch.PAGES + werkzeugwege.PAGES + versionen.PAGES

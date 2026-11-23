@@ -267,8 +267,33 @@ PAGES = [
     },
     {
         "slug": "vervielfaeltigen", "cat": C, "title": "Vervielfältigen (Muster)",
+        "title_en": "Pattern (array)",
         "lead": "Aus einer Form ein rechteckiges Muster aus verbundenen Kopien machen – die mit der Form lebt.",
+        "lead_en": "Turn one shape into a rectangular pattern of linked copies that stays alive with the shape.",
         "neu": True,
+        "body_en": """
+<p>The <strong>Pattern</strong> tool (between Offset and the vector operations) turns <em>one</em> selected shape into a rectangular <strong>pattern</strong>. Unlike a plain copy, the pattern stays live: the copies (the “children”) hang on the source shape and follow it.</p>
+<p>Select a shape, open the tool and fill in the window:</p>
+<table>
+<tr><th>Field</th><th>Meaning</th></tr>
+<tr><td>Axis 1 (X) · Quantity</td><td>How many shapes side by side (the source counted in).</td></tr>
+<tr><td>Axis 1 (X) · Distance</td><td>Centre-to-centre distance across the width.</td></tr>
+<tr><td>Axis 2 (Y) · Quantity</td><td>How many above one another.</td></tr>
+<tr><td>Axis 2 (Y) · Distance</td><td>Centre-to-centre distance over the height.</td></tr>
+</table>
+{{img:vervielfaeltigen.png|The “Rectangular pattern” window with the preview “6 copies (3 × 2)”}}
+<h2>What makes a pattern special</h2>
+<ul>
+<li>The source gets a small <strong>pattern marker</strong> (four dots). A <strong>double-click</strong> on it reopens the window for changes.</li>
+<li>The children are drawn semi-transparent (60 %), as shadows of the source.</li>
+<li>The children are firmly tied to the source: they can only be selected together, not one by one.</li>
+<li><strong>Move</strong> the source and the whole pattern moves. <strong>Delete</strong> the source and the children go too.</li>
+<li>A [[werkzeugwege-uebersicht|toolpath]] or any other tool always applies to the source and acts on every child. Children have no toolpaths of their own.</li>
+</ul>
+<h2>Dissolving a pattern</h2>
+<p>With <em>Ungroup</em> (<kbd>⇧⌘G</kbd>) you dissolve the pattern: from then on each copy stands on its own, gets the source's toolpaths copied onto it and can be edited individually.</p>
+<div class="neu-box"><p>Quantity and distances take numbers, [[variablen|variables]] and [[formeln-in-feldern|formulas]]. For example <code>platte_b / 50</code> columns fill the board whatever its width, and when a variable changes the pattern rebuilds – all in the spirit of [[parametrisch-uebersicht|parametric]] work. Every step can be [[rueckgaengig-wiederholen|undone]].</p></div>
+""",
         "body": """
 <p>Das Werkzeug <strong>Vervielfältigen</strong> (zwischen Versatz und den Vektoroperationen) macht aus <em>einer</em> gewählten Form ein rechteckiges <strong>Muster</strong>. Anders als beim bloßen Kopieren bleibt das Muster lebendig: Die Kopien (die „Kinder“) hängen an der Urform und folgen ihr.</p>
 <p>Wählen Sie eine Form, öffnen Sie das Werkzeug und tragen Sie im Fenster ein:</p>
