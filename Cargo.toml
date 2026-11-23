@@ -1,6 +1,6 @@
 [package]
 name = "cnccraft"
-version = "1.24.0"
+version = "1.25.0"
 edition = "2021"
 description = "Ein CNC-Entwurfs- und Fräsprogramm (Nachbau der Kernfunktionen von Vectric Spark)"
 homepage = "https://freegroup.github.io/CncCraft/"

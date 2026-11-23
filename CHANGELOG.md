@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/freegroup/CncCraft/compare/v1.24.0...v1.25.0) (2026-11-23)
+
+
+### Features
+
+* shared number field for fillet radii, last job for new jobs ([d3cded1](https://github.com/freegroup/CncCraft/commit/d3cded1cf0e903a1fc6c96f2730d0774ef69d214))
+
 # [1.24.0](https://github.com/freegroup/CncCraft/compare/v1.23.0...v1.24.0) (2026-11-23)
 
 
