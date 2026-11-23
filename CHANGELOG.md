@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/freegroup/CncCraft/compare/v1.23.0...v1.24.0) (2026-11-23)
+
+
+### Features
+
+* guides placed by hand land on whole millimetres ([63f9427](https://github.com/freegroup/CncCraft/commit/63f9427cf5dc3756e161f723a55fee89a6c03c76))
+
 # [1.23.0](https://github.com/freegroup/CncCraft/compare/v1.22.0...v1.23.0) (2026-11-22)
 
 
