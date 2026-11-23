@@ -98,7 +98,10 @@ impl App {
             depth_changed |= tp.resolve_depths(&self.vars_resolved);
         }
         let needs_initial = self.toolpaths.iter().any(|tp| tp.moves.is_empty() && !tp.shape_ids.is_empty());
-        if bound_changed || depth_changed || needs_initial || guides_moved {
+        // a changed variable may resize a pattern source or change a pattern's count/distance
+        // (both can be formulas), so rebuild the children before recomputing toolpaths
+        let patterns_changed = (bound_changed || value_changed || guides_moved) && !self.patterns.is_empty() && self.sync_patterns();
+        if bound_changed || depth_changed || needs_initial || guides_moved || patterns_changed {
             self.recompute_all();
         }
         self.var_log = events;

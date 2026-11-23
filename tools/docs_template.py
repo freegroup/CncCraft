@@ -245,7 +245,7 @@ def product_html(categories, order, pages, page_url):
     lists = {
         "Parametrisch": ["parametrisch-uebersicht", "variablen", "formeln-in-feldern", "abstand-bemassen", "waagrecht-senkrecht", "hilfslinien"],
         "Zeichnung": ["auswahlwerkzeug", "linie-polylinie", "spline", "rechteck", "kreis", "ellipse", "polygon", "text-erstellen", "knotenbearbeitung", "dxf-importieren", "bild-als-vorlage"],
-        "Vektoren bearbeiten und kombinieren": ["boolesche-operationen", "versatz", "spiegeln", "zentrieren", "in-kurven-umwandeln", "vektoren-trennen-verbinden", "ecken-abrunden", "gruppieren", "kopieren-einfuegen"],
+        "Vektoren bearbeiten und kombinieren": ["boolesche-operationen", "versatz", "spiegeln", "zentrieren", "in-kurven-umwandeln", "vervielfaeltigen", "vektoren-trennen-verbinden", "ecken-abrunden", "gruppieren", "kopieren-einfuegen"],
         "CNC-Werkzeugwege": ["profil-werkzeugweg", "ausschnitt-werkzeugweg", "taschen-werkzeugweg", "nut-werkzeugweg", "bohr-werkzeugweg", "vcarving-werkzeugweg"],
         "Ausgabe": ["materialien", "werkzeugauswahl", "vorschau-werkzeugwege", "werkzeugwege-speichern"],
     }

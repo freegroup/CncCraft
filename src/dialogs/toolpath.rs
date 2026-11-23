@@ -220,7 +220,9 @@ impl App {
                 let right = ui.vertical(|ui| {
                     ui.set_width(column);
                     // Strategie: where the cutter goes, in which order and direction, and how it
-                    // enters the material
+                    // enters the material. Drilling has no choices here (centre of each contour, in
+                    // pecks), so the section is left out and Travel moves up into its place.
+                    if !matches!(tp.strategy, Strategy::Drill) {
                     group(ui, &t!("Strategie"), "tp_strategy", |ui| {
                         match &mut tp.strategy {
                             Strategy::Profile { side, climb, tabs, tab_count } => {
@@ -267,11 +269,7 @@ impl App {
                                 });
                                 ui.end_row();
                             }
-                            Strategy::Drill => {
-                                ui.label(t!("Bohren"));
-                                ui.label(egui::RichText::new(t!("in der Mitte jeder Kontur, in Hüben bis zur Zieltiefe; nach jedem Hub fährt der Bohrer ganz aus dem Loch, damit die Späne herauskommen")).small().color(muted()));
-                                ui.end_row();
-                            }
+                            Strategy::Drill => {} // drilling has no strategy choices; the section is not shown
                             Strategy::VCarve { max_depth } => {
                                 ui.label(t!("Tiefenbegrenzung"));
                                 ui.add(egui::DragValue::new(max_depth).speed(0.1).range(0.0..=100.0).suffix(" mm")).on_hover_text(t!("0 = nur durch den Fräserdurchmesser begrenzt"));
@@ -307,6 +305,7 @@ impl App {
                             ui.end_row();
                         }
                     });
+                    }
                     // Eilgang: the heights the cutter travels at between cuts (the job's, for all toolpaths)
                     group(ui, &t!("Eilgang"), "tp_travel", |ui| {
                         ui.label(t!("Sicher Z"));

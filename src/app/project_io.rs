@@ -11,8 +11,7 @@ impl App {
             self.path.clone()
         };
         let Some(path) = path else { return };
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked };
-        match serde_json::to_string_pretty(&proj).map_err(|e| e.to_string()).and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string())) {
+        match self.write_project(&path) {
             Ok(()) => {
                 self.add_recent(&path);
                 self.path = Some(path);
@@ -21,6 +20,13 @@ impl App {
             }
             Err(e) => self.status = format!("Speichern fehlgeschlagen: {e}"),
         }
+    }
+
+    /// Write the project to `path` as JSON (pattern children are left out, as references). Shared by
+    /// saving and the round-trip self-test.
+    pub(super) fn write_project(&self, path: &std::path::Path) -> Result<(), String> {
+        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
+        serde_json::to_string_pretty(&proj).map_err(|e| e.to_string()).and_then(|s| std::fs::write(path, s).map_err(|e| e.to_string()))
     }
 
     pub(super) fn open_project(&mut self) {
@@ -44,11 +50,21 @@ impl App {
                 self.aligns = p.aligns;
                 self.guides = p.guides;
                 self.guides_locked = p.guides_locked;
+                self.patterns = p.patterns;
                 self.next_guide_id = self.guides.iter().map(|g| g.id).max().unwrap_or(0) + 1;
                 self.guide_selected = None;
                 self.guide_drag = None;
                 self.layers = p.layers.repaired();
                 self.layers.sync(&mut self.shapes);
+                // pattern children are not saved (they are references to the source): rebuild them
+                // from each source and its pattern record now. Resolve the variables first so
+                // formula-based counts/distances build right away.
+                let job = [self.job.width, self.job.height, self.job.thickness];
+                self.vars_resolved = self.vars.resolve(&[(super::variables::FROM_JOB[0].0, job[0]), (super::variables::FROM_JOB[1].0, job[1]), (super::variables::FROM_JOB[2].0, job[2])]);
+                let groups: Vec<u64> = self.patterns.iter().map(|p| p.group).collect();
+                for g in groups {
+                    self.regenerate_pattern(g);
+                }
                 self.image_textures.clear();
                 self.calibrate_mode = None;
                 if !p.postprocs.is_empty() {

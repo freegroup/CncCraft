@@ -12,7 +12,7 @@ impl App {
             self.status = "Zum Gruppieren mindestens zwei Formen oder Gruppen auswählen".into();
             return;
         }
-        let before = (self.shapes.clone(), self.layers.clone());
+        let before = self.snapshot();
         let (ids, group) = (self.edit.selection.clone(), self.new_id());
         if group_items(&mut self.shapes, &ids, group) {
             self.push_undo_from(before);
@@ -27,7 +27,20 @@ impl App {
 
     /// Dissolve the outermost group of the shapes `ids`.
     pub(super) fn ungroup(&mut self, ids: &[u64]) {
-        let before = (self.shapes.clone(), self.layers.clone());
+        let before = self.snapshot();
+        // a pattern group is freed specially: the children become independent shapes, each gets the
+        // source's toolpaths copied onto it, and the pattern record goes away
+        let pattern_group = ids.iter().find_map(|id| {
+            let item = self.shapes.iter().find(|s| s.id == *id)?;
+            self.patterns.iter().find(|p| item.groups.last() == Some(&p.group)).map(|p| p.group)
+        });
+        if let Some(group) = pattern_group {
+            self.unlink_pattern(group);
+            self.push_undo_from(before);
+            self.recompute_all();
+            self.status = t!("Muster aufgelöst: die Kopien stehen jetzt für sich").into();
+            return;
+        }
         if ungroup_items(&mut self.shapes, ids) {
             self.push_undo_from(before);
         } else {

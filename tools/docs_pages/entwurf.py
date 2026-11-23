@@ -266,6 +266,34 @@ PAGES = [
 """,
     },
     {
+        "slug": "vervielfaeltigen", "cat": C, "title": "Vervielfältigen (Muster)",
+        "lead": "Aus einer Form ein rechteckiges Muster aus verbundenen Kopien machen – die mit der Form lebt.",
+        "neu": True,
+        "body": """
+<p>Das Werkzeug <strong>Vervielfältigen</strong> (zwischen Versatz und den Vektoroperationen) macht aus <em>einer</em> gewählten Form ein rechteckiges <strong>Muster</strong>. Anders als beim bloßen Kopieren bleibt das Muster lebendig: Die Kopien (die „Kinder“) hängen an der Urform und folgen ihr.</p>
+<p>Wählen Sie eine Form, öffnen Sie das Werkzeug und tragen Sie im Fenster ein:</p>
+<table>
+<tr><th>Feld</th><th>Bedeutung</th></tr>
+<tr><td>Achse 1 (X) · Anzahl</td><td>Wie viele Formen nebeneinander (die Urform mitgezählt).</td></tr>
+<tr><td>Achse 1 (X) · Abstand</td><td>Abstand von Mitte zu Mitte in der Breite.</td></tr>
+<tr><td>Achse 2 (Y) · Anzahl</td><td>Wie viele übereinander.</td></tr>
+<tr><td>Achse 2 (Y) · Abstand</td><td>Abstand von Mitte zu Mitte in der Höhe.</td></tr>
+</table>
+{{img:vervielfaeltigen.png|Das Fenster „Rechteckiges Muster“ mit der Vorschau „6 Kopien (3 × 2)“}}
+<h2>Was ein Muster besonders macht</h2>
+<ul>
+<li>Die Urform bekommt ein kleines <strong>Muster-Zeichen</strong> (vier Punkte). Ein <strong>Doppelklick</strong> darauf öffnet das Fenster wieder zum Ändern.</li>
+<li>Die Kinder werden halb durchscheinend (60 %) gezeichnet, als Schatten der Urform.</li>
+<li>Die Kinder sind fest mit der Urform verbunden: Sie lassen sich nur zusammen auswählen, nicht einzeln.</li>
+<li><strong>Bewegen</strong> Sie die Urform, bewegt sich das ganze Muster. <strong>Löschen</strong> Sie die Urform, verschwinden auch die Kinder.</li>
+<li>Ein [[werkzeugwege-uebersicht|Werkzeugweg]] oder ein anderes Werkzeug gilt immer der Urform und wirkt auf alle Kinder. Kinder haben keine eigenen Werkzeugwege.</li>
+</ul>
+<h2>Muster auflösen</h2>
+<p>Mit <em>Gruppe auflösen</em> (<kbd>⇧⌘G</kbd>) lösen Sie das Muster: Ab dann steht jede Kopie für sich, bekommt die Werkzeugwege der Urform als eigene Kopie und lässt sich einzeln bearbeiten.</p>
+<div class="neu-box"><p>Anzahl und Abstände nehmen Zahlen, [[variablen|Variablen]] und [[formeln-in-feldern|Formeln]]. So füllt zum Beispiel <code>platte_b / 50</code> Spalten die Platte, egal wie breit sie ist, und ändert sich eine Variable, baut sich das Muster neu – ganz im Sinne des [[parametrisch-uebersicht|parametrischen]] Arbeitens. Jeder Schritt lässt sich [[rueckgaengig-wiederholen|rückgängig]] machen.</p></div>
+""",
+    },
+    {
         "slug": "gruppieren", "cat": C, "title": "Gruppieren",
         "lead": "Mehrere Formen zu einer Gruppe zusammenfassen, die sich wie eine Form auswählen lässt.",
         "body": """

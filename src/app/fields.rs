@@ -390,6 +390,15 @@ impl App {
         for (dim, v, expr) in values {
             self.set_dimension(idx, dim, v, expr);
         }
+        self.propagate_source_dims(d.id);
+    }
+
+    /// After a typed size has changed shape `id`: if it is a pattern source, rebuild its children so
+    /// they take the new size too (dragging a handle already does this on the gesture path).
+    pub(super) fn propagate_source_dims(&mut self, id: u64) {
+        if self.patterns.iter().any(|p| p.source == id) && self.sync_patterns() {
+            self.recompute_all();
+        }
     }
 
     /// A press in the drawing beside the fields works like Enter: the values are taken and the

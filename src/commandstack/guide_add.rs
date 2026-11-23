@@ -18,14 +18,14 @@ impl GuideAddCommand {
 }
 
 impl Command for GuideAddCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
         if !guides.iter().any(|g| g.id == self.guide.id) {
             guides.push(self.guide.clone());
             self.added = true;
         }
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
         if self.added {
             guides.retain(|g| g.id != self.guide.id);
         }

@@ -436,19 +436,24 @@ impl Pen<'_> {
                 self.solid(self.rrect(0.0, 0.0, 10.0, 8.0, 1.5));
                 self.dashed_rect(Rect::from_center_size(self.c, Vec2::new(22.0, 20.0)));
             }
+            Icon::Array => {
+                // a 3×2 grid of small squares: the top-left one solid (the original), the rest hollow
+                for (r, c) in (0..2).flat_map(|r| (0..3).map(move |c| (r, c))) {
+                    let x = -8.0 + c as f32 * 8.0;
+                    let y = -5.0 + r as f32 * 10.0;
+                    let cell = Rect::from_center_size(self.at(x, y), Vec2::new(self.w(5.5), self.w(5.5)));
+                    if r == 0 && c == 0 {
+                        self.p.rect_filled(cell, 1.0, self.k.line);
+                    } else {
+                        self.p.rect_stroke(cell, 1.0, self.stroke());
+                    }
+                }
+            }
             Icon::Curves => {
                 let pts: Vec<Pos2> = (0..=24).map(|i| i as f32 / 24.0).map(|t| self.at(-10.0 + 20.0 * t, -(t * TAU).sin() * 7.0)).collect();
                 self.p.add(Shape::line(pts, self.stroke()));
                 self.node(-10.0, 0.0);
                 self.node(10.0, 0.0);
-            }
-            Icon::Delete => {
-                // a bin
-                self.solid(vec![self.at(-7.0, -5.0), self.at(-6.0, 10.0), self.at(6.0, 10.0), self.at(7.0, -5.0)]);
-                self.line(&[(-9.0, -6.0), (9.0, -6.0)]);
-                self.line(&[(-3.0, -6.0), (-3.0, -9.0), (3.0, -9.0), (3.0, -6.0)]);
-                self.p.line_segment([self.at(-2.0, -1.0), self.at(-2.0, 6.0)], Stroke::new(1.4_f32, self.k.back));
-                self.p.line_segment([self.at(2.0, -1.0), self.at(2.0, 6.0)], Stroke::new(1.4_f32, self.k.back));
             }
             Icon::Union | Icon::Subtract | Icon::Intersect => self.combine(icon),
             // the toolpath operations: a slab of wood seen at an angle, with what the cutter does to it

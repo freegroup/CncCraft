@@ -12,7 +12,7 @@ PAGES = [
 <ul>
 <li>Jobs mit Größe, Material und Nullpunkt; Projekte speichern, öffnen und zuletzt verwendete wieder öffnen ([[neuer-job]], [[dateien-speichern]]).</li>
 <li>Zeichnen: Linie, [[spline|Spline]], Rechteck, Kreis, Ellipse, Polygon, Text ([[auswahlwerkzeug]]); [[dxf-importieren|DXF importieren]], [[bild-als-vorlage|Bilder als Vorlage]].</li>
-<li>Bearbeiten: Knoten, Versatz, Spiegeln, Zentrieren, In Kurven umwandeln, Boolesche Operationen, [[gruppieren|Gruppieren]], [[vektoren-trennen-verbinden|Trennen, Löschen und Verbinden]], [[ecken-abrunden|Abrunden und Ohren]], Kopieren und Einfügen ([[knotenbearbeitung]], [[boolesche-operationen]]).</li>
+<li>Bearbeiten: Knoten, Versatz, [[vervielfaeltigen|Vervielfältigen (Gitter)]], Spiegeln, Zentrieren, In Kurven umwandeln, Boolesche Operationen, [[gruppieren|Gruppieren]], [[vektoren-trennen-verbinden|Trennen, Löschen und Verbinden]], [[ecken-abrunden|Abrunden und Ohren]], Kopieren und Einfügen ([[knotenbearbeitung]], [[boolesche-operationen]]).</li>
 <li>Ebenen mit Sichtbarkeit, Sperre und Farbe ([[ebenenliste]]).</li>
 <li>Werkzeugwege: Profil, Ausschnitt, Tasche (Versatz, Raster, Spirale), Nut, Bohren, V-Carving ([[werkzeugwege-uebersicht]]).</li>
 <li>Vorschau in 2D und 3D und Ausgabe als G-Code (mm, Zoll, GRBL) ([[vorschau-werkzeugwege]], [[werkzeugwege-speichern]]).</li>

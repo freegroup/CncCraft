@@ -404,6 +404,13 @@ impl Layers {
     }
 
     pub fn sync(&self, items: &mut [Item]) -> bool {
+        self.sync_with(items, |_| false)
+    }
+
+    /// Like [`sync`], but `also_frozen(id)` marks extra shapes frozen on top of their layer's lock
+    /// (pattern children: passive ghosts that are never picked or edited). Keeping it in the one
+    /// pass means the flag is stable frame to frame, so it does not look like a change every time.
+    pub fn sync_with(&self, items: &mut [Item], also_frozen: impl Fn(u64) -> bool) -> bool {
         let first = self.list.first().map_or(1, |l| l.id);
         let mut changed = false;
         for it in items {
@@ -411,7 +418,7 @@ impl Layers {
                 it.layer = first;
             }
             let hidden = !self.is_visible(it.layer);
-            let frozen = self.is_locked(it.layer);
+            let frozen = self.is_locked(it.layer) || also_frozen(it.id);
             changed |= it.hidden != hidden || it.frozen != frozen;
             it.hidden = hidden;
             it.frozen = frozen;

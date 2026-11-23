@@ -2,6 +2,7 @@
 //! toolpath tools on the right, like the original.
 
 mod align;
+mod array;
 mod cursor;
 mod distance;
 #[path = "dialogs/mod.rs"]
@@ -132,7 +133,8 @@ pub(crate) enum Icon {
     Center,
     Offset,
     Curves,
-    Delete,
+    /// The pattern tool: turn a shape into a rectangular grid of linked copies.
+    Array,
     Union,
     Subtract,
     Intersect,
@@ -273,6 +275,9 @@ struct Project {
     /// Whether the construction lines are locked. Old project files: open.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     guides_locked: bool,
+    /// Rectangular patterns (source shape + grid). Old project files have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    patterns: Vec<Pattern>,
 }
 
 struct PpDialog {
@@ -365,6 +370,49 @@ impl Sim {
     }
 }
 
+/// A rectangular pattern: a parametric grid of copies ("children") of one source shape. The
+/// source and all its children share the group id `group`, so picking, moving and scaling treat
+/// them as one (a "PatternShape"). The counts and the centre-to-centre distances are held as
+/// text, so each takes a number, a variable or a formula like every other value field; the
+/// children are rebuilt from them whenever the source moves or changes, or the variables do.
+/// Children never carry their own toolpaths: a toolpath on the source is applied to every child
+/// when toolpaths are worked out.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct Pattern {
+    /// The shape the grid is built from. Cell (0, 0) is the source itself.
+    pub source: u64,
+    /// The group the source and its children all belong to.
+    pub group: u64,
+    pub cols: String,
+    pub rows: String,
+    /// Centre-to-centre distance between neighbouring columns (X) and rows (Y), in millimetres.
+    pub dist_x: String,
+    pub dist_y: String,
+}
+
+impl Pattern {
+    /// Columns and rows as whole numbers (at least 1) and the centre distances as millimetres,
+    /// worked out from the texts with the given variables; `None` if any text can't be evaluated.
+    pub fn resolved(&self, vars: &dyn shape_edit::calc::Lookup) -> Option<(usize, usize, f64, f64)> {
+        let num = |t: &str| shape_edit::calc::eval(t.trim().trim_end_matches('=').trim(), vars).ok();
+        let count = |t: &str| num(t).map(|v| v.round().max(1.0) as usize);
+        Some((count(&self.cols)?, count(&self.rows)?, num(&self.dist_x)?, num(&self.dist_y)?))
+    }
+}
+
+/// The open pattern dialog: the settings being edited and which source they belong to. `group` is
+/// `Some` when an existing pattern is being changed (double-click on its marker), `None` for a new
+/// one being created from the current selection.
+pub(super) struct PatternDialog {
+    pub source: u64,
+    pub group: Option<u64>,
+    pub cols: String,
+    pub rows: String,
+    pub dist_x: String,
+    pub dist_y: String,
+    pub error: Option<String>,
+}
+
 /// Inline editing of a fillet radius in the drawing.
 pub(super) struct CornerEdit {
     pub id: u64,
@@ -439,6 +487,10 @@ pub struct App {
     mouse_mm: Option<Pt>,
     offset_dist: f64,
     offset_outside: bool,
+    /// The rectangular patterns in the drawing, one per source shape (see [`Pattern`]).
+    patterns: Vec<Pattern>,
+    /// The open pattern dialog (create or edit), if any.
+    pattern_dialog: Option<PatternDialog>,
     shot: Option<(PathBuf, u32)>,
     about: bool,
     /// The document as last saved, opened or created (as project text): what the changes are measured against.
@@ -579,6 +631,8 @@ pub struct App {
     dim_lines: Vec<(u64, shape_edit::Dim, [Pos2; 2])>,
     /// Fillet radius labels drawn in the canvas: (shape_id, path_index, node_index, screen rect).
     corner_labels: Vec<(u64, usize, usize, Rect)>,
+    /// Pattern source markers drawn in the canvas: (source_id, screen rect) for hover and double-click.
+    pattern_markers: Vec<(u64, Rect)>,
     /// The fillet radius being edited inline: (shape_id, path_index, node_index, text, rect, error).
     corner_edit: Option<CornerEdit>,
     /// The job's size (X, Y, Z) the variables were last worked out for.
@@ -687,6 +741,8 @@ impl App {
             mouse_mm: None,
             offset_dist: 5.0,
             offset_outside: true,
+            patterns: Vec::new(),
+            pattern_dialog: None,
             shot: shot.map(|p| (p, 0)),
             about: false,
             saved_text: String::new(),
@@ -771,6 +827,7 @@ impl App {
             dim_labels: Vec::new(),
             dim_lines: Vec::new(),
             corner_labels: Vec::new(),
+            pattern_markers: Vec::new(),
             corner_edit: None,
             vars_job: [0.0; 3],
             editor_layer: None,
@@ -868,6 +925,21 @@ impl App {
                 app.editor = Some(Editor::new(tp, Some(0), kind));
                 app.vars_dirty = true;
             }
+            // the pattern dialog, opened on the example hexagon, to review it
+            if std::env::var("CNCCRAFT_SHOW_ARRAY").is_ok() {
+                if let Some(hex) = app.shapes.iter().find(|s| matches!(s.shape, shape_edit::Shape::Polygon(_))).map(|s| s.id) {
+                    app.edit.selection = vec![hex];
+                    app.open_pattern_dialog(hex);
+                }
+            }
+            // an applied pattern, to review the ghost children and the source marker
+            if std::env::var("CNCCRAFT_SHOW_PATTERN").is_ok() {
+                if let Some(hex) = app.shapes.iter().find(|s| matches!(s.shape, shape_edit::Shape::Polygon(_))).map(|s| s.id) {
+                    app.edit.selection = vec![hex];
+                    let d = PatternDialog { source: hex, group: None, cols: "3".into(), rows: "2".into(), dist_x: "40".into(), dist_y: "40".into(), error: None };
+                    app.apply_pattern_dialog(&d);
+                }
+            }
             // a line or a circle selected, to review their selection feedback
             if let Ok(what) = std::env::var("CNCCRAFT_SHOW_STYLE") {
                 let id = if what == "circle" { app.add_shape(Circle::new([200.0, 150.0], 20.0)) } else { app.add_shape(shape_edit::Path::new(vec![[170.0, 140.0], [260.0, 165.0]], false)) };
@@ -959,19 +1031,25 @@ impl App {
         self.next_id
     }
 
+    /// A snapshot of everything the undo system restores: the shapes, the layers and the patterns.
+    fn snapshot(&self) -> crate::commandstack::Snapshot {
+        (self.shapes.clone(), self.layers.clone(), self.patterns.clone())
+    }
+
     fn push_undo(&mut self) {
-        let cmd = crate::commandstack::SnapshotCommand::new("edit", self.shapes.clone(), self.layers.clone());
+        let s = self.snapshot();
+        let cmd = crate::commandstack::SnapshotCommand::new("edit", s.0, s.1, s.2);
         self.undo.push_executed(Box::new(cmd));
     }
 
-    fn push_undo_from(&mut self, before: (Vec<Item>, crate::layers::Layers)) {
-        let mut cmd = crate::commandstack::SnapshotCommand::new("edit", before.0, before.1);
-        cmd.capture_after(&self.shapes, &self.layers);
+    fn push_undo_from(&mut self, before: crate::commandstack::Snapshot) {
+        let mut cmd = crate::commandstack::SnapshotCommand::new("edit", before.0, before.1, before.2);
+        cmd.capture_after(&self.shapes, &self.layers, &self.patterns);
         self.undo.push_executed(Box::new(cmd));
     }
 
     fn execute_command(&mut self, cmd: Box<dyn crate::commandstack::Command>) {
-        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides);
+        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
     }
 
     fn add_shape(&mut self, shape: impl Into<Shape>) -> u64 {
@@ -1031,6 +1109,8 @@ impl App {
         self.vars_dirty = true;
         self.distances.clear();
         self.aligns.clear();
+        self.patterns.clear();
+        self.pattern_dialog = None;
         self.align_mode = None;
         self.dim_mode = None;
         self.distance_edit = None;
@@ -1048,7 +1128,7 @@ impl App {
 
     /// The document as project text, to tell whether it changed since it was last saved.
     fn project_text(&self) -> String {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes.clone(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
         serde_json::to_string(&proj).unwrap_or_default()
     }
 
@@ -1144,6 +1224,8 @@ impl App {
         self.push_undo();
         let sel = std::mem::take(&mut self.edit.selection);
         self.shapes.retain(|s| !sel.contains(&s.id));
+        // a deleted pattern source takes its children (and the pattern record) with it
+        self.sync_patterns();
         self.edit.retain_existing(&self.shapes);
         self.prune_guide_attachments();
         self.recompute_all();
@@ -1163,6 +1245,8 @@ impl App {
         for it in self.shapes.iter_mut().filter(|s| self.edit.selection.contains(&s.id)) {
             it.shape = f(&it.shape);
         }
+        // a transformed pattern source rebuilds its children to match
+        self.sync_patterns();
         self.edit.retain_existing(&self.shapes);
     }
 
@@ -1220,16 +1304,20 @@ impl App {
         if let Some(ctx) = &self.egui_ctx {
             let job = self.job.clone();
             let shapes: Vec<Item> = self.shapes.clone();
-            let mut tps: Vec<Toolpath> = self.toolpaths.iter().map(|tp| tp.without_moves()).collect();
+            // compute copies cut the source and all its pattern children; the originals (source id
+            // only) are kept, so the stored list and selection stay unchanged
+            let originals: Vec<Vec<u64>> = self.toolpaths.iter().map(|tp| tp.shape_ids.clone()).collect();
+            let mut tps: Vec<Toolpath> = self.toolpaths.iter().map(|tp| self.with_pattern_children(tp.without_moves())).collect();
             let gen = self.tp_gen;
             let cancel = Arc::new(AtomicBool::new(false));
             let cancel2 = cancel.clone();
             let (tx, rx) = mpsc::channel();
             let ctx2 = ctx.clone();
             std::thread::spawn(move || {
-                for tp in &mut tps {
+                for (tp, orig) in tps.iter_mut().zip(originals.into_iter()) {
                     if cancel2.load(Ordering::Relaxed) { return; }
                     tp.compute(&job, &shapes);
+                    tp.shape_ids = orig; // keep the stored toolpath on the source only
                 }
                 let _ = tx.send(BgResult::All { tps, gen });
                 ctx2.request_repaint();
@@ -1237,8 +1325,13 @@ impl App {
             self.bg_compute = Some(BgCompute { rx, computing: None, cancel });
             self.sim = None;
         } else {
+            let job = self.job.clone();
+            let shapes = self.shapes.clone();
             for tp in &mut self.toolpaths {
-                tp.compute(&self.job, &self.shapes);
+                let orig = tp.shape_ids.clone();
+                tp.shape_ids = Self::toolpath_ids_with_children(&orig, &self.patterns, &shapes);
+                tp.compute(&job, &shapes);
+                tp.shape_ids = orig;
             }
             self.sim = None;
         }
@@ -1252,11 +1345,16 @@ impl App {
         tp.moves.clear();
         let job = self.job.clone();
         let shapes: Vec<Item> = self.shapes.clone();
+        // cut the source and its pattern children, but keep the stored toolpath on the source only
+        let orig_ids = tp.shape_ids.clone();
+        let compute_ids = Self::toolpath_ids_with_children(&orig_ids, &self.patterns, &shapes);
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel();
         let ctx2 = ctx.clone();
         std::thread::spawn(move || {
+            tp.shape_ids = compute_ids;
             tp.compute(&job, &shapes);
+            tp.shape_ids = orig_ids;
             let _ = tx.send(BgResult::One { tp, index });
             ctx2.request_repaint();
         });
@@ -1347,7 +1445,7 @@ impl App {
     // ---------------- UI ----------------
 
     fn do_undo(&mut self) {
-        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides) {
+        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns) {
             self.edit.retain_existing(&self.shapes);
             while let Some((ids, before)) = self.paste_log.last() {
                 if ids.iter().all(|id| !self.shapes.iter().any(|s| s.id == *id)) {
@@ -1366,7 +1464,7 @@ impl App {
     }
 
     fn do_redo(&mut self) {
-        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides) {
+        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns) {
             self.edit.retain_existing(&self.shapes);
             self.vars_dirty = true;
             self.recompute_all();
@@ -1387,7 +1485,7 @@ impl App {
         }
         let id = self.edit.selection[0];
         let Some(idx) = self.shapes.iter().position(|s| s.id == id) else { return };
-        let before = (self.shapes.clone(), self.layers.clone());
+        let before = self.snapshot();
         if crate::props::edit(ui, &mut self.shapes[idx].shape) {
             // typed in the panel: a plain number now, a formula would only undo it
             self.shapes[idx].bound.clear();
@@ -1398,7 +1496,15 @@ impl App {
     }
 
     fn open_editor(&mut self, kind: &'static str) {
-        let ids: Vec<u64> = self.edit.selection.clone();
+        // a toolpath binds to pattern sources, never to children: a child in the selection is
+        // replaced by its source, and duplicates are dropped, so one toolpath covers the grid
+        let mut ids: Vec<u64> = Vec::new();
+        for id in self.edit.selection.clone() {
+            let bind = self.pattern_source_of(id).unwrap_or(id);
+            if !ids.contains(&bind) {
+                ids.push(bind);
+            }
+        }
         let tp = default_toolpath(kind, &self.lib, &self.job, ids);
         self.editor = Some(Editor::new(tp, None, kind));
         if self.edit.selection.is_empty() {
@@ -1536,7 +1642,9 @@ impl App {
         // turn the guides' red (and the guide they'd hang on is drawn thicker)
         let snaps = !self.guide_snap_preview().is_empty();
         for s in self.shapes.iter().filter(|s| !s.hidden) {
-            let layer_alpha = self.layers.opacity(s.layer);
+            // pattern children are drawn as ghosts (60 %) of their source, so the live source stands out
+            let child_alpha = if self.pattern_of_child(s.id).is_some() { 0.6 } else { 1.0 };
+            let layer_alpha = self.layers.opacity(s.layer) * child_alpha;
             // RefImage shapes are rendered as textures above; only draw their selection outline
             if matches!(&s.shape, Shape::RefImage(_)) {
                 if self.edit.selection.contains(&s.id) || Some(s.id) == hover_id {
@@ -1778,6 +1886,7 @@ impl App {
         self.draw_distances(&painter, resp.hover_pos());
         self.draw_aligns(&painter);
         self.draw_corners(&painter);
+        self.draw_pattern_markers(&painter, resp.hover_pos());
         self.distance_edit_ui(ui.ctx(), &painter);
         self.dims_ui(ui.ctx(), &painter);
         self.corner_edit_ui(ui.ctx(), &painter);
@@ -1828,6 +1937,10 @@ impl App {
         // construction lines: grabbed and moved only on the ruler, never in the drawing. A ruler
         // interaction takes precedence over everything else.
         if self.guide_ruler_interact(resp) {
+            return;
+        }
+        // a pattern marker takes its clicks (double-click opens the dialog), before selection
+        if self.pattern_marker_interact(resp) {
             return;
         }
         // the level/upright mode takes the clicks the same way (a drag still moves shapes)
@@ -1888,15 +2001,24 @@ impl App {
                             self.push_undo();
                         }
                     }
-                } else if resp.clicked() {
+                } else if resp.clicked() || resp.double_clicked() {
                     if let Some(p) = mouse {
                         self.edit.press(&self.shapes, p, view, tool, additive);
                         self.edit.release(&self.shapes);
+                        // a click on a ghost child (frozen, so the editor ignored it) selects the
+                        // pattern through its source
+                        if self.edit.selection.is_empty() {
+                            if let Some(src) = self.pattern_child_source_at(p, view) {
+                                self.edit.selection = vec![src];
+                            }
+                        }
                     }
                 }
                 if dragging && self.edit.is_busy() {
                     if let Some(m) = pointer {
                         self.edit.drag(&mut self.shapes, m, uniform);
+                        // keep the ghost children following the source live, not only on drop
+                        self.sync_patterns();
                     }
                 }
                 if resp.drag_stopped() && self.edit.is_busy() {
@@ -1944,6 +2066,7 @@ impl App {
                         }
                     }
                     if outcome.changed_shapes() {
+                        self.sync_patterns();
                         self.sync_image_from_shape();
                         self.recompute_all();
                     }
@@ -2118,9 +2241,13 @@ impl App {
             d
         });
         if nudge != [0.0, 0.0] {
-            let before = (self.shapes.clone(), self.layers.clone());
+            let before = self.snapshot();
             let tool = self.edit_tool();
             if self.edit.nudge(&mut self.shapes, tool, nudge[0], nudge[1]) {
+                // nudging a pattern source (or a node of it) carries the children along
+                if self.sync_patterns() {
+                    self.recompute_all();
+                }
                 self.push_undo_from(before);
             }
         }
@@ -2146,9 +2273,11 @@ impl App {
             Action::Apply | Action::ClosePolyline | Action::NextLine => {}
             Action::Delete if self.delete_selected_constraint() => {}
             Action::Delete => {
-                let before = (self.shapes.clone(), self.layers.clone());
+                let before = self.snapshot();
                 if self.tool == DrawTool::NodeEdit && self.edit.active_node.is_some() {
                     if self.edit.delete_active_node(&mut self.shapes) {
+                        // a deleted node on a pattern source must reach the children too
+                        self.sync_patterns();
                         self.push_undo_from(before);
                         self.status = "Knoten gelöscht".into();
                         self.recompute_all();
@@ -2408,8 +2537,11 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.egui_ctx = Some(ctx.clone());
         self.sync_theme(ctx);
-        // a layer was switched on or off: what is on it joins or leaves the picking and the cutting
-        if self.layers.sync(&mut self.shapes) {
+        // a layer was switched on or off: what is on it joins or leaves the picking and the cutting.
+        // Pattern children are frozen too (passive ghosts of their source), in the same pass so the
+        // flag stays stable frame to frame and does not trigger an endless recompute.
+        let children = self.pattern_child_ids();
+        if self.layers.sync_with(&mut self.shapes, |id| children.contains(&id)) {
             self.edit.retain_existing(&self.shapes);
             self.recompute_all();
         }
@@ -2495,6 +2627,7 @@ impl eframe::App for App {
             self.sheet_interact(ctx);
         }
         self.job_dialog_ui(ctx);
+        self.pattern_dialog_ui(ctx);
         self.variables_dialog(ctx);
         self.new_variable_dialog(ctx);
         self.export_dialog_ui(ctx);

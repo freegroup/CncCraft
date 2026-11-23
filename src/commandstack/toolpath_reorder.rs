@@ -16,7 +16,7 @@ impl ToolpathReorderCommand {
 }
 
 impl Command for ToolpathReorderCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
         if self.from < toolpaths.len() {
             let item = toolpaths.remove(self.from);
             let target = if self.to > self.from { self.to - 1 } else { self.to };
@@ -24,7 +24,7 @@ impl Command for ToolpathReorderCommand {
         }
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, _guides: &mut Vec<crate::guides::Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
         let target = if self.to > self.from { self.to - 1 } else { self.to };
         let target = target.min(toolpaths.len().saturating_sub(1));
         if target < toolpaths.len() {

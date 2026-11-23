@@ -27,9 +27,10 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Polyline), Icon::Draw(DrawTool::Spline)],
     &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon), Icon::ImportDxf],
     &[Icon::Draw(DrawTool::Text)],
-    &[Icon::Delete, Icon::Curves],
+    &[Icon::Curves],
     &[Icon::Center, Icon::MirrorH, Icon::MirrorV],
     &[Icon::Offset],
+    &[Icon::Array],
     &[Icon::Draw(DrawTool::Trim), Icon::Draw(DrawTool::Erase), Icon::Draw(DrawTool::Connect), Icon::Draw(DrawTool::FilletOuter), Icon::Draw(DrawTool::FilletInner)],
     &[Icon::Union, Icon::Subtract, Icon::Intersect],
     &[Icon::Group, Icon::Ungroup],
@@ -37,10 +38,10 @@ const GROUPS: [&[Icon]; GROUP_COUNT] = [
 ];
 
 /// How many groups the tool column has (one remembered choice each when folded).
-pub(in crate::app) const GROUP_COUNT: usize = 11;
+pub(in crate::app) const GROUP_COUNT: usize = 12;
 
 /// What each group is, for the folded column's tooltips.
-const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Vektoroperationen"), tr!("Boolesche Operationen"), tr!("Gruppieren"), tr!("Bildwerkzeuge")];
+const GROUP_NAMES: [crate::lang::Tr; GROUP_COUNT] = [tr!("Modus"), tr!("Linien zeichnen"), tr!("Formen zeichnen"), tr!("Text"), tr!("Objekte bearbeiten"), tr!("Ausrichten und Spiegeln"), tr!("Versatz"), tr!("Vervielfältigen"), tr!("Vektoroperationen"), tr!("Boolesche Operationen"), tr!("Gruppieren"), tr!("Bildwerkzeuge")];
 
 /// Icons per row in the expanded column, and the size of one icon cell.
 const ROW: usize = 5;
@@ -76,11 +77,11 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Draw(DrawTool::FilletInner) => Tip::new(t!("Abrunden"), t!("Eine Ecke anklicken: Sie wird mit dem Radius aus dem Formular links abgerundet. Der Radius bleibt jederzeit änderbar.")),
         Icon::Transform => Tip::new(t!("Transformieren"), t!("Lage und Größe der Auswahl genau eintippen.")),
         Icon::Offset => Tip::new(t!("Versetzen"), t!("Eine neue Kontur im festen Abstand außen oder innen um die Auswahl.")).shortcut("O"),
+        Icon::Array => Tip::new(t!("Vervielfältigen"), t!("Macht aus einer Form ein rechteckiges Muster aus verbundenen Kopien. Doppelklick auf das Muster-Zeichen ändert es wieder.")).when_disabled(pick_one),
         Icon::MirrorH => Tip::new(t!("Waagrecht spiegeln"), t!("Spiegelt die Auswahl an ihrer senkrechten Mitte (links wird rechts).")).when_disabled(pick_one),
         Icon::MirrorV => Tip::new(t!("Senkrecht spiegeln"), t!("Spiegelt die Auswahl an ihrer waagrechten Mitte (oben wird unten).")).when_disabled(pick_one),
         Icon::Center => Tip::new(t!("Auf dem Material zentrieren"), t!("Schiebt die Auswahl in die Mitte der Platte.")).when_disabled(pick_one),
         Icon::Curves => Tip::new(t!("In Kurven umwandeln"), t!("Macht aus Rechteck, Kreis, Text und Co. frei bearbeitbare Vektoren. Ihre Maße lassen sich danach nicht mehr eintippen.")).when_disabled(pick_one),
-        Icon::Delete => Tip::new(t!("Löschen"), t!("Entfernt die ausgewählten Formen.")).shortcut("Entf").when_disabled(pick_one),
         Icon::Union => Tip::new(t!("Vereinen"), t!("Macht aus sich überlappenden Formen eine gemeinsame Umrissform.")).when_disabled(pick_two),
         Icon::Subtract => Tip::new(t!("Abziehen"), t!("Die zuerst gewählte Form minus alle anderen.")).when_disabled(pick_two),
         Icon::Intersect => Tip::new(t!("Schnittmenge"), t!("Behält nur die Fläche, die alle gewählten Formen gemeinsam haben.")).when_disabled(pick_two),
@@ -256,6 +257,7 @@ impl App {
             Icon::Draw(t) => (self.tool == t, true),
             Icon::Transform => (self.tool_form == Some(ToolForm::Transform), true),
             Icon::Offset => (self.tool_form == Some(ToolForm::Offset), true),
+            Icon::Array => (false, self.edit.selection.len() == 1),
             Icon::Union | Icon::Subtract | Icon::Intersect => (false, self.edit.selection.len() >= 2),
             Icon::Group => (false, self.selection_can_group()),
             Icon::Ungroup => (false, self.selection_has_group()),
@@ -296,11 +298,17 @@ impl App {
                 self.tool = DrawTool::Select;
                 self.mode = ViewMode::TwoD;
             }
+            Icon::Array => {
+                self.tool = DrawTool::Select;
+                self.mode = ViewMode::TwoD;
+                if let Some(id) = self.edit.selection.first().copied().filter(|_| self.edit.selection.len() == 1) {
+                    self.open_pattern_dialog(id);
+                }
+            }
             Icon::MirrorH => self.mirror(Flip::Horizontal),
             Icon::MirrorV => self.mirror(Flip::Vertical),
             Icon::Center => self.center_on_job(),
             Icon::Curves => self.to_curves(),
-            Icon::Delete => self.delete_selection(),
             Icon::Union => self.join_selection(),
             Icon::Subtract => self.subtract_selection(),
             Icon::Intersect => self.intersect_selection(),

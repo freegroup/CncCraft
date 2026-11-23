@@ -117,7 +117,7 @@ PAGES = [
 </ul>
 <p>Rechts oben wechselt der Knopf <strong>2D/3D</strong> zwischen Entwurf und [[ansicht-3d]]; daneben schaltet ein Knopf den Nullpunkt (Achsenkreuz) ein oder aus.</p>
 <h2>Die Werkzeugleiste</h2>
-<p>Links liegen die Werkzeuge in Gruppen: Modus (Auswählen, Transformieren, Knoten bearbeiten), Linien, Formen, Text, Objekte bearbeiten, Ausrichten und Spiegeln, Versatz, Boolesche Operationen sowie – abgesetzt – die Job-Einrichtung und die Variablen. Mit dem kleinen Pfeil oben links lässt sich die Leiste verkleinern; dann zeigt jede Gruppe nur das zuletzt benutzte Werkzeug.</p>
+<p>Links liegen die Werkzeuge in Gruppen: Modus (Auswählen, Transformieren, Knoten bearbeiten), Linien, Formen, Text, Objekte bearbeiten, Ausrichten und Spiegeln, Versatz, Vervielfältigen, Boolesche Operationen sowie – abgesetzt – die Job-Einrichtung und die Variablen. Mit dem kleinen Pfeil oben links lässt sich die Leiste verkleinern; dann zeigt jede Gruppe nur das zuletzt benutzte Werkzeug.</p>
 {{img:werkzeugleiste-eingeklappt.png|Die verkleinerte Werkzeugleiste}}
 <p>Fahren Sie mit der Maus über ein Werkzeug, erscheint ein kurzer Hilfetext. Die Statuszeile unten nennt außerdem, was als Nächstes zu tun ist (zum Beispiel „Zweiten Punkt wählen“).</p>
 <h2>Dekorationen der Arbeitsfläche</h2>

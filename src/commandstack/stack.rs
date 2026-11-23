@@ -3,11 +3,11 @@ use crate::toolpath::Toolpath;
 use crate::guides::Guide;
 use shape_edit::Item;
 
-pub type Snapshot = (Vec<Item>, Layers);
+pub type Snapshot = (Vec<Item>, Layers, Vec<crate::app::Pattern>);
 
 pub trait Command: std::fmt::Debug {
-    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>);
-    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>);
+    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>);
+    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>);
     #[allow(dead_code)]
     fn description(&self) -> &str;
 }
@@ -23,8 +23,8 @@ impl CommandStack {
         Self { undo: Vec::new(), redo: Vec::new(), limit }
     }
 
-    pub fn execute(&mut self, mut cmd: Box<dyn Command>, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>) {
-        cmd.execute(shapes, layers, toolpaths, guides);
+    pub fn execute(&mut self, mut cmd: Box<dyn Command>, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) {
+        cmd.execute(shapes, layers, toolpaths, guides, patterns);
         self.undo.push(cmd);
         if self.undo.len() > self.limit {
             self.undo.remove(0);
@@ -40,9 +40,9 @@ impl CommandStack {
         self.redo.clear();
     }
 
-    pub fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>) -> bool {
+    pub fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) -> bool {
         if let Some(mut cmd) = self.undo.pop() {
-            cmd.undo(shapes, layers, toolpaths, guides);
+            cmd.undo(shapes, layers, toolpaths, guides, patterns);
             self.redo.push(cmd);
             true
         } else {
@@ -50,9 +50,9 @@ impl CommandStack {
         }
     }
 
-    pub fn redo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>) -> bool {
+    pub fn redo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) -> bool {
         if let Some(mut cmd) = self.redo.pop() {
-            cmd.execute(shapes, layers, toolpaths, guides);
+            cmd.execute(shapes, layers, toolpaths, guides, patterns);
             self.undo.push(cmd);
             true
         } else {

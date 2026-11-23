@@ -34,10 +34,11 @@ impl App {
         if let Some((id, idx)) = self.edit.node_under(&self.shapes, mouse, view) {
             if let Some(item) = self.shapes.iter().find(|s| s.id == id) {
                 if let Some(toggled) = item.toggle_spline_node(idx) {
-                    let before = (self.shapes.clone(), self.layers.clone());
+                    let before = self.snapshot();
                     if let Some(slot) = self.shapes.iter_mut().find(|s| s.id == id) {
                         *slot = toggled;
                     }
+                    self.sync_patterns();
                     self.push_undo_from(before);
                     self.status = "Knotentyp umgeschaltet".into();
                     self.recompute_all();
@@ -45,8 +46,9 @@ impl App {
                 }
             }
         }
-        let before = (self.shapes.clone(), self.layers.clone());
+        let before = self.snapshot();
         if self.edit.insert_node(&mut self.shapes, mouse, view) {
+            self.sync_patterns();
             self.push_undo_from(before);
             self.status = "Knoten eingefügt".into();
             self.recompute_all();

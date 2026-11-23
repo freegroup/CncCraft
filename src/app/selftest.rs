@@ -110,7 +110,251 @@ const STAGES: &[Stage] = &[
     stage("Werkzeugweg-Dialog: die ComboBox ist immer über dem Dialog", combobox_above_dialog),
     stage("Tooltip: über dem Raster-Knopf erscheinen Überschrift, Text und links das Icon", tooltip_with_icon),
     stage("Tooltip: ein ausgegrautes Werkzeug zeigt seinen Tooltip und darunter den Grund", tooltip_on_disabled_tool),
+    stage("Vervielfältigen: 3×2 Gitter, das Original bleibt, die Werte als Formel", array_grid),
+    stage("Muster: die Urform verschieben nimmt die Kinder mit", pattern_source_moves),
+    stage("Muster: die Urform größer machen macht alle Kinder größer, Kind-IDs bleiben", pattern_source_resized),
+    stage("Muster: die Urform löschen löscht die Kinder", pattern_source_deleted),
+    stage("Muster auflösen: die Kinder stehen für sich und bekommen den Werkzeugweg kopiert", pattern_ungroup),
+    stage("Muster: die Kinder sind eingefroren (nur die Urform ist editierbar)", pattern_children_frozen),
+    stage("Muster: speichern und wieder laden bringt die Kinder zurück", pattern_round_trip),
+    stage("Muster: den Urkreis am Griff größer ziehen macht die Kinder mit groß", pattern_circle_grip),
+    stage("Muster: den Durchmesser des Urkreises eintippen macht die Kinder mit groß", pattern_circle_typed),
 ];
+
+/// A fresh rectangle; a 3×2 pattern (centre distances 25 mm X, 15 mm Y, columns from a formula)
+/// applied directly. 6 rectangles in all, the source where it was, the next column 25 mm right,
+/// the next row 15 mm down, all sharing the pattern's group.
+fn array_grid(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 150.0], 20.0, 10.0));
+    app.edit.selection = vec![id];
+    app.open_pattern_dialog(id);
+    let d = super::PatternDialog { source: id, group: None, cols: "1+2".into(), rows: "2".into(), dist_x: "25".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let check: Check = Box::new(move |app| {
+
+        let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group);
+        let members = group.map(|g| app.shapes.iter().filter(|s| s.groups.contains(&g)).count()).unwrap_or(0);
+        // source centre 40/150: a copy one column right at 65/150, one row below at 40/135
+        let centre = |app: &App, x: f64, y: f64| app.shapes.iter().filter_map(|s| s.bounds()).any(|(lo, hi)| near((lo[0] + hi[0]) / 2.0, x, 1e-6) && near((lo[1] + hi[1]) / 2.0, y, 1e-6));
+        let msg = format!("Gruppe {group:?} mit {members} Mitgliedern (erwartet 6), rechts: {}, unten: {}", centre(app, 65.0, 150.0), centre(app, 40.0, 135.0));
+        if members == 6 && centre(app, 65.0, 150.0) && centre(app, 40.0, 135.0) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// A pattern source, then the whole group moved by +100 in X: every child moves with it, so the
+/// grid keeps its shape and the child that was one column right is still one column right.
+fn pattern_source_moves(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 60.0], 20.0, 10.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "2".into(), rows: "1".into(), dist_x: "25".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    // move the whole group (source + child) by +100 mm in X
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    let members: Vec<u64> = app.shapes.iter().filter(|s| s.groups.contains(&group)).map(|s| s.id).collect();
+    for m in &members {
+        if let Some(it) = app.shapes.iter_mut().find(|s| s.id == *m) {
+            *it = it.translated(100.0, 0.0);
+        }
+    }
+    app.sync_patterns();
+    let check: Check = Box::new(move |app| {
+        let src_c = app.shapes.iter().find(|s| s.id == id).and_then(|s| s.bounds()).map(|(lo, hi)| [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0]);
+        // source now at 140/60, the child one column right at 165/60
+        let child = app.shapes.iter().filter_map(|s| s.bounds()).any(|(lo, hi)| near((lo[0] + hi[0]) / 2.0, 165.0, 1e-6) && near((lo[1] + hi[1]) / 2.0, 60.0, 1e-6));
+        let msg = format!("Urform-Mitte {src_c:?}, Kind rechts bei 165/60: {child}");
+        if matches!(src_c, Some(c) if near(c[0], 140.0, 1e-6) && near(c[1], 60.0, 1e-6)) && child {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// Children reference the source: resize the source and every child grows to the same size, while
+/// each child keeps its id (so its toolpath binding survives). A 2×1 pattern of a 20×10 rectangle,
+/// then the source set to 40×30.
+fn pattern_source_resized(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 100.0], 20.0, 10.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "2".into(), rows: "1".into(), dist_x: "60".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    let child_before: Vec<u64> = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).map(|s| s.id).collect();
+    // resize the source to 40×30 (keeping its centre) and sync
+    if let Some(it) = app.shapes.iter_mut().find(|s| s.id == id) {
+        it.shape = shape_edit::Rect::new([40.0, 100.0], 40.0, 30.0).into();
+    }
+    app.sync_patterns();
+    let check: Check = Box::new(move |app| {
+        let child_after: Vec<u64> = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).map(|s| s.id).collect();
+        let ids_kept = child_after == child_before;
+        // the child one column right (source centre 40, distance 60 → child centre 100) is now 40×30
+        let child_sized = app.shapes.iter().find(|s| s.id != id && s.groups.contains(&group)).and_then(|s| s.bounds()).map(|(lo, hi)| (hi[0] - lo[0], hi[1] - lo[1]));
+        let right = child_sized.is_some_and(|(w, h)| near(w, 40.0, 1e-6) && near(h, 30.0, 1e-6));
+        let msg = format!("Kind-IDs gleich: {ids_kept} ({child_before:?} → {child_after:?}), Kind-Größe {child_sized:?} (erwartet 40×30)");
+        if ids_kept && right {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// Deleting the source removes the whole pattern: no child is left and the pattern record is gone.
+fn pattern_source_deleted(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 30.0], 10.0, 10.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "3".into(), rows: "1".into(), dist_x: "15".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    // delete the source: it is the whole selection
+    app.edit.selection = vec![id];
+    app.delete_selection();
+    let check: Check = Box::new(move |app| {
+        let left = app.shapes.iter().filter(|s| s.groups.contains(&group)).count();
+        let has_pattern = app.patterns.iter().any(|p| p.group == group);
+        let msg = format!("{left} Gruppenmitglieder übrig (erwartet 0), Muster noch da: {has_pattern}");
+        if left == 0 && !has_pattern {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// A pattern with a toolpath on the source, then "Gruppe auflösen": the children become their own
+/// shapes (no shared group), the pattern record is gone, and each former child now carries a copy
+/// of the source's toolpath.
+fn pattern_ungroup(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Circle::new([60.0, 30.0], 4.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "3".into(), rows: "1".into(), dist_x: "12".into(), dist_y: "12".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    let children: Vec<u64> = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).map(|s| s.id).collect();
+    // a drill toolpath on the source (its id only)
+    app.toolpaths.push(crate::toolpath::default_toolpath("drill", &app.lib, &app.job, vec![id]));
+    app.edit.selection = vec![id];
+    app.ungroup(&[id]);
+    let check: Check = Box::new(move |app| {
+        let still_grouped = app.shapes.iter().any(|s| s.groups.contains(&group));
+        let has_pattern = app.patterns.iter().any(|p| p.group == group);
+        let each_child_cut = children.iter().all(|c| app.toolpaths.iter().any(|t| t.shape_ids == vec![*c]));
+        let msg = format!("noch gruppiert: {still_grouped}, Muster da: {has_pattern}, jedes Kind hat Werkzeugweg: {each_child_cut}");
+        if !still_grouped && !has_pattern && each_child_cut {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// After `freeze_pattern_children`, every child is frozen (passive ghost) and the source is not, so
+/// only the source is picked and shows handles.
+fn pattern_children_frozen(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 170.0], 10.0, 10.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "3".into(), rows: "1".into(), dist_x: "15".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    app.freeze_pattern_children();
+    let check: Check = Box::new(move |app| {
+        let children: Vec<&shape_edit::Item> = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).collect();
+        let all_frozen = !children.is_empty() && children.iter().all(|s| s.frozen);
+        let source_free = app.shapes.iter().find(|s| s.id == id).is_some_and(|s| !s.frozen);
+        let msg = format!("{} Kinder, alle eingefroren: {all_frozen}, Urform frei: {source_free}", children.len());
+        if all_frozen && source_free {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// A pattern is saved (children are not stored, being references) and loaded back: the children
+/// reappear, rebuilt from the source and the pattern record.
+fn pattern_round_trip(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Rect::new([40.0, 60.0], 10.0, 10.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "3".into(), rows: "2".into(), dist_x: "15".into(), dist_y: "15".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let path = std::env::temp_dir().join(format!("cnccraft-pattern-{}.cnccraft", std::process::id()));
+    let wrote = app.write_project(&path);
+    app.open_path(path.clone());
+    let _ = std::fs::remove_file(&path);
+    let check: Check = Box::new(move |app| {
+        // after loading, this pattern (by its source id) has six group members: source + 5 children
+        let members = app.patterns.iter().find(|p| p.source == id).map(|p| app.shapes.iter().filter(|s| s.groups.contains(&p.group)).count()).unwrap_or(0);
+        let msg = format!("Schreiben ok: {}, Muster nach Laden: {}, Gruppenmitglieder dieser Urform: {members} (erwartet 6)", wrote.is_ok(), app.patterns.len());
+        if wrote.is_ok() && members == 6 {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// Reproduces the circle bug: a pattern of a circle, then the source circle dragged larger by its
+/// right handle. The children must grow to the same diameter (not stay small).
+fn pattern_circle_grip(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Circle::new([40.0, 60.0], 6.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "2".into(), rows: "1".into(), dist_x: "40".into(), dist_y: "40".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    let (lo, _) = bounds_of(app, id);
+    let px = 40.0;
+    let dx = px as f64 / app.zoom as f64;
+    let check: Check = Box::new(move |app| {
+        let src_w = bounds_of(app, id).1[0] - bounds_of(app, id).0[0];
+        // the one child: its width should equal the source's new width
+        let child_w = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).find_map(|s| s.bounds()).map(|(l, h)| h[0] - l[0]);
+        let msg = format!("Urkreis-Breite jetzt {src_w:.1} mm, Kind-Breite {child_w:?} mm");
+        if src_w > 11.0 && matches!(child_w, Some(w) if near(w, src_w, 0.1)) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    let _ = (lo, dx);
+    (drag(handle_screen(app, id, Handle::Right), Vec2::new(px, 0.0)), check)
+}
+
+/// Typing a new diameter for the source circle (the Properties path) must reach the children too,
+/// not only dragging. Set the source to Ø 30 and check the child follows.
+fn pattern_circle_typed(app: &mut App) -> (Vec<Event>, Check) {
+    let id = app.add_shape(shape_edit::Circle::new([40.0, 120.0], 5.0));
+    app.edit.selection = vec![id];
+    let d = super::PatternDialog { source: id, group: None, cols: "2".into(), rows: "1".into(), dist_x: "40".into(), dist_y: "40".into(), error: None };
+    app.apply_pattern_dialog(&d);
+    let group = app.patterns.iter().find(|p| p.source == id).map(|p| p.group).unwrap();
+    let idx = app.shapes.iter().position(|s| s.id == id).unwrap();
+    // the same two calls a typed size in the Properties panel makes
+    app.set_dimension(idx, Dim::Diameter, 30.0, None);
+    app.propagate_source_dims(id);
+    let check: Check = Box::new(move |app| {
+        let src_w = bounds_of(app, id).1[0] - bounds_of(app, id).0[0];
+        let child_w = app.shapes.iter().filter(|s| s.id != id && s.groups.contains(&group)).find_map(|s| s.bounds()).map(|(l, h)| h[0] - l[0]);
+        let msg = format!("Urkreis-Ø {src_w:.1} mm, Kind-Ø {child_w:?} mm");
+        if near(src_w, 30.0, 0.1) && matches!(child_w, Some(w) if near(w, 30.0, 0.1)) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
 
 /// Resting the pointer on "Vereinen" with nothing selected: the same tip, and the reason below it.
 fn tooltip_on_disabled_tool(app: &mut App) -> (Vec<Event>, Check) {

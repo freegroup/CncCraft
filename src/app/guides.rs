@@ -484,6 +484,8 @@ impl App {
         let (from, had_attached) = (g.offset, !g.attached.is_empty());
         self.execute_command(Box::new(crate::commandstack::GuideMoveCommand::new(id, from, offset).with_expr(expr)));
         if had_attached {
+            // a moved attached pattern source rebuilds its children to follow
+            self.sync_patterns();
             self.recompute_all();
         }
     }
@@ -506,6 +508,8 @@ impl App {
         if let Some(g) = self.guides.iter_mut().find(|g| g.id == id) {
             g.offset = offset;
         }
+        // an attached shape that is a pattern source takes its children along
+        self.sync_patterns();
     }
 
     /// Delete the selected guide through the command stack (undoable); its shapes stay put.
