@@ -115,6 +115,8 @@ impl App {
         }
         if ok {
             let (job, is_new) = self.job_dialog.take().unwrap();
+            // the choices made here are where the next new job starts
+            self.last_job = Some(job.clone());
             if is_new {
                 self.new_job(job);
             } else {

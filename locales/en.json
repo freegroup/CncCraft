@@ -684,6 +684,7 @@
  "Gewählte Ecke: der Radius folgt dem Feld.": "Selected corner: the radius follows the field.",
  "Hier ist keine Ecke: eine Ecke eines Linienzugs, Rechtecks oder Polygons anklicken": "There is no corner here: click a corner of a polyline, rectangle or polygon",
  "Radius geändert": "Radius changed",
+ "Abgebrochen": "Cancelled",
  "Radius ändern · Feld leeren und Enter drücken entfernt die Rundung · Esc bricht ab": "Change radius · clear the field and press Enter to remove the rounding · Esc cancels",
  "Rundung entfernen": "Remove rounding",
  "Rundung entfernt": "Rounding removed",

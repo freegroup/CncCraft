@@ -21,6 +21,8 @@ const GRAB_PX: f32 = 1.0;
 const LABEL_THICK: f32 = 20.0;
 /// Space (screen pixels) between the ruler and a guide's number label.
 const LABEL_GAP: f32 = 8.0;
+/// Screen points between a ruler and the board's edge that belong to the board, not the ruler.
+const EDGE_GAP: f32 = 1.0;
 /// How close (mm on screen, in pixels) a shape edge must come to a guide to snap while dragging.
 const SNAP_PX: f32 = 8.0;
 /// A guide's number while it is being typed.
@@ -85,8 +87,23 @@ impl App {
 
     /// The square where the two rulers meet: it holds the lock of the construction lines.
     fn ruler_corner(&self) -> Rect {
-        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
-        Rect::from_min_max(Pos2::new(board.left() - RULER, board.top() - RULER), Pos2::new(board.left(), board.top()))
+        let board = self.board_screen();
+        Rect::from_min_max(Pos2::new(board.left() - RULER, board.top() - RULER), Pos2::new(board.left() - EDGE_GAP, board.top() - EDGE_GAP))
+    }
+
+    /// Where the rulers take the pointer: the strip above the board and the one left of it. Both
+    /// stop short of the board's edge, which belongs to the drawing (it is picked, for example,
+    /// to measure from the plate).
+    fn ruler_strips(&self) -> (Rect, Rect) {
+        let board = self.board_screen();
+        let top = Rect::from_min_max(Pos2::new(board.left(), board.top() - RULER), Pos2::new(board.right(), board.top() - EDGE_GAP));
+        let left = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top()), Pos2::new(board.left() - EDGE_GAP, board.bottom()));
+        (top, left)
+    }
+
+    /// The board on screen.
+    fn board_screen(&self) -> Rect {
+        Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]))
     }
 
     /// Lock or open the construction lines. Locked lines can't be added, moved, edited or deleted
@@ -108,7 +125,7 @@ impl App {
 
     /// Where a guide's number label sits: outside the ruler, a little apart from it.
     fn guide_label_pos(&self, g: &Guide) -> Pos2 {
-        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        let board = self.board_screen();
         match g.axis {
             // both sit outside their ruler, the same gap away, centred on the line; the label of a
             // horizontal guide stands upright (like the left ruler's numbers), so it needs no more
@@ -121,7 +138,7 @@ impl App {
     /// Draw the guides across the whole board, in the guide's colour (their handles and numbers
     /// come after the rulers, in `paint_guide_labels`).
     pub(super) fn paint_guides(&self, painter: &egui::Painter) {
-        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        let board = self.board_screen();
         // the guide a dragged shape would snap to is drawn thicker
         let target = self.guide_snap_preview();
         for g in &self.guides {
@@ -186,7 +203,7 @@ impl App {
     /// A guide's handle on the ruler: a tab across the ruler, centred on the line. It is what is
     /// drawn, hovered and grabbed.
     fn guide_handle_rect(&self, g: &Guide) -> Rect {
-        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
+        let board = self.board_screen();
         match g.axis {
             GuideAxis::Vertical => {
                 let x = self.to_screen([g.offset, 0.0]).x;
@@ -299,10 +316,10 @@ impl App {
         let names = self.var_names();
         let value = |n: &str| self.vars_resolved.value(n).ok();
         let tab = std::mem::take(&mut self.guide_tab);
-        let (outcome, _) = super::input::edit_number_field(&ctx, id, e.rect.center(), &mut e.text, &mut e.input, &names, &value, &self.vars_resolved, false, tab, false);
+        let (outcome, _) = super::input::edit_number_field(&ctx, id, e.rect.center(), &mut e.text, &mut e.input, &names, &value, &self.vars_resolved, super::input::Accepts::Any, tab, false);
         match outcome {
             super::input::NumberOutcome::Open => self.guide_edit = Some(e),
-            super::input::NumberOutcome::Cancel => self.status = "Abgebrochen".into(),
+            super::input::NumberOutcome::Cancel => self.status = t!("Abgebrochen").into(),
             super::input::NumberOutcome::Commit => self.take_guide_value(&e),
         }
     }
@@ -335,9 +352,7 @@ impl App {
         if !self.rulers_shown() {
             return false;
         }
-        let board = Rect::from_two_pos(self.to_screen([0.0, 0.0]), self.to_screen([self.job.width, self.job.height]));
-        let top = Rect::from_min_max(Pos2::new(board.left(), board.top() - RULER), Pos2::new(board.right(), board.top()));
-        let left = Rect::from_min_max(Pos2::new(board.left() - RULER, board.top()), Pos2::new(board.left(), board.bottom()));
+        let (top, left) = self.ruler_strips();
         let Some(p) = resp.interact_pointer_pos().or_else(|| resp.hover_pos()) else { return false };
         // where the button first went down (a drag only reports once the pointer has moved a bit,
         // by then it may be off the thin handle); fall back to the current position

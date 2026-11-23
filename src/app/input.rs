@@ -143,6 +143,17 @@ impl ConstraintInput {
     }
 }
 
+/// Which values a number field takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Accepts {
+    /// Any number (a distance from the board's edge may be zero).
+    Any,
+    /// Only values above zero (sizes, distances).
+    Positive,
+    /// Values above zero, or nothing at all: an empty field removes what it sets (a fillet).
+    PositiveOrEmpty,
+}
+
 /// What a run of the shared number field did this frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NumberOutcome {
@@ -158,11 +169,11 @@ pub(super) enum NumberOutcome {
 /// with the suggestion list, the cursor, the error line under it, and Tab/Enter/Escape handled.
 /// Every inline editor (shape sizes, distance values, fillet radii, construction lines) runs this,
 /// so they all behave the same. `tab` is the Tab press taken out of the input by `take_tabs`.
-/// `positive` rejects values of zero or less. Returns what the frame did; the caller reads the
+/// `accepts` says which values it takes. Returns what the frame did; the caller reads the
 /// committed `text` and applies it.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn edit_number_field(ctx: &Context, id: Id, at: egui::Pos2, text: &mut String, input: &mut ConstraintInput, names: &[String], value: &dyn Fn(&str) -> Option<f64>, lookup: &dyn calc::Lookup, positive: bool, tab: bool, error: bool) -> (NumberOutcome, Rect) {
-    let why = problem(text, lookup, positive);
+pub(super) fn edit_number_field(ctx: &Context, id: Id, at: egui::Pos2, text: &mut String, input: &mut ConstraintInput, names: &[String], value: &dyn Fn(&str) -> Option<f64>, lookup: &dyn calc::Lookup, accepts: Accepts, tab: bool, error: bool) -> (NumberOutcome, Rect) {
+    let why = problem(text, lookup, accepts);
     let resp = super::fields::field(ctx, id, at, text, error || why.is_some());
     // a click on one of last frame's suggestions takes that name
     if let Some((_, name)) = input.click(ctx) {
@@ -194,11 +205,14 @@ pub(super) fn edit_number_field(ctx: &Context, id: Id, at: egui::Pos2, text: &mu
 }
 
 /// Why `text` can't be worked out yet (an unknown variable, a broken formula, or a result that
-/// must be above zero when `positive`), for the line under a field.
-pub(super) fn problem(text: &str, lookup: &dyn calc::Lookup, positive: bool) -> Option<String> {
+/// must be above zero), for the line under a field.
+pub(super) fn problem(text: &str, lookup: &dyn calc::Lookup, accepts: Accepts) -> Option<String> {
     let t = text.trim().trim_end_matches('=').trim();
+    if t.is_empty() && accepts == Accepts::PositiveOrEmpty {
+        return None;
+    }
     match calc::eval(t, lookup) {
-        Ok(v) if positive && v <= 0.0 => Some(t!("muss größer als 0 sein").into()),
+        Ok(v) if accepts != Accepts::Any && v <= 0.0 => Some(t!("muss größer als 0 sein").into()),
         Ok(_) => None,
         Err(e) => Some(crate::lang::calc_message(&e)),
     }

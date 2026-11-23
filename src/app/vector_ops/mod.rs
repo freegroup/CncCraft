@@ -407,54 +407,65 @@ impl App {
         let Some(c) = paths.get(pi).and_then(|p| p.corner(ni)) else { return };
         let text = c.expr.clone().unwrap_or_else(|| super::fields::fmt(c.radius));
         let rect = self.corner_labels.iter().find(|(i, p, n, _)| *i == id && *p == pi && *n == ni).map(|(_, _, _, r)| *r).unwrap_or(egui::Rect::NOTHING);
-        self.corner_edit = Some(super::CornerEdit { id, path: pi, node: ni, text, rect, error: None });
+        self.corner_edit = Some(super::CornerEdit { id, path: pi, node: ni, text, rect, error: None, input: super::input::ConstraintInput::selecting(0) });
         self.status = t!("Radius ändern · Feld leeren und Enter drücken entfernt die Rundung · Esc bricht ab").into();
     }
 
-    /// The inline edit field for a fillet radius.
+    /// The inline edit field for a fillet radius: the shared number field (same as the shape
+    /// sizes, the distance values and the construction lines). It takes a number, a variable or
+    /// a formula; an empty field removes the rounding.
     pub(super) fn corner_edit_ui(&mut self, ctx: &egui::Context, _painter: &egui::Painter) {
-        let Some(mut ce) = self.corner_edit.take() else { return };
         let id = egui::Id::new("corner_edit");
-        let resp = super::fields::field(ctx, id, ce.rect.center(), &mut ce.text, ce.error.is_some());
-        if resp.lost_focus() || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                return;
-            }
-            let text = ce.text.trim().to_string();
-            if text.is_empty() {
-                self.push_undo();
-                self.set_corner_by_id(ce.id, ce.path, ce.node, None);
-                self.recompute_all();
-                self.status = t!("Rundung entfernt").into();
-                return;
-            }
-            match shape_edit::calc::eval(&text, &self.vars_resolved) {
-                Ok(v) if v > 0.0 => {
-                    let plain = !shape_edit::calc::is_formula(&text) && shape_edit::calc::names_in(&text).is_empty();
-                    let expr = (!plain).then_some(text.clone());
-                    let Some(index) = self.shapes.iter().position(|s| s.id == ce.id) else { return };
-                    let kind = corner_paths(&self.shapes[index].shape).and_then(|ps| ps.get(ce.path)?.corner(ce.node).map(|c| c.kind)).unwrap_or(shape_edit::CornerKind::Round);
-                    self.push_undo();
-                    self.set_corner(index, ce.path, ce.node, Some((kind, v, expr)));
-                    self.vops.radius_text = text;
-                    self.recompute_all();
-                    self.status = t!("Radius geändert").into();
+        let Some(mut ce) = self.corner_edit.take() else {
+            // the field is gone: so is its keyboard focus (tool keys must not type into it)
+            ctx.memory_mut(|m| {
+                if m.has_focus(id) {
+                    m.surrender_focus(id);
                 }
-                Ok(_) => {
-                    ce.error = Some(t!("Der Radius muss größer als 0 sein").into());
-                    self.corner_edit = Some(ce);
-                }
-                Err(e) => {
-                    ce.error = Some(crate::lang::calc_message(&e));
-                    self.corner_edit = Some(ce);
-                }
-            }
+            });
+            return;
+        };
+        let tab = std::mem::take(&mut self.corner_tab);
+        let names = self.var_names();
+        let value = |n: &str| self.vars_resolved.value(n).ok();
+        let lookup = self.vars_resolved.clone();
+        let (outcome, rect) = super::input::edit_number_field(ctx, id, ce.rect.center(), &mut ce.text, &mut ce.input, &names, &value, &lookup, super::input::Accepts::PositiveOrEmpty, tab, ce.error.is_some());
+        ce.rect = rect;
+        match outcome {
+            super::input::NumberOutcome::Open => self.corner_edit = Some(ce),
+            super::input::NumberOutcome::Cancel => self.status = t!("Abgebrochen").into(),
+            super::input::NumberOutcome::Commit => self.take_corner_radius(ce),
+        }
+    }
+
+    /// Put the typed radius on its corner: nothing removes the rounding, a plain number is just
+    /// the radius, a variable or formula is kept so the corner follows it.
+    fn take_corner_radius(&mut self, mut ce: super::CornerEdit) {
+        let text = ce.text.trim().trim_end_matches('=').trim().to_string();
+        if text.is_empty() {
+            self.push_undo();
+            self.set_corner_by_id(ce.id, ce.path, ce.node, None);
+            self.recompute_all();
+            self.status = t!("Rundung entfernt").into();
             return;
         }
-        if !resp.has_focus() {
-            resp.request_focus();
-        }
-        self.corner_edit = Some(ce);
+        let v = match shape_edit::calc::eval(&text, &self.vars_resolved) {
+            Ok(v) => v,
+            Err(e) => {
+                ce.error = Some(crate::lang::calc_message(&e));
+                self.corner_edit = Some(ce);
+                return;
+            }
+        };
+        let Some(index) = self.shapes.iter().position(|s| s.id == ce.id) else { return };
+        let plain = !shape_edit::calc::is_formula(&text) && shape_edit::calc::names_in(&text).is_empty();
+        let expr = (!plain).then_some(text.clone());
+        let kind = corner_paths(&self.shapes[index].shape).and_then(|ps| ps.get(ce.path)?.corner(ce.node).map(|c| c.kind)).unwrap_or(shape_edit::CornerKind::Round);
+        self.push_undo();
+        self.set_corner(index, ce.path, ce.node, Some((kind, v, expr)));
+        self.vops.radius_text = text;
+        self.recompute_all();
+        self.status = t!("Radius geändert").into();
     }
 
     /// Move a corner's label offset by a world-space delta.

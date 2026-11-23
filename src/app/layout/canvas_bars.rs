@@ -128,22 +128,11 @@ impl App {
         }
     }
 
-    /// Pointer position, the selection's size and the layer, as the original's bottom line.
+    /// Pointer position, the selection's size and the layer, as the original's bottom line. While
+    /// toolpaths are worked out in the background, a thin bar runs along its top edge: drawn over
+    /// the line, not as a strip of its own, so the drawing never shifts when it comes and goes.
     pub(in crate::app) fn status_bar(&mut self, ctx: &egui::Context) {
-        if self.bg_compute.is_some() {
-            egui::TopBottomPanel::bottom("compute_progress").exact_height(3.0).frame(egui::Frame::none()).show(ctx, |ui| {
-                let rect = ui.max_rect();
-                let t = ui.input(|i| i.time) % 2.0;
-                let frac = if t < 1.0 { t } else { 2.0 - t } as f32;
-                let glow_w = rect.width() * 0.25;
-                let cx = rect.left() + (rect.width() - glow_w) * frac + glow_w * 0.5;
-                let half = glow_w * 0.5;
-                let bar = egui::Rect::from_x_y_ranges(cx - half..=cx + half, rect.y_range());
-                ui.painter().rect_filled(rect, 0.0, crate::theme::separator());
-                ui.painter().rect_filled(bar, 1.5, crate::app::ACCENT);
-            });
-        }
-        egui::TopBottomPanel::bottom("status").exact_height(24.0).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(egui::Margin::symmetric(12.0, 3.0))).show(ctx, |ui| {
+        let panel = egui::TopBottomPanel::bottom("status").exact_height(24.0).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(egui::Margin::symmetric(12.0, 3.0))).show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
                 let mut text = String::new();
                 if let Some(p) = self.mouse_mm {
@@ -156,5 +145,21 @@ impl App {
                 ui.label(egui::RichText::new(text).monospace().size(12.0).color(ink()));
             });
         });
+        if self.bg_compute.is_some() {
+            let line = panel.response.rect;
+            let rect = egui::Rect::from_min_size(line.min, egui::Vec2::new(line.width(), PROGRESS_H));
+            let t = ctx.input(|i| i.time) % 2.0;
+            let frac = if t < 1.0 { t } else { 2.0 - t } as f32;
+            let glow_w = rect.width() * 0.25;
+            let cx = rect.left() + (rect.width() - glow_w) * frac + glow_w * 0.5;
+            let bar = egui::Rect::from_x_y_ranges(cx - glow_w * 0.5..=cx + glow_w * 0.5, rect.y_range());
+            let painter = ctx.layer_painter(panel.response.layer_id);
+            painter.rect_filled(rect, 0.0, crate::theme::separator());
+            painter.rect_filled(bar, 1.5, crate::app::ACCENT);
+            ctx.request_repaint();
+        }
     }
 }
+
+/// Height of the background-work bar on the status line's top edge.
+const PROGRESS_H: f32 = 3.0;

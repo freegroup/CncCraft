@@ -300,9 +300,9 @@ impl App {
     /// own focus moving sees it (that would only respect a text field one frame after it got the
     /// cursor), and count it for [`Self::dims_ui`]: +1 forward, −1 back with Shift.
     pub(super) fn take_tabs(&mut self, raw: &mut egui::RawInput) {
-        // the value field of a distance constraint or of a construction line: Tab takes a
-        // suggestion (noted for `distance_edit_ui` / `show_guide_edit`)
-        if self.distance_edit.is_some() || self.guide_edit.is_some() {
+        // the value field of a distance constraint, a fillet radius or a construction line: Tab
+        // takes a suggestion (noted for `distance_edit_ui` / `corner_edit_ui` / `show_guide_edit`)
+        if self.distance_edit.is_some() || self.corner_edit.is_some() || self.guide_edit.is_some() {
             let mut pressed = false;
             raw.events.retain(|e| match e {
                 egui::Event::Key { key: egui::Key::Tab, pressed: p, .. } => {
@@ -313,6 +313,8 @@ impl App {
             });
             if self.guide_edit.is_some() {
                 self.guide_tab |= pressed;
+            } else if self.corner_edit.is_some() {
+                self.corner_tab |= pressed;
             } else {
                 self.distance_tab |= pressed;
             }

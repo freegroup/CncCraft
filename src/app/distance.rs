@@ -757,14 +757,14 @@ impl App {
         let names = self.var_names();
         let value = |n: &str| self.vars_resolved.value(n).ok();
         let lookup = self.vars_resolved.clone();
-        let (outcome, rect) = super::input::edit_number_field(ctx, id, at, &mut e.text, &mut e.input, &names, &value, &lookup, true, tab, e.error.is_some());
+        let (outcome, rect) = super::input::edit_number_field(ctx, id, at, &mut e.text, &mut e.input, &names, &value, &lookup, super::input::Accepts::Positive, tab, e.error.is_some());
         e.rect = rect;
         self.distance_edit = Some(e);
         match outcome {
             super::input::NumberOutcome::Open => {}
             super::input::NumberOutcome::Cancel => {
                 self.distance_edit = None;
-                self.status = "Abgebrochen".into();
+                self.status = t!("Abgebrochen").into();
             }
             super::input::NumberOutcome::Commit => {
                 if let Err(why) = self.take_distance() {

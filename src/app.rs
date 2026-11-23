@@ -373,6 +373,8 @@ pub(super) struct CornerEdit {
     pub text: String,
     pub rect: Rect,
     pub error: Option<String>,
+    /// Suggestions and cursor of the shared number field.
+    pub(in crate::app) input: input::ConstraintInput,
 }
 
 pub struct App {
@@ -407,6 +409,9 @@ pub struct App {
     sim_quality: f64,
     start_page: bool,
     job_dialog: Option<(Job, bool)>,
+    /// The job the person set up last (size, units, zero point, material): a new job starts from
+    /// it. Remembered between runs.
+    last_job: Option<Job>,
     postprocs: Vec<gcode::PostProcessor>,
     post_idx: usize,
     pp_dialog: Option<PpDialog>,
@@ -547,6 +552,8 @@ pub struct App {
     /// Tab was pressed while the guide's number field was open (taken out of the input, it takes
     /// a suggestion there, as in the distance field).
     guide_tab: bool,
+    /// A Tab press taken for the open fillet-radius field.
+    corner_tab: bool,
     /// A long press on a guide number in progress: the guide id and when it began.
     guide_press: Option<(u64, f64)>,
     /// Where each guide's number label was drawn last frame (for the long press).
@@ -655,6 +662,7 @@ impl App {
             sim_quality: cc.storage.and_then(|s| s.get_string("cnccraft_sim_quality")).and_then(|v| v.parse().ok()).unwrap_or(sim::SIMULATION_QUALITY),
             start_page: true,
             job_dialog: None,
+            last_job: cc.storage.and_then(|s| s.get_string("cnccraft_last_job")).and_then(|json| serde_json::from_str(&json).ok()),
             postprocs: gcode::builtins(),
             post_idx: cc.storage.and_then(|s| s.get_string("cnccraft_post_idx")).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0),
             pp_dialog: None,
@@ -748,6 +756,7 @@ impl App {
             guides_locked: false,
             guide_edit: None,
             guide_tab: false,
+            corner_tab: false,
             guide_press: None,
             guide_labels: Vec::new(),
             distance_edit: None,
@@ -851,9 +860,12 @@ impl App {
                 app.vars_dirty = true;
             }
             // the toolpath editor of a pocket, to review its operation icon in the header
-            if std::env::var("CNCCRAFT_SHOW_POCKET").is_ok() {
-                let tp = default_toolpath("pocket", &app.lib, &app.job, vec![]);
-                app.editor = Some(Editor::new(tp, Some(0), "pocket"));
+            // the editor of one kind of toolpath (CNCCRAFT_SHOW_EDITOR=pocket, slot, profile …),
+            // to review its form and its operation icon
+            if let Ok(kind) = std::env::var("CNCCRAFT_SHOW_EDITOR") {
+                let kind = ["profile", "cutout", "pocket", "slot", "drill", "vcarve"].into_iter().find(|k| *k == kind).unwrap_or("pocket");
+                let tp = default_toolpath(kind, &app.lib, &app.job, vec![]);
+                app.editor = Some(Editor::new(tp, Some(0), kind));
                 app.vars_dirty = true;
             }
             // a line or a circle selected, to review their selection feedback
@@ -1072,7 +1084,15 @@ impl App {
                 }
             }
             // a new job starts without a material: the person has to choose one
-            Pending::NewJob => self.job_dialog = Some((Job { material: String::new(), ..Job::default() }, true)),
+            // a new job starts from the last one set up (its material only while it still exists);
+            // the very first one starts without a material: the person has to choose one
+            Pending::NewJob => {
+                let mut job = self.last_job.clone().unwrap_or_else(|| Job { material: String::new(), ..Job::default() });
+                if self.materials.get(&job.material).is_none() {
+                    job.material = String::new();
+                }
+                self.job_dialog = Some((job, true));
+            }
             Pending::Open => self.open_project(),
             Pending::OpenRecent(path) => self.open_path(path),
             Pending::Example => self.load_example(),
@@ -2367,6 +2387,9 @@ impl eframe::App for App {
         storage.set_string("cnccraft_layer_type", (if self.last_layer_image { "image" } else { "vector" }).into());
         storage.set_string("cnccraft_tools", self.lib.to_json());
         storage.set_string("cnccraft_materials", self.materials.to_json());
+        if let Some(json) = self.last_job.as_ref().and_then(|j| serde_json::to_string(j).ok()) {
+            storage.set_string("cnccraft_last_job", json);
+        }
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
