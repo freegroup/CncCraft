@@ -101,6 +101,36 @@
   var leiste = document.querySelector(".seitenleiste");
   if (knopf && leiste) knopf.addEventListener("click", function () { leiste.classList.toggle("offen"); });
 
+  // Bilder-Karussell der Produktseite: zeigt zuerst das erste Bild und wechselt nur, wenn man
+  // es will – Knöpfe, Pfeiltasten (wenn es den Fokus hat) oder Wischen; am Ende geht es von vorn los
+  document.querySelectorAll("[data-karussell]").forEach(function (k) {
+    var dias = k.querySelectorAll(".dia");
+    var zaehler = k.querySelector(".karussell-zaehler");
+    var jetzt = 0;
+    if (dias.length < 2) return;
+    function zeige(i) {
+      jetzt = (i + dias.length) % dias.length;
+      dias.forEach(function (d, j) { d.hidden = j !== jetzt; });
+      if (zaehler) zaehler.textContent = (jetzt + 1) + " / " + dias.length;
+    }
+    k.querySelectorAll(".karussell-knopf").forEach(function (b) {
+      b.addEventListener("click", function () { zeige(jetzt + Number(b.getAttribute("data-schritt"))); });
+    });
+    k.addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowLeft") { ev.preventDefault(); zeige(jetzt - 1); }
+      if (ev.key === "ArrowRight") { ev.preventDefault(); zeige(jetzt + 1); }
+    });
+    var startX = null;
+    k.addEventListener("touchstart", function (ev) { startX = ev.touches[0].clientX; }, { passive: true });
+    k.addEventListener("touchend", function (ev) {
+      if (startX === null) return;
+      var dx = ev.changedTouches[0].clientX - startX;
+      startX = null;
+      if (Math.abs(dx) > 40) zeige(jetzt + (dx < 0 ? 1 : -1));
+    });
+    k.classList.add("bereit");
+  });
+
   var cur = document.querySelector(".seitenleiste a[aria-current]");
   if (cur && cur.scrollIntoView) { var bar = cur.closest(".seitenleiste"); if (bar) bar.scrollTop = cur.offsetTop - bar.clientHeight / 3; }
 })();
