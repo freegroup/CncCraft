@@ -127,6 +127,11 @@ th { background: var(--flaeche2); font-weight: 600; }
 .tipp::before { content: "Tipp"; }
 .achtung::before { content: "Achtung"; }
 .neu-box::before { content: "Neu in CncCraft"; color: var(--neu-text); }
+/* English labels on the English site (html lang="en") */
+html[lang="en"] .hinweis::before { content: "Note"; }
+html[lang="en"] .tipp::before { content: "Tip"; }
+html[lang="en"] .achtung::before { content: "Caution"; }
+html[lang="en"] .neu-box::before { content: "New in CncCraft"; }
 .blaettern { display: flex; justify-content: space-between; gap: 16px; margin-top: 3em; padding-top: 20px; border-top: 1px solid var(--linie); }
 .blaettern a { display: block; border: 1px solid var(--linie); border-radius: 10px; padding: 10px 16px; min-width: 0; flex: 1; color: var(--text); }
 .blaettern a:hover { border-color: var(--marke); text-decoration: none; }

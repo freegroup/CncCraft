@@ -5,7 +5,29 @@ C = "entwurf"
 PAGES = [
     {
         "slug": "auswahlwerkzeug", "cat": C, "title": "Auswählen und verschieben",
+        "title_en": "Select and move",
         "lead": "Mit dem Auswahlwerkzeug klicken Sie Formen an, verschieben sie und ändern ihre Größe.",
+        "lead_en": "With the select tool you click shapes, move them and change their size.",
+        "body_en": """
+<p>The select tool (arrow, key <kbd>S</kbd>) is CncCraft's normal mode.</p>
+<h2>Selecting</h2>
+<ul>
+<li><strong>Click</strong> a shape to select it. A click on empty space clears the selection.</li>
+<li><strong>Drag a box</strong> to select all shapes inside it.</li>
+<li><kbd>⇧</kbd> + click adds shapes to the selection or takes them out again. <kbd>⌘A</kbd> selects everything.</li>
+</ul>
+<p>The selection appears with a box, handles at the corners and a centre mark. The status line at the bottom shows the width and height of the selection.</p>
+<h2>Moving and scaling</h2>
+<ul>
+<li><strong>Move:</strong> drag the shape – or the centre mark. With <kbd>⌥</kbd> or <kbd>⌃</kbd> while dragging a copy is made; with <kbd>⇧</kbd> nothing snaps.</li>
+<li><strong>Arrow keys</strong> move the selection in small steps, with <kbd>⇧</kbd> ten times.</li>
+<li><strong>Resize:</strong> drag a handle. <kbd>⇧</kbd> keeps the aspect ratio.</li>
+</ul>
+<h2>Typing dimensions</h2>
+<p><kbd>Enter</kbd> with exactly one shape selected opens the dimension fields right at the shape (<em>Edit ▸ Edit dimensions</em>). With <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>Tab</kbd> you switch fields. See [[eigenschaften-masse]].</p>
+<h2>Help while moving</h2>
+<p>While dragging, the selection snaps to nodes, centres, midpoints, job corners and the grid – more under [[einrasten]].</p>
+""",
         "body": """
 <p>Das Auswahlwerkzeug (Pfeil, Taste <kbd>S</kbd>) ist der Normalmodus von CncCraft.</p>
 <h2>Auswählen</h2>
@@ -29,7 +51,19 @@ PAGES = [
     },
     {
         "slug": "transformieren", "cat": C, "title": "Objekte transformieren",
+        "title_en": "Transform objects",
         "lead": "Das Formular „Objekte transformieren“ legt Lage und Größe einer Form durch Zahlen fest.",
+        "lead_en": "The “Transform objects” form sets a shape's position and size by numbers.",
+        "body_en": """
+<p>The “Transform objects” button in the toolbar (<em>Mode</em> group) opens a form for the selected shape to the left of the drawing. It is the same block of fields as under [[eigenschaften-masse]]:</p>
+<ul>
+<li><strong>Centre X / Centre Y</strong> – where the shape's centre lies (from the job's origin).</li>
+<li><strong>Width / Height</strong> for rectangle and ellipse, <strong>Radius</strong> for circle and polygon, <strong>Corners</strong> for the polygon, <strong>Corner radius</strong> for the rectangle.</li>
+<li><strong>Text</strong> and <strong>Height</strong> for text.</li>
+</ul>
+<p>Every field takes numbers, formulas and variables ([[formeln-in-feldern]]). Change a value and the shape follows at once; a click on the cross closes the form.</p>
+<p>If several shapes are selected, the form shows only their count – to move and scale them together use the [[auswahlwerkzeug|select tool]].</p>
+""",
         "body": """
 <p>Der Knopf „Objekte transformieren“ in der Werkzeugleiste (Gruppe <em>Modus</em>) öffnet links neben der Zeichnung ein Formular für die gewählte Form. Es ist dasselbe Feldblock wie unter [[eigenschaften-masse]]:</p>
 <ul>
@@ -43,7 +77,21 @@ PAGES = [
     },
     {
         "slug": "linie-polylinie", "cat": C, "title": "Linien und Polylinien zeichnen",
+        "title_en": "Draw lines and polylines",
         "lead": "Mit dem Linienwerkzeug entstehen offene oder geschlossene Linienzüge aus Strecken.",
+        "lead_en": "The line tool makes open or closed polylines from straight segments.",
+        "body_en": """
+<p>Choose the line tool (key <kbd>L</kbd>) and click the corner points into the drawing one after another. Between clicks a preview shows where the next segment leads. Snapping ([[einrasten]]) helps you hit points exactly.</p>
+<table>
+<tr><th>Key</th><th>Action</th></tr>
+<tr><td><kbd>Enter</kbd> or double-click</td><td>finish the polyline (open)</td></tr>
+<tr><td><kbd>Tab</kbd></td><td>close the polyline: the last point joins the first</td></tr>
+<tr><td><kbd>Space</kbd></td><td>finish and start a new polyline at once</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>cancel</td></tr>
+</table>
+<p>Only closed polylines can be cut out or cleared. Open lines suit “on the line” profiles and V-carving.</p>
+<div class="tipp"><p>A single segment can later be set to a fixed length with <em>Distance</em> ([[abstand-bemassen]]) or made level or upright with <em>Level/upright</em> ([[waagrecht-senkrecht]]).</p></div>
+""",
         "body": """
 <p>Wählen Sie das Linienwerkzeug (Taste <kbd>L</kbd>) und klicken Sie nacheinander die Eckpunkte in die Zeichnung. Zwischen den Klicks zeigt eine Vorschau, wohin die nächste Strecke führt. Einrasthilfen ([[einrasten]]) helfen, Punkte genau zu treffen.</p>
 <table>
@@ -59,7 +107,13 @@ PAGES = [
     },
     {
         "slug": "rechteck", "cat": C, "title": "Rechteck zeichnen",
+        "title_en": "Draw a rectangle",
         "lead": "Rechtecke ziehen Sie von einer Ecke zur gegenüberliegenden auf; abgerundete Ecken sind ein Maßfeld.",
+        "lead_en": "Draw rectangles from one corner to the opposite one; rounded corners are a dimension field.",
+        "body_en": """
+<p>Choose the rectangle (key <kbd>R</kbd>), press at a corner and drag to the opposite one. On release the rectangle is finished and selected.</p>
+<p>Under [[eigenschaften-masse]] you set the centre, <strong>width</strong> and <strong>height</strong> exactly; the <strong>corner radius</strong> rounds the corners. The corner radius also affects the toolpaths.</p>
+""",
         "body": """
 <p>Wählen Sie das Rechteck (Taste <kbd>R</kbd>), drücken Sie an einer Ecke und ziehen Sie zur gegenüberliegenden. Beim Loslassen ist das Rechteck fertig und ausgewählt.</p>
 <p>Unter [[eigenschaften-masse]] stellen Sie Mitte, <strong>Breite</strong> und <strong>Höhe</strong> genau ein; der <strong>Eckradius</strong> rundet die Ecken ab. Der Eckradius wirkt auch auf die Werkzeugwege.</p>
@@ -67,7 +121,13 @@ PAGES = [
     },
     {
         "slug": "kreis", "cat": C, "title": "Kreis zeichnen",
+        "title_en": "Draw a circle",
         "lead": "Kreise zeichnen Sie vom Mittelpunkt aus; der Radius ist ein Maßfeld.",
+        "lead_en": "Draw circles from the centre; the radius is a dimension field.",
+        "body_en": """
+<p>Choose the circle (key <kbd>C</kbd>), press on the centre and drag to the radius you want. The centre and radius can then be typed exactly under [[eigenschaften-masse]].</p>
+<p>Circles are the basis for holes: the [[bohr-werkzeugweg|drilling toolpath]] drills in the centre of every selected contour.</p>
+""",
         "body": """
 <p>Wählen Sie den Kreis (Taste <kbd>C</kbd>), drücken Sie auf den Mittelpunkt und ziehen Sie bis zum gewünschten Radius. Mitte und Radius lassen sich danach unter [[eigenschaften-masse]] genau eintippen.</p>
 <p>Kreise sind die Grundlage für Bohrungen: Der [[bohr-werkzeugweg|Bohr-Werkzeugweg]] bohrt in der Mitte jeder gewählten Kontur.</p>
@@ -75,21 +135,37 @@ PAGES = [
     },
     {
         "slug": "ellipse", "cat": C, "title": "Ellipse zeichnen",
+        "title_en": "Draw an ellipse",
         "lead": "Eine Ellipse hat zwei Maße: Breite und Höhe.",
+        "lead_en": "An ellipse has two dimensions: width and height.",
+        "body_en": """
+<p>Choose the ellipse and drag the bounding box it should fit into. Width and height can then be set more precisely under [[eigenschaften-masse]]. An ellipse with equal width and height is a circle.</p>
+""",
         "body": """
 <p>Wählen Sie die Ellipse und ziehen Sie den Begrenzungsrahmen auf, in den sie passen soll. Breite und Höhe stellen Sie danach unter [[eigenschaften-masse]] genauer ein. Eine Ellipse mit gleicher Breite und Höhe ist ein Kreis.</p>
 """,
     },
     {
         "slug": "polygon", "cat": C, "title": "Polygon zeichnen",
+        "title_en": "Draw a polygon",
         "lead": "Ein Polygon ist ein regelmäßiges Vieleck mit einstellbarer Eckenzahl.",
+        "lead_en": "A polygon is a regular n-gon with an adjustable number of corners.",
+        "body_en": """
+<p>Choose the polygon, press on the centre and drag to the size you want. It has at least three corners; change the number of <strong>corners</strong> and the <strong>radius</strong> under [[eigenschaften-masse]]. The example contains a hexagon.</p>
+""",
         "body": """
 <p>Wählen Sie das Polygon, drücken Sie auf den Mittelpunkt und ziehen Sie bis zur gewünschten Größe. Es hat mindestens drei Ecken; die Zahl der <strong>Ecken</strong> und den <strong>Radius</strong> ändern Sie unter [[eigenschaften-masse]]. Das Beispiel enthält ein Sechseck.</p>
 """,
     },
     {
         "slug": "text-erstellen", "cat": C, "title": "Text erstellen",
+        "title_en": "Create text",
         "lead": "Text wird als Vektorform eingefügt und kann danach gefräst oder in Kurven umgewandelt werden.",
+        "lead_en": "Text is inserted as a vector shape and can then be milled or converted to curves.",
+        "body_en": """
+<p>Choose the text tool and click in the drawing. A sample text is inserted; change its content in the <strong>Text</strong> field under [[eigenschaften-masse]], and the size with the <strong>Height</strong> field.</p>
+<p>Lettering suits [[vcarving-werkzeugweg|V-carving]] especially: the V-bit runs the letters at different depths by width. To edit the individual letter outlines, first convert the text [[in-kurven-umwandeln|to curves]].</p>
+""",
         "body": """
 <p>Wählen Sie das Textwerkzeug und klicken Sie in die Zeichnung. Ein Beispieltext wird eingefügt; seinen Inhalt ändern Sie im Feld <strong>Text</strong> unter [[eigenschaften-masse]], die Größe mit dem Feld <strong>Höhe</strong>.</p>
 <p>Schrift eignet sich besonders für das [[vcarving-werkzeugweg|V-Carving]]: Der V-Fräser fährt die Buchstaben je nach Breite unterschiedlich tief ab. Wollen Sie die einzelnen Buchstabenumrisse bearbeiten, wandeln Sie den Text zuerst [[in-kurven-umwandeln|in Kurven um]].</p>
@@ -97,7 +173,20 @@ PAGES = [
     },
     {
         "slug": "knotenbearbeitung", "cat": C, "title": "Knoten bearbeiten",
+        "title_en": "Node editing",
         "lead": "Im Knotenmodus ziehen Sie die Eckpunkte einer Form einzeln, fügen welche ein oder löschen sie.",
+        "lead_en": "In node mode you drag a shape's corner points one by one, insert them or delete them.",
+        "body_en": """
+<p>Select a shape and press <kbd>N</kbd> (or choose the “Node editing” tool). The shape now shows its nodes.</p>
+<ul>
+<li><strong>Drag a node:</strong> with the mouse. While dragging the node snaps to help points; <kbd>⇧</kbd> turns that off.</li>
+<li><strong>Insert a node:</strong> double-click the line.</li>
+<li><strong>Delete a node:</strong> select the node and press <kbd>Del</kbd>.</li>
+<li><strong>Move with the arrow keys:</strong> selected nodes in small steps (<kbd>⇧</kbd>: ten times).</li>
+</ul>
+<p><kbd>N</kbd> or <kbd>Esc</kbd> ends node mode. With no shape selected the status line reports “Select a vector first, then press ‘N’”.</p>
+<div class="hinweis"><p>Circles, rectangles and other basic shapes become free curves when node-edited. Dimensions that were tied to variables fall away – the shape then has no reference sizes any more.</p></div>
+""",
         "body": """
 <p>Wählen Sie eine Form und drücken Sie <kbd>N</kbd> (oder wählen Sie das Werkzeug „Knoten bearbeiten“). Die Form zeigt jetzt ihre Knoten.</p>
 <ul>
@@ -112,7 +201,18 @@ PAGES = [
     },
     {
         "slug": "versatz", "cat": C, "title": "Versatz",
+        "title_en": "Offset",
         "lead": "Der Versatz erzeugt eine Kontur im festen Abstand – größer oder kleiner als das Original.",
+        "lead_en": "Offset creates a contour at a fixed distance – larger or smaller than the original.",
+        "body_en": """
+<p>Select one or more shapes and open the “Offset vectors” tool (key <kbd>O</kbd>). In the form on the left you set:</p>
+<ul>
+<li><strong>Distance</strong> in millimetres,</li>
+<li><strong>Outside</strong> (the new contour is larger) or <strong>Inside</strong> (smaller).</li>
+</ul>
+<p>The button in the form creates the new contour as an extra shape and selects it; the original stays. If the offset gives no shape – for example because the contour vanishes entirely inward – the status line reports it (“Offset gives no shape”).</p>
+<div class="tipp"><p>A typical use: a border at a fixed distance from the board, or a contour that should be larger by the cutter radius.</p></div>
+""",
         "body": """
 <p>Wählen Sie eine oder mehrere Formen und öffnen Sie das Werkzeug „Vektoren versetzen“ (Taste <kbd>O</kbd>). Im Formular links stellen Sie ein:</p>
 <ul>
@@ -125,21 +225,37 @@ PAGES = [
     },
     {
         "slug": "spiegeln", "cat": C, "title": "Spiegeln",
+        "title_en": "Mirror",
         "lead": "Spiegeln kehrt die gewählten Formen um ihre Mitte waagrecht oder senkrecht um.",
+        "lead_en": "Mirror flips the selected shapes about their centre, level or upright.",
+        "body_en": """
+<p>Select the shapes and in the “Align and mirror” group click <strong>Mirror horizontally</strong> or <strong>Mirror vertically</strong>. The shapes are flipped about the centre of the selection; with several shapes their arrangement to one another is kept.</p>
+""",
         "body": """
 <p>Wählen Sie die Formen und klicken Sie in der Gruppe „Ausrichten und Spiegeln“ auf <strong>Waagrecht spiegeln</strong> oder <strong>Senkrecht spiegeln</strong>. Die Formen werden um die Mitte der Auswahl umgeklappt; bei mehreren Formen bleibt ihre Lage zueinander erhalten.</p>
 """,
     },
     {
         "slug": "zentrieren", "cat": C, "title": "Auf dem Material zentrieren",
+        "title_en": "Centre on the material",
         "lead": "Zentrieren schiebt die Auswahl in die Mitte des Werkstücks.",
+        "lead_en": "Centring moves the selection to the middle of the workpiece.",
+        "body_en": """
+<p>Select the shapes and click <strong>Centre on the material</strong> (“Align and mirror” group). The centre of the whole selection is placed on the centre of the board; its size does not change.</p>
+""",
         "body": """
 <p>Wählen Sie die Formen und klicken Sie auf <strong>Auf dem Material zentrieren</strong> (Gruppe „Ausrichten und Spiegeln“). Die Mitte der gesamten Auswahl wird auf die Mitte der Platte gelegt; ihre Größe ändert sich nicht.</p>
 """,
     },
     {
         "slug": "in-kurven-umwandeln", "cat": C, "title": "In Kurven umwandeln",
+        "title_en": "Convert to curves",
         "lead": "Das Umwandeln macht aus Grundformen und Text freie Kurven, deren Knoten Sie bearbeiten können.",
+        "lead_en": "Converting turns basic shapes and text into free curves whose nodes you can edit.",
+        "body_en": """
+<p>Select shapes or text and click <strong>Convert to curves</strong> (“Edit objects” group). A circle becomes a curve of nodes, text becomes the outlines of the letters. After that everything can be shaped in [[knotenbearbeitung|node editing]] mode.</p>
+<div class="hinweis"><p>Converted shapes no longer have dimension fields like “radius” or “text”, and variables on them are released. So if you still want to change the shape parametrically, convert it last.</p></div>
+""",
         "body": """
 <p>Wählen Sie Formen oder Text und klicken Sie auf <strong>In Kurven umwandeln</strong> (Gruppe „Objekte bearbeiten“). Aus einem Kreis wird eine Kurve aus Knoten, aus Text die Umrisse der Buchstaben. Danach lässt sich alles im Modus [[knotenbearbeitung|Knoten bearbeiten]] formen.</p>
 <div class="hinweis"><p>Umgewandelte Formen haben keine Maßfelder wie „Radius“ oder „Text“ mehr, und Variablen an ihnen werden gelöst. Wer die Form noch parametrisch ändern will, wandelt sie deshalb erst am Ende um.</p></div>
@@ -147,7 +263,20 @@ PAGES = [
     },
     {
         "slug": "boolesche-operationen", "cat": C, "title": "Boolesche Operationen",
+        "title_en": "Boolean operations",
         "lead": "Vereinen, Abziehen und Schnittmenge setzen aus mehreren geschlossenen Formen eine neue zusammen.",
+        "lead_en": "Union, subtract and intersect build a new shape from several closed shapes.",
+        "body_en": """
+<p>Select at least two closed shapes and in the “Boolean operations” group click one of the three buttons:</p>
+<table>
+<tr><th>Operation</th><th>Result</th></tr>
+<tr><td><strong>Union</strong></td><td>One shape covering all selected areas.</td></tr>
+<tr><td><strong>Subtract</strong></td><td>The shape selected first, with all others subtracted from it.</td></tr>
+<tr><td><strong>Intersect</strong></td><td>Only the area all selected shapes have in common.</td></tr>
+</table>
+<p>The original shapes are replaced by the result. With <kbd>⌘Z</kbd> you undo the step.</p>
+<div class="tipp"><p>For “Subtract” the order matters: select the base shape first (the board, for example), then the cut-outs with <kbd>⇧</kbd> + click.</p></div>
+""",
         "body": """
 <p>Wählen Sie mindestens zwei geschlossene Formen und klicken Sie in der Gruppe „Boolesche Operationen“ auf eine der drei Schaltflächen:</p>
 <table>
@@ -162,7 +291,26 @@ PAGES = [
     },
     {
         "slug": "kopieren-einfuegen", "cat": C, "title": "Kopieren, Einfügen und Duplizieren",
+        "title_en": "Copy, paste and duplicate",
         "lead": "Formen lassen sich kopieren und einfügen – samt ihrer Werkzeugwege und der Bedingungen zwischen ihnen.",
+        "lead_en": "Shapes can be copied and pasted – with their toolpaths and the constraints between them.",
+        "body_en": """
+<table>
+<tr><th>Command</th><th>Key</th><th>Effect</th></tr>
+<tr><td>Copy</td><td><kbd>⌘C</kbd></td><td>puts the selection on the clipboard</td></tr>
+<tr><td>Cut</td><td><kbd>⌘X</kbd></td><td>copies and deletes</td></tr>
+<tr><td>Paste</td><td><kbd>⌘V</kbd></td><td>pastes the copy</td></tr>
+<tr><td>Duplicate</td><td><kbd>⌘D</kbd></td><td>copies and pastes in one step</td></tr>
+<tr><td>Delete</td><td><kbd>Del</kbd></td><td>removes the selection</td></tr>
+</table>
+<p>All commands are also in the <em>Edit</em> menu. On Windows and Linux <kbd>Ctrl</kbd> applies instead of <kbd>⌘</kbd>.</p>
+<div class="neu-box"><p>When copying, CncCraft takes along what hangs on the shapes:</p>
+<ul>
+<li><strong>Toolpaths:</strong> if a shape belongs to a toolpath, a matching toolpath is made for the copy when pasting.</li>
+<li><strong>Constraints:</strong> distance and level/upright constraints are copied only if all shapes they connect are part of the copy.</li>
+</ul></div>
+<p>Hold <kbd>⌥</kbd> or <kbd>⌃</kbd> while moving and a copy is made at the destination.</p>
+""",
         "body": """
 <table>
 <tr><th>Befehl</th><th>Taste</th><th>Wirkung</th></tr>
@@ -184,7 +332,29 @@ PAGES = [
     },
     {
         "slug": "einrasten", "cat": C, "title": "Einrasten",
+        "title_en": "Snapping",
         "lead": "Beim Zeichnen und Verschieben rastet der Zeiger an Hilfspunkten ein, damit alles genau sitzt.",
+        "lead_en": "While drawing and moving, the pointer snaps to help points so everything sits exactly.",
+        "body_en": """
+<p>CncCraft has five kinds of snap point:</p>
+<ul>
+<li><strong>Node</strong> – corner points of existing shapes,</li>
+<li><strong>Centre</strong> – centre points,</li>
+<li><strong>Midpoint</strong> – the middle of an edge,</li>
+<li><strong>Job point</strong> – the corners and the centre of the workpiece,</li>
+<li><strong>Grid</strong> – the grid intersections.</li>
+</ul>
+<p>A small hint beside the pointer names what it is snapping to.</p>
+<h2>Settings</h2>
+<p>The switches <strong>Snap to grid</strong> and <strong>Snap to geometry</strong> in the header (“Decoration” group) turn the kinds on and off. In <em>View ▸ Snapping</em> there is also:</p>
+<ul>
+<li><em>To geometry (nodes, centres)</em> and <em>To job corners and centre</em> separately,</li>
+<li><strong>Radius</strong> – how close in screen points the pointer must be,</li>
+<li><strong>To grid</strong> with the grid spacing in millimetres.</li>
+</ul>
+<p>Hold <kbd>⇧</kbd> while dragging and nothing snaps.</p>
+<div class="neu-box"><p>The grid is only visible while <strong>Snap to grid</strong> is on – what you see is what snaps. In addition, moved shapes snap to [[hilfslinien|construction lines]]: with an edge or their centre, and the line colours the shape red while it would snap.</p></div>
+""",
         "body": """
 <p>CncCraft kennt fünf Arten von Einrastpunkten:</p>
 <ul>
@@ -208,7 +378,28 @@ PAGES = [
     },
     {
         "slug": "eigenschaften-masse", "cat": C, "title": "Maße und Eigenschaften",
+        "title_en": "Dimensions and properties",
         "lead": "Jede Form hat Maßfelder, in die Sie Zahlen, Formeln oder Variablen eintippen.",
+        "lead_en": "Every shape has dimension fields where you type numbers, formulas or variables.",
+        "body_en": """
+<p>The fields appear in the [[transformieren|Transform objects]] form and – with a shape selected and <kbd>Enter</kbd> pressed – right at the shape.</p>
+<table>
+<tr><th>Shape</th><th>Fields</th></tr>
+<tr><td>Rectangle</td><td>Centre X, Centre Y, Width, Height, Corner radius</td></tr>
+<tr><td>Circle</td><td>Centre X, Centre Y, Radius</td></tr>
+<tr><td>Ellipse</td><td>Centre X, Centre Y, Width, Height</td></tr>
+<tr><td>Polygon</td><td>Centre X, Centre Y, Radius, Corners</td></tr>
+<tr><td>Text</td><td>Centre X, Centre Y, Text, Height</td></tr>
+<tr><td>Curve (polyline)</td><td>Number of points, closed or open, contours</td></tr>
+</table>
+<h2>Entry</h2>
+<ul>
+<li>The decimal mark is the comma or the point.</li>
+<li><kbd>Tab</kbd>, <kbd>↑</kbd> and <kbd>↓</kbd> switch between fields; <kbd>Enter</kbd> accepts, <kbd>Esc</kbd> cancels.</li>
+<li>The fields do maths: <code>300/2 - 12</code> or <code>breite/2</code> is a valid entry ([[formeln-in-feldern]]).</li>
+<li>Values must be greater than zero where a dimension requires it (a radius, for example).</li>
+</ul>
+""",
         "body": """
 <p>Die Felder erscheinen im Formular [[transformieren|Objekte transformieren]] und – bei gewählter Form und gedrückter <kbd>Enter</kbd>-Taste – direkt an der Form.</p>
 <table>
@@ -231,8 +422,14 @@ PAGES = [
     },
     {
         "slug": "spline", "cat": C, "title": "Spline zeichnen",
+        "title_en": "Draw a spline",
         "lead": "Eine weiche Kurve durch die Punkte, die Sie anklicken.",
+        "lead_en": "A smooth curve through the points you click.",
         "neu": True,
+        "body_en": """
+<p>The <strong>Spline</strong> tool (key <kbd>P</kbd>) lays a smooth curve through every point you click. A double-click or <kbd>Enter</kbd> finishes it; a click on the first point closes it into a closed shape that can be cleared as a [[taschen-werkzeugweg|pocket]], for example.</p>
+<p>The points can then be moved with [[knotenbearbeitung|node editing]]; the curve stays smooth.</p>
+""",
         "body": """
 <p>Das Werkzeug <strong>Spline</strong> (Taste <kbd>P</kbd>) legt eine glatte Kurve durch jeden Punkt, den Sie anklicken. Ein Doppelklick oder <kbd>Enter</kbd> beendet sie; ein Klick auf den ersten Punkt schließt sie zu einer geschlossenen Form, die sich zum Beispiel als [[taschen-werkzeugweg|Tasche]] ausräumen lässt.</p>
 <p>Die Punkte lassen sich danach mit der [[knotenbearbeitung]] verschieben; die Kurve bleibt dabei weich.</p>
@@ -240,7 +437,18 @@ PAGES = [
     },
     {
         "slug": "vektoren-trennen-verbinden", "cat": C, "title": "Vektoren trennen, löschen und verbinden",
+        "title_en": "Trim, delete and join vectors",
         "lead": "Vektoren an Kreuzungen teilen, einzelne Stücke entfernen und offene Enden verbinden.",
+        "lead_en": "Split vectors at crossings, remove individual pieces and join open ends.",
+        "body_en": """
+<table>
+<tr><th>Tool</th><th>How it works</th></tr>
+<tr><td><strong>Trim</strong> (<kbd>T</kbd>)</td><td>Click a vector: it is split at every crossing with other vectors.</td></tr>
+<tr><td><strong>Delete vector</strong></td><td>Click a vector or a trimmed piece: it is removed. So you can take away overhanging ends after trimming.</td></tr>
+<tr><td><strong>Join</strong></td><td>Click two points one after another: they are joined with a line. Click both ends of a polyline and it closes.</td></tr>
+</table>
+<div class="tipp"><p>You need closed vectors for [[taschen-werkzeugweg|pockets]] and [[ausschnitt-werkzeugweg|cut-outs]] with an inside and outside; open lines suit [[profil-werkzeugweg|profiles]] and [[nut-werkzeugweg|slots]].</p></div>
+""",
         "body": """
 <table>
 <tr><th>Werkzeug</th><th>So geht es</th></tr>
@@ -253,7 +461,19 @@ PAGES = [
     },
     {
         "slug": "ecken-abrunden", "cat": C, "title": "Ecken abrunden und Ohren",
+        "title_en": "Round corners and ears",
         "lead": "Ecken mit einem Radius abrunden oder als „Ohr“ ausfräsen, damit Teile ineinander passen.",
+        "lead_en": "Round corners with a radius or cut an “ear” so parts fit into one another.",
+        "body_en": """
+<p>A round cutter cannot mill a sharp inside corner. Two tools handle this; you enter the radius in the form on the left.</p>
+<table>
+<tr><th>Tool</th><th>Effect</th></tr>
+<tr><td><strong>Round</strong></td><td>Click a corner: it is rounded with the radius.</td></tr>
+<tr><td><strong>Ear</strong></td><td>Click a corner: an arc is added around the corner point (dog-bone) so the cutter reaches fully into the corner and a square counterpart fits in.</td></tr>
+</table>
+<h2>Changing the radius later</h2>
+<p>At every rounded corner a label shows the radius, for example <code>R5</code>. <strong>Long-press</strong> opens it for typing – like any dimension field with [[formeln-in-feldern|formulas]] and [[variablen|variables]] (it then shows <code>R ƒfraeser/2</code>, for example). Clear the field and press <kbd>Enter</kbd> and the rounding disappears again.</p>
+""",
         "body": """
 <p>Ein runder Fräser kann keine scharfe Innenecke fräsen. Dafür gibt es zwei Werkzeuge; den Radius tragen Sie im Formular links ein.</p>
 <table>
@@ -320,7 +540,13 @@ PAGES = [
     },
     {
         "slug": "gruppieren", "cat": C, "title": "Gruppieren",
+        "title_en": "Grouping",
         "lead": "Mehrere Formen zu einer Gruppe zusammenfassen, die sich wie eine Form auswählen lässt.",
+        "lead_en": "Combine several shapes into a group that selects like a single shape.",
+        "body_en": """
+<p><strong>Group</strong> (<kbd>⌘G</kbd>) combines the selection: a click on any part then selects the whole group. Groups can themselves be grouped.</p>
+<p><strong>Ungroup</strong> (<kbd>⇧⌘G</kbd>) dissolves the outermost group of the selection, one level per click. Copies of a group form their own new group ([[kopieren-einfuegen]]).</p>
+""",
         "body": """
 <p><strong>Gruppieren</strong> (<kbd>⌘G</kbd>) fasst die Auswahl zusammen: Ein Klick auf irgendein Teil wählt danach die ganze Gruppe. Gruppen lassen sich selbst wieder gruppieren.</p>
 <p><strong>Gruppe auflösen</strong> (<kbd>⇧⌘G</kbd>) löst die äußerste Gruppe der Auswahl auf, eine Stufe je Klick. Kopien einer Gruppe bilden eine eigene, neue Gruppe ([[kopieren-einfuegen]]).</p>
@@ -328,7 +554,13 @@ PAGES = [
     },
     {
         "slug": "dxf-importieren", "cat": C, "title": "DXF importieren",
+        "title_en": "Import DXF",
         "lead": "Zeichnungen aus anderen Programmen als DXF-Datei übernehmen.",
+        "lead_en": "Bring in drawings from other programs as a DXF file.",
+        "body_en": """
+<p>The <strong>Import DXF</strong> tool reads a DXF file (R12, R14 and newer) and places its contents as <strong>one group</strong> in the drawing ([[gruppieren]]). Lines, arcs, circles and polylines become vectors you edit and give toolpaths like ones you drew yourself.</p>
+<p>If the file changes later in the other program, a <strong>right-click on the shape</strong> reloads it from disk.</p>
+""",
         "body": """
 <p>Das Werkzeug <strong>DXF importieren</strong> liest eine DXF-Datei (R12, R14 und neuer) und legt ihren Inhalt als <strong>eine Gruppe</strong> in die Zeichnung ([[gruppieren]]). Linien, Bögen, Kreise und Polylinien werden zu Vektoren, die Sie wie selbst gezeichnete bearbeiten und mit Werkzeugwegen versehen.</p>
 <p>Ändert sich die Datei später im anderen Programm, lädt ein <strong>Rechtsklick auf die Form</strong> sie neu von der Platte.</p>
@@ -336,8 +568,15 @@ PAGES = [
     },
     {
         "slug": "bild-als-vorlage", "cat": C, "title": "Bild als Vorlage",
+        "title_en": "Image as a template",
         "lead": "Ein Foto oder eine Skizze unter die Zeichnung legen, auf das richtige Maß bringen und nachzeichnen.",
+        "lead_en": "Place a photo or sketch under the drawing, bring it to the right scale and trace it.",
         "neu": True,
+        "body_en": """
+<p><strong>Insert image</strong> loads an image (PNG, JPEG) onto an image layer ([[ebene-neu]]). It sits translucent under the drawing; set the opacity in the [[ebenenliste|layer list]].</p>
+<h2>Calibrating</h2>
+<p>To make the image to scale, click two points in the image with <strong>Calibrate image</strong> whose real distance you know (such as the ends of a ruler in the photo), and type the distance. CncCraft scales the image so it matches the board 1:1 – after that you can trace on it to exact size.</p>
+""",
         "body": """
 <p><strong>Bild einfügen</strong> lädt ein Bild (PNG, JPEG) auf eine Bild-Ebene ([[ebene-neu]]). Es liegt durchscheinend unter der Zeichnung; die Deckkraft stellen Sie in der [[ebenenliste]] ein.</p>
 <h2>Kalibrieren</h2>

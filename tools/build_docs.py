@@ -62,14 +62,15 @@ def page_url(slug, from_depth):
     return f"{rel_to_root(from_depth)}{HELP}/{PAGE_DIR}/{slug}/index.html"
 
 
-def resolve(body, pages, depth):
-    """[[slug]] und [[slug|Text]] zu Links, {{img:datei|Beschreibung}} zu Abbildungen."""
+def resolve(body, pages, depth, lang="de"):
+    """[[slug]] und [[slug|Text]] zu Links, {{img:datei|Beschreibung}} zu Abbildungen. Ohne
+    eigenen Text nimmt ein Link den Titel der Zielseite in der aktiven Sprache."""
 
     def link(m):
         slug, _, text = m.group(1).partition("|")
         if slug not in pages:
             raise SystemExit(f"unbekannter Verweis [[{slug}]]")
-        return f'<a href="{page_url(slug, depth)}">{html.escape(text or pages[slug]["title"])}</a>'
+        return f'<a href="{page_url(slug, depth)}">{html.escape(text or field(pages[slug], "title", lang))}</a>'
 
     def img(m):
         name, _, alt = m.group(1).partition("|")
@@ -105,7 +106,7 @@ def build_lang(lang, root, pages, cats, order):
         depth = 4  # <root>/hilfe/Help/page/<slug>/index.html
         if slug_of(p["slug"]) != p["slug"] or p["slug"] == "home":
             raise SystemExit(f"Seitenname {p['slug']!r} folgt nicht der Namensregel des Originals")
-        body = resolve(field(p, "body", lang), pages, depth)
+        body = resolve(field(p, "body", lang), pages, depth, lang)
         prev_p = order[i - 1] if i > 0 else None
         next_p = order[i + 1] if i + 1 < len(order) else None
         tail = f"{HELP}/{PAGE_DIR}/{p['slug']}/index.html"
