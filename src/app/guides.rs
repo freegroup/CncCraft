@@ -354,9 +354,10 @@ impl App {
             return on_top || on_left;
         }
 
-        // pointer in mm, clamped to the board
-        let at_v = (((p.x - self.origin.x) / self.zoom) as f64).clamp(0.0, self.job.width);
-        let at_h = (((self.origin.y - p.y) / self.zoom) as f64).clamp(0.0, self.job.height);
+        // pointer in mm, on whole millimetres and on the board: a line placed or dragged by hand
+        // always sits on a round value (a typed value may have decimals)
+        let at_v = whole_mm((p.x - self.origin.x) / self.zoom, self.job.width);
+        let at_h = whole_mm((self.origin.y - p.y) / self.zoom, self.job.height);
 
         // which existing guide's handle is under the press point on the ruler?
         let near = self.guides.iter().find(|g| match g.axis {
@@ -603,4 +604,23 @@ fn paint_lock(painter: &egui::Painter, c: Pos2, locked: bool, colour: Color32) {
     // open: the right leg stops short of the body
     shackle.push(Pos2::new(c.x + 3.0, if locked { c.y - 0.5 } else { top + 1.5 }));
     painter.add(egui::Shape::line(shackle, Stroke::new(1.6_f32, colour)));
+}
+
+/// `mm` rounded to a whole millimetre and kept on the board (0 to `len`, whole millimetres only).
+fn whole_mm(mm: f32, len: f64) -> f64 {
+    (mm as f64).round().clamp(0.0, len.floor())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dragged_lines_land_on_whole_millimetres_on_the_board() {
+        assert_eq!(whole_mm(65.45, 300.0), 65.0);
+        assert_eq!(whole_mm(65.5, 300.0), 66.0);
+        assert_eq!(whole_mm(-3.0, 300.0), 0.0);
+        assert_eq!(whole_mm(300.4, 300.5), 300.0);
+        assert_eq!(whole_mm(400.0, 300.5), 300.0);
+    }
 }
