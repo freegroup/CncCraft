@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/freegroup/CncCraft/compare/v1.25.0...v1.26.0) (2026-11-23)
+
+
+### Features
+
+* value fields grow with their text ([bfea8e1](https://github.com/freegroup/CncCraft/commit/bfea8e1a0ed9f5f4a62569dff1e9b4c403f07dff))
+
 # [1.25.0](https://github.com/freegroup/CncCraft/compare/v1.24.0...v1.25.0) (2026-11-23)
 
 
