@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/freegroup/CncCraft/compare/v1.26.0...v1.27.0) (2026-11-23)
+
+
+### Features
+
+* rectangular pattern tool (Vervielfältigen) ([3915f1d](https://github.com/freegroup/CncCraft/commit/3915f1d2e77076eedf67087ad27a47041fb06917))
+
 # [1.26.0](https://github.com/freegroup/CncCraft/compare/v1.25.0...v1.26.0) (2026-11-23)
 
 
