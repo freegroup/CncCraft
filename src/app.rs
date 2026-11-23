@@ -2325,14 +2325,22 @@ impl App {
     }
 
     fn screenshot(&mut self, ctx: &egui::Context) {
-        let Some((path, frames)) = &mut self.shot else { return };
+        let Some((_, frames)) = &mut self.shot else { return };
         *frames += 1;
+        let frame = *frames;
         ctx.request_repaint();
         // a toast just before the picture, to review its look
-        if *frames == 100 && std::env::var("CNCCRAFT_SHOW_TOAST").is_ok() {
+        if frame == 100 && std::env::var("CNCCRAFT_SHOW_TOAST").is_ok() {
             crate::widgets::toast::post(ctx, t!("Hilfslinien gesperrt: Sie können nicht mehr verschoben, bearbeitet oder gelöscht werden. Formen rasten weiter an ihnen ein."));
         }
-        if *frames == 110 {
+        // the value field of a construction line open, as after a long press on its number
+        if frame == 90 {
+            if let Some(id) = std::env::var("CNCCRAFT_GUIDE_EDIT").ok().and_then(|v| v.parse::<u64>().ok()) {
+                self.open_guide_edit(id);
+            }
+        }
+        let Some((path, _)) = &self.shot else { return };
+        if frame == 110 {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
         }
         let image = ctx.input(|i| {
@@ -2353,7 +2361,7 @@ impl App {
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        if *frames > 400 {
+        if frame > 400 {
             eprintln!("Kein Bild erhalten");
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }

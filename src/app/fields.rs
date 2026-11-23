@@ -106,17 +106,37 @@ pub(super) fn value_label(painter: &egui::Painter, at: Pos2, text: String, tone:
 
 /// A small text field centred on `pos`; `invalid` draws its frame red.
 pub(super) fn field(ctx: &egui::Context, key: Id, pos: Pos2, text: &mut String, invalid: bool) -> egui::Response {
+    // as wide as its text (a formula such as "platte_l/2" is shown whole, never scrolled), at least
+    // the width of a short number, and centred on `pos` either way
+    let width = field_text_width(ctx, text);
     egui::Area::new(key.with("area"))
-        .fixed_pos(pos - Vec2::new(38.0, 11.0))
+        .fixed_pos(pos - Vec2::new(field_width(ctx, text) / 2.0, 11.0))
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             egui::Frame::none().fill(crate::theme::surface()).stroke(Stroke::new(if invalid { 1.6 } else { 1.0_f32 }, if invalid { crate::theme::error() } else { crate::theme::outline() })).rounding(5.0).inner_margin(egui::Margin::symmetric(4.0, 1.0)).show(ui, |ui| {
                 // Tab must not wander off to other widgets: the fields handle it themselves
-                ui.add(egui::TextEdit::singleline(text).id(key).desired_width(68.0).font(egui::TextStyle::Monospace).frame(false).lock_focus(true))
+                ui.add(egui::TextEdit::singleline(text).id(key).desired_width(width).font(egui::TextStyle::Monospace).frame(false).lock_focus(true))
             })
         })
         .inner
         .inner
+}
+
+/// The narrowest text area of a value field: room for a short number.
+const FIELD_MIN_TEXT_W: f32 = 68.0;
+/// The field's frame around its text: margins and stroke on both sides.
+const FIELD_FRAME_W: f32 = 8.0;
+
+/// Width of the text area of a value field holding `text` (one character to spare for the cursor).
+fn field_text_width(ctx: &egui::Context, text: &str) -> f32 {
+    let font = egui::TextStyle::Monospace.resolve(&ctx.style());
+    let w = ctx.fonts(|f| f.layout_no_wrap(format!("{text} "), font, egui::Color32::WHITE).size().x);
+    w.max(FIELD_MIN_TEXT_W).ceil()
+}
+
+/// Full width on screen of a value field holding `text`, for placing it beside something.
+pub(super) fn field_width(ctx: &egui::Context, text: &str) -> f32 {
+    field_text_width(ctx, text) + FIELD_FRAME_W
 }
 
 impl App {

@@ -269,11 +269,7 @@ impl App {
             match self.guide_press {
                 Some((pid, since)) if pid == id => {
                     if now - since >= super::distance::HOLD_SECS {
-                        if let Some(g) = self.guides.iter().find(|g| g.id == id) {
-                            let text = g.expr.clone().unwrap_or_else(|| super::fields::fmt(g.offset));
-                            self.guide_edit = Some(GuideEdit { id, text, rect, input: ConstraintInput::selecting(0) });
-                            self.guide_selected = Some(id);
-                        }
+                        self.open_guide_edit(id);
                         self.guide_press = None;
                     } else {
                         // the same thin bar the constraints show: "keep holding"
@@ -292,6 +288,17 @@ impl App {
             self.guide_press = None;
         }
         self.show_guide_edit(ui);
+    }
+
+    /// Open the value field on the number of line `id` (what a long press on it does): it shows
+    /// the line's formula if it has one, else its distance. Nothing happens while the number isn't
+    /// drawn (rulers hidden).
+    pub(super) fn open_guide_edit(&mut self, id: u64) {
+        let Some(rect) = self.guide_labels.iter().find(|(i, _)| *i == id).map(|(_, r)| *r) else { return };
+        let Some(g) = self.guides.iter().find(|g| g.id == id) else { return };
+        let text = g.expr.clone().unwrap_or_else(|| super::fields::fmt(g.offset));
+        self.guide_edit = Some(GuideEdit { id, text, rect, input: ConstraintInput::selecting(0) });
+        self.guide_selected = Some(id);
     }
 
     /// The open guide-number field: runs the shared number field (same as the shape sizes, the
@@ -316,7 +323,15 @@ impl App {
         let names = self.var_names();
         let value = |n: &str| self.vars_resolved.value(n).ok();
         let tab = std::mem::take(&mut self.guide_tab);
-        let (outcome, _) = super::input::edit_number_field(&ctx, id, e.rect.center(), &mut e.text, &mut e.input, &names, &value, &self.vars_resolved, super::input::Accepts::Any, tab, false);
+        // over the number; a horizontal line's number stands upright in the narrow strip left of
+        // the ruler, so its (wide) field starts there and reaches over the ruler, not off the sheet
+        let horizontal = self.guides.iter().any(|g| g.id == e.id && g.axis == GuideAxis::Horizontal);
+        let at = if horizontal {
+            Pos2::new(e.rect.left() + super::fields::field_width(&ctx, &e.text) / 2.0, e.rect.center().y)
+        } else {
+            e.rect.center()
+        };
+        let (outcome, _) = super::input::edit_number_field(&ctx, id, at, &mut e.text, &mut e.input, &names, &value, &self.vars_resolved, super::input::Accepts::Any, tab, false);
         match outcome {
             super::input::NumberOutcome::Open => self.guide_edit = Some(e),
             super::input::NumberOutcome::Cancel => self.status = t!("Abgebrochen").into(),
