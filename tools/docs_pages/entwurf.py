@@ -186,7 +186,7 @@ PAGES = [
         "slug": "einrasten", "cat": C, "title": "Einrasten",
         "lead": "Beim Zeichnen und Verschieben rastet der Zeiger an Hilfspunkten ein, damit alles genau sitzt.",
         "body": """
-<p>CncCraft kennt vier Arten von Einrastpunkten:</p>
+<p>CncCraft kennt fünf Arten von Einrastpunkten:</p>
 <ul>
 <li><strong>Knoten</strong> – Eckpunkte bestehender Formen,</li>
 <li><strong>Mitte</strong> – Mittelpunkte,</li>
@@ -203,6 +203,7 @@ PAGES = [
 <li><strong>Am Raster</strong> mit dem Rasterabstand in Millimetern.</li>
 </ul>
 <p>Mit gedrückter <kbd>⇧</kbd>-Taste beim Ziehen rastet nichts ein.</p>
+<div class="neu-box"><p>Das Raster ist nur zu sehen, solange <strong>Am Raster einrasten</strong> an ist – was man sieht, rastet auch ein. Zusätzlich rasten verschobene Formen an [[hilfslinien|Hilfslinien]] ein: mit einer Kante oder ihrer Mitte, und die Linie färbt die Form rot, solange sie einrasten würde.</p></div>
 """,
     },
     {
@@ -226,6 +227,68 @@ PAGES = [
 <li>Die Felder rechnen: <code>300/2 - 12</code> oder <code>breite/2</code> ist eine gültige Eingabe ([[formeln-in-feldern]]).</li>
 <li>Werte müssen größer als null sein, wo ein Maß das verlangt (zum Beispiel ein Radius).</li>
 </ul>
+""",
+    },
+    {
+        "slug": "spline", "cat": C, "title": "Spline zeichnen",
+        "lead": "Eine weiche Kurve durch die Punkte, die Sie anklicken.",
+        "neu": True,
+        "body": """
+<p>Das Werkzeug <strong>Spline</strong> (Taste <kbd>P</kbd>) legt eine glatte Kurve durch jeden Punkt, den Sie anklicken. Ein Doppelklick oder <kbd>Enter</kbd> beendet sie; ein Klick auf den ersten Punkt schließt sie zu einer geschlossenen Form, die sich zum Beispiel als [[taschen-werkzeugweg|Tasche]] ausräumen lässt.</p>
+<p>Die Punkte lassen sich danach mit der [[knotenbearbeitung]] verschieben; die Kurve bleibt dabei weich.</p>
+""",
+    },
+    {
+        "slug": "vektoren-trennen-verbinden", "cat": C, "title": "Vektoren trennen, löschen und verbinden",
+        "lead": "Vektoren an Kreuzungen teilen, einzelne Stücke entfernen und offene Enden verbinden.",
+        "body": """
+<table>
+<tr><th>Werkzeug</th><th>So geht es</th></tr>
+<tr><td><strong>Trennen</strong> (<kbd>T</kbd>)</td><td>Einen Vektor anklicken: Er wird an jeder Kreuzung mit anderen Vektoren geteilt.</td></tr>
+<tr><td><strong>Vektor löschen</strong></td><td>Einen Vektor oder ein getrenntes Stück anklicken: Es wird entfernt. So lassen sich überstehende Enden nach dem Trennen wegnehmen.</td></tr>
+<tr><td><strong>Verbinden</strong></td><td>Zwei Punkte nacheinander anklicken: Sie werden mit einer Linie verbunden. Klicken Sie beide Enden eines Linienzugs an, wird er geschlossen.</td></tr>
+</table>
+<div class="tipp"><p>Geschlossene Vektoren brauchen Sie für [[taschen-werkzeugweg|Taschen]] und [[ausschnitt-werkzeugweg|Ausschnitte]] mit Innen- und Außenseite; offene Linien eignen sich für [[profil-werkzeugweg|Profile]] und [[nut-werkzeugweg|Nuten]].</p></div>
+""",
+    },
+    {
+        "slug": "ecken-abrunden", "cat": C, "title": "Ecken abrunden und Ohren",
+        "lead": "Ecken mit einem Radius abrunden oder als „Ohr“ ausfräsen, damit Teile ineinander passen.",
+        "body": """
+<p>Ein runder Fräser kann keine scharfe Innenecke fräsen. Dafür gibt es zwei Werkzeuge; den Radius tragen Sie im Formular links ein.</p>
+<table>
+<tr><th>Werkzeug</th><th>Wirkung</th></tr>
+<tr><td><strong>Abrunden</strong></td><td>Eine Ecke anklicken: Sie wird mit dem Radius gerundet.</td></tr>
+<tr><td><strong>Ohr</strong></td><td>Eine Ecke anklicken: Um den Eckpunkt kommt ein Kreisbogen (Dog-Bone), damit der Fräser ganz in die Ecke reicht und ein eckiges Gegenstück hineinpasst.</td></tr>
+</table>
+<h2>Radius später ändern</h2>
+<p>An jeder gerundeten Ecke steht ein Schild mit dem Radius, zum Beispiel <code>R5</code>. <strong>Lange drücken</strong> öffnet es zum Eintippen – wie jedes Maßfeld mit [[formeln-in-feldern|Formeln]] und [[variablen|Variablen]] (dann steht dort zum Beispiel <code>R ƒfraeser/2</code>). Leeren Sie das Feld und drücken Sie <kbd>Enter</kbd>, verschwindet die Rundung wieder.</p>
+""",
+    },
+    {
+        "slug": "gruppieren", "cat": C, "title": "Gruppieren",
+        "lead": "Mehrere Formen zu einer Gruppe zusammenfassen, die sich wie eine Form auswählen lässt.",
+        "body": """
+<p><strong>Gruppieren</strong> (<kbd>⌘G</kbd>) fasst die Auswahl zusammen: Ein Klick auf irgendein Teil wählt danach die ganze Gruppe. Gruppen lassen sich selbst wieder gruppieren.</p>
+<p><strong>Gruppe auflösen</strong> (<kbd>⇧⌘G</kbd>) löst die äußerste Gruppe der Auswahl auf, eine Stufe je Klick. Kopien einer Gruppe bilden eine eigene, neue Gruppe ([[kopieren-einfuegen]]).</p>
+""",
+    },
+    {
+        "slug": "dxf-importieren", "cat": C, "title": "DXF importieren",
+        "lead": "Zeichnungen aus anderen Programmen als DXF-Datei übernehmen.",
+        "body": """
+<p>Das Werkzeug <strong>DXF importieren</strong> liest eine DXF-Datei (R12, R14 und neuer) und legt ihren Inhalt als <strong>eine Gruppe</strong> in die Zeichnung ([[gruppieren]]). Linien, Bögen, Kreise und Polylinien werden zu Vektoren, die Sie wie selbst gezeichnete bearbeiten und mit Werkzeugwegen versehen.</p>
+<p>Ändert sich die Datei später im anderen Programm, lädt ein <strong>Rechtsklick auf die Form</strong> sie neu von der Platte.</p>
+""",
+    },
+    {
+        "slug": "bild-als-vorlage", "cat": C, "title": "Bild als Vorlage",
+        "lead": "Ein Foto oder eine Skizze unter die Zeichnung legen, auf das richtige Maß bringen und nachzeichnen.",
+        "neu": True,
+        "body": """
+<p><strong>Bild einfügen</strong> lädt ein Bild (PNG, JPEG) auf eine Bild-Ebene ([[ebene-neu]]). Es liegt durchscheinend unter der Zeichnung; die Deckkraft stellen Sie in der [[ebenenliste]] ein.</p>
+<h2>Kalibrieren</h2>
+<p>Damit das Bild maßstäblich ist, klicken Sie mit <strong>Bild kalibrieren</strong> zwei Punkte im Bild an, deren echten Abstand Sie kennen (etwa die Enden eines mitfotografierten Lineals), und tippen den Abstand ein. CncCraft skaliert das Bild so, dass es 1:1 zur Platte passt – danach lässt sich darauf maßgenau nachzeichnen.</p>
 """,
     },
 ]

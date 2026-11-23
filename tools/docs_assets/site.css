@@ -163,6 +163,11 @@ th { background: var(--flaeche2); font-weight: 600; }
 .knopf.primaer { background: var(--akzent); border-color: var(--akzent); color: #1c1c1c; }
 .knopf:hover { text-decoration: none; filter: brightness(.97); }
 .produkt-held figure { margin: 0; max-width: none; }
+.held-marke { display: inline-block; font-size: .8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--neu-text); background: var(--flaeche); border: 1px solid var(--linie); border-radius: 999px; padding: 4px 12px; margin-bottom: 14px; }
+.vorteile { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 0 0 20px; }
+.vorteil { border: 1px solid var(--linie); border-radius: 14px; padding: 20px 22px; background: var(--flaeche); box-shadow: var(--schatten); }
+.vorteil h3 { font-size: 1.2rem; margin: 0 0 .35em; }
+.vorteil p { color: var(--gedaempft); margin: 0; }
 .abschnitt { max-width: 1180px; margin: 0 auto; padding: 54px 20px 10px; }
 .abschnitt > h2 { font-size: 2rem; margin: 0 0 .3em; }
 .abschnitt > .unter { color: var(--gedaempft); font-size: 1.1rem; max-width: 70ch; margin: 0 0 1.6em; }
@@ -211,7 +216,7 @@ th { background: var(--flaeche2); font-weight: 600; }
   .seitenleiste.offen { display: block; }
   .menue-knopf { display: inline-block; }
   .kopf nav { display: none; }
-  .produkt-held .innen, .merkmal { grid-template-columns: 1fr; }
+  .produkt-held .innen, .merkmal, .vorteile { grid-template-columns: 1fr; }
   .merkmal:nth-child(even) .text { order: 0; }
   .liste-zwei { columns: 1; }
   .held .suche { width: 100%; }

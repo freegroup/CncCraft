@@ -5,12 +5,13 @@ C = "erste-schritte"
 PAGES = [
     {
         "slug": "einfuehrung", "cat": C, "title": "Einführung",
-        "lead": "CncCraft ist ein Programm, mit dem Sie Teile für eine CNC-Fräse entwerfen, Werkzeugwege berechnen und als Datei an die Maschine geben.",
+        "lead": "CncCraft ist ein kostenloses, parametrisches CAD/CAM-Programm für Einsteiger: Sie entwerfen Teile für eine CNC-Fräse mit Maßen, die sich ändern lassen, berechnen die Werkzeugwege und geben sie als Datei an die Maschine.",
         "body": """
+<div class="neu-box"><p><strong>Parametrisch heißt:</strong> Ein Maß ist kein fester Strich, sondern ein Wert, den Sie jederzeit ändern – und alles, was daran hängt, folgt. Schreiben Sie etwa die Breite der Platte als Variable <code>breite</code>, wandern Bohrungen, Abstände, [[hilfslinien|Hilfslinien]] und Werkzeugwege mit, wenn Sie <code>breite</code> ändern. Was Profi-CAD-Programme wie Fusion 360 können, bringt CncCraft in einfacher Form mit – ohne Lizenz, ohne Abo, ohne Konto.</p></div>
 <p>Der Weg vom Einfall zum gefrästen Teil hat bei CncCraft drei Stationen, die sich in einem Fenster abspielen:</p>
 <ol>
-<li><strong>Entwerfen:</strong> Sie zeichnen Formen oder tippen Maße ein. Ebenen, Einrasten und Bedingungen helfen, genau zu arbeiten (Anfang: [[auswahlwerkzeug|die Entwurfswerkzeuge]]).</li>
-<li><strong>Werkzeugwege berechnen:</strong> Sie wählen Formen aus und sagen, was die Fräse damit tun soll – ausschneiden, eine Tasche ausräumen, bohren oder eine Schrift mit V-Fräser schnitzen.</li>
+<li><strong>Entwerfen:</strong> Sie zeichnen Formen oder tippen Maße ein – Zahlen, [[variablen|Variablen]] oder [[formeln-in-feldern|Formeln]]. Ebenen, Einrasten, Hilfslinien und Bedingungen helfen, genau zu arbeiten (Anfang: [[parametrisch-uebersicht]]).</li>
+<li><strong>Werkzeugwege berechnen:</strong> Sie wählen Formen aus und sagen, was die Fräse damit tun soll – ausschneiden, eine Tasche ausräumen, eine Nut fräsen, bohren oder eine Schrift mit V-Fräser schnitzen. Zum gewählten [[materialien|Material]] schlägt CncCraft passende Schnittwerte vor und warnt, wenn ein Wert zu hoch ist.</li>
 <li><strong>Ausgeben:</strong> Nach einer Vorschau in 2D oder 3D speichern Sie die Werkzeugwege als G-Code.</li>
 </ol>
 {{img:oberflaeche.png|Das Hauptfenster: links die Werkzeuge, in der Mitte die Zeichnung, rechts die Werkzeugwege}}
@@ -20,8 +21,8 @@ PAGES = [
 <tr><td>Menüleiste (oben links)</td><td>Datei, Bearbeiten, Ansicht, Werkzeugwege, Hilfe.</td></tr>
 <tr><td>Ebenenwahl (oben Mitte)</td><td>Die aktive Ebene und die Liste aller Ebenen. Siehe [[ebenenliste]].</td></tr>
 <tr><td>Werkzeugleiste (links)</td><td>Zeichen- und Bearbeitungswerkzeuge, darunter Job-Einrichtung und Variablen.</td></tr>
-<tr><td>Kopfleiste über der Zeichnung</td><td>Dekoration (Raster, Einrasten, Maße) und Constraints; rechts die Ansichtsknöpfe.</td></tr>
-<tr><td>Zeichenfläche (Mitte)</td><td>Das Werkstück mit Linealen und Ihren Formen – oder die 3D-Vorschau.</td></tr>
+<tr><td>Kopfleiste über der Zeichnung</td><td>Dekoration (Nullpunkt, Raster, Einrasten, Maße, Lineale) und Constraints; rechts die Ansichtsknöpfe.</td></tr>
+<tr><td>Zeichenfläche (Mitte)</td><td>Das Werkstück mit Linealen, Hilfslinien und Ihren Formen – oder die 3D-Vorschau.</td></tr>
 <tr><td>Werkzeugpfade (rechts)</td><td>Platten-Setup, die Knöpfe für neue Werkzeugwege, die Liste, Vorschau und Ausgabe.</td></tr>
 <tr><td>Statuszeile (unten)</td><td>Größe der Auswahl, Zeigerposition und die Ebene der Auswahl.</td></tr>
 </table>
@@ -79,7 +80,12 @@ PAGES = [
 <ul>
 <li><strong>Breite (X), Länge (Y), Dicke (Z):</strong> die Maße des Rohlings. Die kleine Skizze zeigt, welche Seite welcher Achse entspricht.</li>
 <li><strong>Einheiten:</strong> Zoll oder Millimeter. Beim Umschalten werden die Zahlen umgerechnet; gespeichert wird intern in Millimetern.</li>
-<li><strong>Material:</strong> Weichholz, Hartholz, MDF oder Acryl. Das Material bestimmt, welche Werkzeuge mit passenden Vorschub- und Drehzahlwerten zur Auswahl stehen (siehe [[werkzeugauswahl]]).</li>
+</ul>
+<h2>Material</h2>
+<p>Ohne Material lässt sich kein Job anlegen – der Knopf <strong>Erstellen</strong> bleibt grau, bis eines gewählt ist. Die Liste enthält zehn Materialien vom Weichholz bis zum Aluminium, jedes mit einem kleinen Muster. Es bestimmt die Werkzeuge und Schnittwerte (siehe [[werkzeugauswahl]]), die Warnungen bei zu schnellen oder zu tiefen Schnitten und das Aussehen in der [[ansicht-3d|3D-Ansicht]].</p>
+<ul>
+<li><strong>Empfehlungen</strong> (zugeklappt): ein Klick zeigt Drehzahl, höchsten Vorschub, Zustellung, passende Fräser und Kühlung für das Material.</li>
+<li><strong>Verwalten …</strong> am Ende der Liste öffnet die Materialeinstellungen, in denen Sie Werte anpassen und eigene Materialien anlegen ([[materialien]]).</li>
 </ul>
 <h2>Nullpunkt</h2>
 <ul>
@@ -89,13 +95,14 @@ PAGES = [
 </ul>
 <div class="tipp"><p>Größe und Dicke stehen danach als Variablen <code>platte_b</code>, <code>platte_l</code> und <code>platte_d</code> zur Verfügung. Damit lässt sich zum Beispiel eine Schnitttiefe als <code>platte_d/2</code> eintragen – siehe [[variablen]].</p></div>
 <p>Wenn Sie einen bestehenden Job ändern, berechnet CncCraft alle Werkzeugwege mit den neuen Werten neu.</p>
+<div class="tipp"><p>Ein neuer Job beginnt immer mit Ihren letzten Einstellungen – Größe, Einheiten, Material und Nullpunkt. Wer meist dieselbe Platte fräst, muss nur noch auf <strong>Erstellen</strong> klicken.</p></div>
 """,
     },
     {
         "slug": "entwurfsansicht", "cat": C, "title": "Die Entwurfsansicht",
         "lead": "In der 2D-Ansicht zeichnen und bearbeiten Sie; Lineale, Raster und Einrasthilfen unterstützen Sie dabei.",
         "body": """
-<p>Die Zeichenfläche zeigt das Werkstück von oben: die Platte mit Linealen am oberen und linken Rand, ein Raster und das Koordinatenkreuz am Nullpunkt. Der Wert im Lineal ist in der Einheit des Jobs.</p>
+<p>Die Zeichenfläche zeigt das Werkstück von oben: die Platte mit Linealen am oberen und linken Rand und das Koordinatenkreuz am Nullpunkt. Der Wert im Lineal ist in der Einheit des Jobs. Ein Klick ins Lineal legt eine [[hilfslinien|Hilfslinie]] an.</p>
 <h2>Sich bewegen</h2>
 <ul>
 <li><strong>Zoomen:</strong> mit dem Mausrad oder einer Zwei-Finger-Geste (zum Zeiger hin).</li>
@@ -105,7 +112,7 @@ PAGES = [
 <h2>Die Kopfleiste</h2>
 <p>Über der Zeichnung liegen zwei Gruppen von Schaltern:</p>
 <ul>
-<li><strong>Dekoration:</strong> am Raster einrasten, an Geometrie einrasten (siehe [[einrasten]]) und die Maße anzeigen oder ausblenden.</li>
+<li><strong>Dekoration:</strong> Nullpunkt zeigen, am Raster einrasten, an Geometrie einrasten (siehe [[einrasten]]), die Maße anzeigen und die <strong>Lineale</strong> mit den Hilfslinien ein- oder ausblenden. Jede Dekoration ist zugleich Werkzeug: Das Raster ist nur zu sehen, solange daran eingerastet wird; die Lineale sind nur da, solange man mit ihnen Hilfslinien setzen kann.</li>
 <li><strong>Constraints:</strong> <em>Abstand</em> (<kbd>D</kbd>) und <em>Waagrecht/Senkrecht</em> (<kbd>H</kbd>) – siehe [[abstand-bemassen]] und [[waagrecht-senkrecht]].</li>
 </ul>
 <p>Rechts oben wechselt der Knopf <strong>2D/3D</strong> zwischen Entwurf und [[ansicht-3d]]; daneben schaltet ein Knopf den Nullpunkt (Achsenkreuz) ein oder aus.</p>
@@ -114,7 +121,9 @@ PAGES = [
 {{img:werkzeugleiste-eingeklappt.png|Die verkleinerte Werkzeugleiste}}
 <p>Fahren Sie mit der Maus über ein Werkzeug, erscheint ein kurzer Hilfetext. Die Statuszeile unten nennt außerdem, was als Nächstes zu tun ist (zum Beispiel „Zweiten Punkt wählen“).</p>
 <h2>Dekorationen der Arbeitsfläche</h2>
-<p>Was die Zeichenfläche zusätzlich zeigt, schalten Sie einzeln im Menü <em>Ansicht ▸ Arbeitsfläche</em>: Platte, Raster, Lineale, Koordinatenkreuz und Hinweise.</p>
+<p>Was die Zeichenfläche zusätzlich zeigt, schalten Sie einzeln im Menü <em>Ansicht ▸ Arbeitsfläche</em>: Platte, Lineale, Koordinatenkreuz und Hinweise. Das Raster steht dort nicht – es folgt dem Schalter „Am Raster einrasten“.</p>
+<h2>Farben</h2>
+<p>Formen, ihre Werkzeugwege in der Liste und die gezeichneten Fräsbahnen tragen die Farbe ihrer Ebene. Ändern Sie die Farbe einer Ebene ([[ebenenliste]]), ändern sich alle drei mit.</p>
 """,
     },
     {
@@ -206,9 +215,11 @@ PAGES = [
 <tr><th>Taste</th><th>Wirkung</th></tr>
 <tr><td><kbd>S</kbd></td><td>Auswählen</td></tr>
 <tr><td><kbd>L</kbd></td><td>Linie zeichnen</td></tr>
+<tr><td><kbd>P</kbd></td><td>Spline zeichnen</td></tr>
 <tr><td><kbd>R</kbd></td><td>Rechteck zeichnen</td></tr>
 <tr><td><kbd>C</kbd></td><td>Kreis zeichnen</td></tr>
 <tr><td><kbd>O</kbd></td><td>Vektoren versetzen</td></tr>
+<tr><td><kbd>T</kbd></td><td>Vektoren an Kreuzungen trennen</td></tr>
 <tr><td><kbd>N</kbd></td><td>Gewählten Vektor im Knotenmodus bearbeiten / zurück</td></tr>
 <tr><td><kbd>D</kbd></td><td>Abstand bemaßen</td></tr>
 <tr><td><kbd>H</kbd></td><td>Waagrecht/Senkrecht festlegen</td></tr>
@@ -225,6 +236,7 @@ PAGES = [
 <tr><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td><td>Rückgängig / Wiederholen</td></tr>
 <tr><td><kbd>⌘C</kbd>, <kbd>⌘X</kbd>, <kbd>⌘V</kbd></td><td>Kopieren, Ausschneiden, Einfügen</td></tr>
 <tr><td><kbd>⌘D</kbd></td><td>Duplizieren</td></tr>
+<tr><td><kbd>⌘G</kbd> / <kbd>⇧⌘G</kbd></td><td>Gruppieren / Gruppe auflösen</td></tr>
 <tr><td><kbd>⌘A</kbd></td><td>Alles auswählen</td></tr>
 <tr><td><kbd>Entf</kbd> / <kbd>⌫</kbd></td><td>Löschen</td></tr>
 <tr><td><kbd>⌘N</kbd>, <kbd>⌘O</kbd></td><td>Neuer Job, Öffnen</td></tr>
@@ -243,8 +255,10 @@ PAGES = [
 <tr><td>Pfeiltasten</td><td>Auswahl oder Knoten verschieben (<kbd>⇧</kbd>: zehnfach)</td></tr>
 <tr><td><kbd>↑</kbd> <kbd>↓</kbd> in Maßfeldern</td><td>zwischen den Feldern wechseln</td></tr>
 <tr><td>Formel und <kbd>=</kbd></td><td>Wert ausrechnen</td></tr>
+<tr><td><kbd>Tab</kbd> in Maßfeldern</td><td>vorgeschlagene Variable übernehmen</td></tr>
+<tr><td>Lange drücken auf einen Wert</td><td>Maß, Radius oder Hilfslinien-Abstand eintippen</td></tr>
 </table>
-<div class="neu-box"><p>Die Einzeltasten für Werkzeuge (<kbd>S</kbd>, <kbd>L</kbd>, <kbd>R</kbd>, <kbd>C</kbd>, <kbd>O</kbd>, <kbd>D</kbd>, <kbd>H</kbd>) sind an Programme wie Fusion 360 angelehnt, damit das Zeichnen ohne Mausweg zur Werkzeugleiste auskommt.</p></div>
+<div class="neu-box"><p>Die Einzeltasten für Werkzeuge (<kbd>S</kbd>, <kbd>L</kbd>, <kbd>P</kbd>, <kbd>R</kbd>, <kbd>C</kbd>, <kbd>O</kbd>, <kbd>T</kbd>, <kbd>D</kbd>, <kbd>H</kbd>) sind an Programme wie Fusion 360 angelehnt, damit das Zeichnen ohne Mausweg zur Werkzeugleiste auskommt.</p></div>
 """,
         "neu": True,
     },
@@ -256,6 +270,7 @@ PAGES = [
 <tr><th>Befehl</th><th>Wirkung</th></tr>
 <tr><td><em>Datei ▸ Neu …</em></td><td>Beginnt einen neuen Job ([[neuer-job]]).</td></tr>
 <tr><td><em>Datei ▸ Öffnen …</em></td><td>Lädt ein Projekt (<code>.cnccraft</code>).</td></tr>
+<tr><td><em>Datei ▸ Zuletzt verwendet öffnen</em></td><td>Die zuletzt geöffneten und gespeicherten Projekte, das neueste oben – wie in Textverarbeitungen. <em>Liste leeren</em> am Ende räumt sie auf. Solange noch nichts geöffnet wurde, ist der Eintrag grau.</td></tr>
 <tr><td><em>Datei ▸ Beispiel öffnen</em></td><td>Lädt das mitgelieferte Beispiel.</td></tr>
 <tr><td><em>Datei ▸ Speichern / Speichern unter …</em></td><td>Schreibt das Projekt in eine Datei.</td></tr>
 <tr><td><em>Datei ▸ Werkzeugwege speichern …</em></td><td>Schreibt die Maschinendatei (G-Code), siehe [[werkzeugwege-speichern]].</td></tr>
@@ -268,7 +283,22 @@ PAGES = [
 <li><strong>Nicht speichern:</strong> macht ohne Speichern weiter; die Änderungen gehen verloren.</li>
 <li><strong>Abbrechen</strong> (oder <kbd>Esc</kbd>): nichts passiert, Sie arbeiten weiter.</li>
 </ul></div>
-<p>Das Projekt ist eine Textdatei im JSON-Format; ältere Dateien mit der früheren Endung <code>.funke</code> lassen sich weiterhin öffnen.</p>
+<p>Mit dem Projekt werden auch die [[hilfslinien|Hilfslinien]] gespeichert, samt Formeln, angehängten Formen und Sperre. Das Projekt ist eine Textdatei im JSON-Format; ältere Dateien mit der früheren Endung <code>.funke</code> lassen sich weiterhin öffnen.</p>
+""",
+    },
+    {
+        "slug": "rueckgaengig-wiederholen", "cat": C, "title": "Rückgängig und Wiederholen",
+        "lead": "Jeder Arbeitsschritt lässt sich zurücknehmen und wiederholen.",
+        "body": """
+<p><kbd>⌘Z</kbd> nimmt den letzten Schritt zurück, <kbd>⇧⌘Z</kbd> wiederholt ihn (auch im Menü <em>Bearbeiten</em>). Bis zu 100 Schritte werden gemerkt.</p>
+<p>Zurücknehmen lassen sich nicht nur Änderungen an Formen, sondern jede Aktion einzeln:</p>
+<ul>
+<li>Formen zeichnen, verschieben, ändern, löschen,</li>
+<li>[[ebenenliste|Ebenen]] anlegen, duplizieren, umbenennen, umsortieren, ein- und ausblenden, sperren, Farbe und Deckkraft ändern, zusammenführen, alle zusammenfassen und löschen,</li>
+<li>[[werkzeugwegliste|Werkzeugwege]] umsortieren und löschen,</li>
+<li>[[hilfslinien|Hilfslinien]] anlegen, verschieben, ihren Abstand ändern und löschen.</li>
+</ul>
+<p>Ein Zug mit der Maus ist immer <em>ein</em> Schritt – auch wenn eine Form oder Hilfslinie dabei lange bewegt wurde.</p>
 """,
     },
 ]

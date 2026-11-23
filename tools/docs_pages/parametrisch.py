@@ -5,24 +5,27 @@ C = "parametrisch"
 PAGES = [
     {
         "slug": "parametrisch-uebersicht", "cat": C, "title": "Parametrisch entwerfen – Überblick",
-        "lead": "Maße müssen nicht fest sein: Sie können sie benennen, berechnen und aneinander binden.",
+        "lead": "Parametrisches CAD für Einsteiger: Maße müssen nicht fest sein – Sie benennen, berechnen und verbinden sie, und die Zeichnung folgt.",
         "neu": True,
         "body": """
 <div class="neu-box"><p>Das Original Spark kennt weder Variablen noch Bedingungen. In CncCraft ändert eine geänderte Variable die Zeichnung – bis hin zum G-Code, denn auch die Werkzeugwege werden neu berechnet.</p></div>
-<p>Es gibt vier Bausteine, die sich kombinieren lassen:</p>
+<p>Parametrisch zu arbeiten heißt: Sie halten fest, <em>was</em> ein Maß bedeuten soll („10 mm vom Rand“, „halb so breit wie die Platte“), statt es nur einmal hinzuzeichnen. Ändern Sie später einen Wert, rechnet CncCraft alles nach. Dafür gibt es fünf Bausteine, die sich kombinieren lassen – keiner verlangt Vorwissen aus Profi-CAD-Programmen:</p>
 <table>
 <tr><th>Baustein</th><th>Wofür</th></tr>
 <tr><td>[[variablen|Variablen]]</td><td>Benannte Werte, die in Formeln benutzt werden, zum Beispiel <code>rand = 12</code>.</td></tr>
 <tr><td>[[formeln-in-feldern|Formeln in Maßfeldern]]</td><td>Jedes Maßfeld und jede Tiefe rechnet: <code>platte_b - 2*rand</code>.</td></tr>
 <tr><td>[[abstand-bemassen|Abstände bemaßen]]</td><td>Der Abstand zwischen zwei Punkten, einem Punkt und einer Linie oder zur Plattenkante bleibt, wie er ist.</td></tr>
 <tr><td>[[waagrecht-senkrecht|Waagrecht/Senkrecht]]</td><td>Eine Linie bleibt waagrecht oder senkrecht.</td></tr>
+<tr><td>[[hilfslinien|Hilfslinien]]</td><td>Linien aus dem Lineal, an denen Formen einrasten und hängen bleiben: Verschieben Sie die Linie – oder ändert sich ihre Formel –, wandern die Formen mit.</td></tr>
 </table>
+{{img:hilfslinien.png|Hilfslinien am Lineal: eine folgt einer Formel, die Formen hängen an ihnen}}
 <p>Ein Beispiel: Sie zeichnen ein Schild und legen <code>rand</code> fest. Die Kontur bekommt die Breite <code>platte_b - 2*rand</code> und die Höhe <code>platte_l - 2*rand</code>. Ändern Sie später die Plattengröße im Job oder den Wert von <code>rand</code>, passt sich die Kontur an, und die Werkzeugwege folgen.</p>
 {{img:variablen.png|Variablen und gebundene Maße im Zusammenspiel}}
 <h2>Grenzen</h2>
 <ul>
 <li>CncCraft löst die Bedingungen direkt, ohne ein allgemeines Gleichungssystem: Eine Form, die eine Bedingung festhält, springt beim Ziehen zurück.</li>
 <li>Verschieben mit der Maus, Knotenbearbeitung und Boolesche Operationen erzeugen neue Geometrie ohne Bindungen; die Statuszeile und die Bedienung weisen darauf hin.</li>
+<li>Jeder Schritt lässt sich [[rueckgaengig-wiederholen|rückgängig machen]] – Ausprobieren kostet nichts.</li>
 </ul>
 """,
     },
@@ -145,6 +148,40 @@ PAGES = [
 <li>Die Platte ist immer Bezug, nie der zweite Punkt.</li>
 </ul>
 <p>Die Bedingung erscheint als kleines blaues Symbol neben der Linie (rot, wenn sie sich nicht einhalten lässt). Klicken Sie es an und drücken Sie <kbd>Entf</kbd> – oder klicken Sie mit rechts darauf –, um sie zu löschen; die Linie bleibt dann, wie sie ist.</p>
+""",
+    },
+    {
+        "slug": "hilfslinien", "cat": C, "title": "Hilfslinien am Lineal",
+        "lead": "Rote Hilfslinien quer über das Werkstück, an denen Formen einrasten und hängen bleiben – mit Maß, Formel und Sperre.",
+        "neu": True,
+        "body": """
+<div class="neu-box"><p>Hilfslinien kennt die Vorlage Spark ähnlich; in CncCraft sind sie zusätzlich ein <em>weicher Constraint</em>: Formen, die Sie an eine Linie ziehen, bleiben an ihr hängen und wandern mit, wenn die Linie sich bewegt – etwa weil sich eine Variable ändert.</p></div>
+{{img:hilfslinien.png|Zwei Hilfslinien: oben eine feste bei 120 mm, links eine, die der Formel <code>platte_l/2</code> folgt}}
+<h2>Lineale ein- und ausschalten</h2>
+<p>Der Knopf mit dem Lineal in der Kopfleiste (Gruppe „Dekoration“) zeigt die Lineale am oberen und linken Plattenrand. Hilfslinien gibt es nur bei eingeschalteten Linealen.</p>
+<h2>Hilfslinie anlegen</h2>
+<ul>
+<li>Ein <strong>Klick ins obere Lineal</strong> legt an dieser Stelle eine senkrechte Linie an, ein Klick ins linke Lineal eine waagrechte.</li>
+<li>Sie können auch im Lineal <strong>drücken und ziehen</strong>: Die neue Linie folgt der Maus, bis Sie loslassen.</li>
+</ul>
+<h2>Verschieben – nur am Lineal</h2>
+<p>Jede Linie hat im Lineal einen roten <strong>Griff</strong>. Nur dort lässt sie sich ziehen; über dem Griff zeigt der Zeiger einen Doppelpfeil. In der Zeichnung selbst reagieren Hilfslinien nicht – sie stören beim Zeichnen also nie. Beim Ziehen landet die Linie immer auf <strong>ganzen Millimetern</strong>.</p>
+<h2>Der genaue Abstand</h2>
+<p>Außerhalb des Lineals steht der Abstand der Linie vom linken bzw. unteren Plattenrand – im selben Schild wie die Werte der [[abstand-bemassen|Abstände]]. Über der Zahl zeigt der Zeiger eine Hand: <strong>Lange drücken</strong> öffnet sie zum Eintippen. Wie in jedem Maßfeld sind Kommazahlen, [[variablen|Variablen]] und [[formeln-in-feldern|Formeln]] erlaubt; eine Formel bleibt erhalten („ƒ platte_l/2 = 100 mm“), und die Linie folgt, wenn sich die Variable oder die Plattengröße ändert. Ziehen Sie eine Formel-Linie am Griff, wird sie wieder zu einer festen Zahl.</p>
+<h2>Formen einrasten lassen</h2>
+<p>Ziehen Sie eine Form so nahe an eine Hilfslinie, dass ihre linke, rechte, obere oder untere Kante oder ihre Mitte die Linie fast berührt, färbt sich die Form <strong>rot</strong> und die Linie wird dicker: Lassen Sie jetzt los, rastet die Form genau ein.</p>
+<ul>
+<li>Die eingerastete Form <strong>hängt an der Linie</strong>: Verschieben Sie die Linie, ändern Sie ihre Zahl oder ihre Formel, wandert die Form mit – und mit ihr die Werkzeugwege.</li>
+<li>Ziehen Sie die Form selbst wieder weg, <strong>löst sie sich</strong> von der Linie. Darum ist es ein weicher Constraint.</li>
+<li>Einrasten geschieht nur, wenn <em>Sie</em> eine Form an eine Linie ziehen. Schieben Sie eine Linie über eine ruhende Form, hängt diese nicht an.</li>
+</ul>
+<h2>Auswählen und löschen</h2>
+<p>Ein Klick auf den Griff wählt die Linie aus (sie wird kräftiger), <kbd>Entf</kbd> löscht sie. Die Formen, die an ihr hingen, bleiben wo sie sind.</p>
+<h2>Hilfslinien sperren</h2>
+<p>In der Ecke, in der sich die Lineale treffen, sitzt ein <strong>Schloss</strong>. Ein Klick sperrt alle Hilfslinien; eine kurze Meldung bestätigt es. Gesperrte Linien werden dünn und halb durchsichtig, lassen sich nicht mehr anlegen, verschieben, bearbeiten oder löschen – Formen rasten aber weiter an ihnen ein. Ein weiterer Klick entsperrt sie.</p>
+{{img:hilfslinien-gesperrt.png|Gesperrte Hilfslinien treten in den Hintergrund}}
+<h2>Rückgängig</h2>
+<p>Anlegen, Verschieben (ein ganzer Zug ist ein Schritt), Zahl ändern und Löschen lassen sich mit <kbd>⌘Z</kbd> rückgängig machen; angehängte Formen gehen dabei mit zurück. Hilfslinien und die Sperre werden mit dem Projekt gespeichert.</p>
 """,
     },
 ]

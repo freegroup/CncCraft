@@ -105,7 +105,7 @@ def foot(depth):
 <div><strong>{SITE}</strong> · Entwerfen, Werkzeugwege berechnen, fräsen.</div>
 <div>{e(DISCLAIMER)}</div>
 {SISTER_LINE}
-<div><a href="{r}hilfe/Help/page/home/index.html">Hilfe</a> · <a href="{r}PARAMETRIK.md">Hintergrund: parametrisches Zeichnen</a></div>
+<div><a href="{r}hilfe/Help/page/home/index.html">Hilfe</a> · <a href="{r}hilfe/Help/page/parametrisch-uebersicht/index.html">Parametrisch entwerfen</a></div>
 </div></footer>
 <script src="{r}assets/search-index.js"></script>
 <script src="{r}assets/site.js"></script>
@@ -175,12 +175,16 @@ def product_html(categories, order, pages, page_url):
         return f'<figure><img src="assets/img/{name}" alt="{e(alt)}" loading="lazy"><figcaption>{e(alt)}</figcaption></figure>'
 
     feats = [
-        ("2D-Entwurf und Bearbeitung", "Zeichnen Sie Linien, Rechtecke, Kreise, Ellipsen, Polygone und Text, passen Sie Knoten an und formen Sie Vektoren mit Versatz, Spiegeln und Booleschen Operationen um. Ebenen halten größere Zeichnungen übersichtlich.",
+        ("Parametrisch entwerfen – ganz ohne CAD-Studium", "Legen Sie benannte Werte wie „rand“ oder „breite“ an und rechnen Sie in jedem Maßfeld mit Formeln. Bemaßen Sie Abstände und legen Sie Linien waagrecht oder senkrecht fest – ändert sich ein Wert, folgt die Zeichnung, und die Werkzeugwege rechnen von selbst neu.",
+         fig("variablen.png", "Variablen und gebundene Maße"), link("parametrisch-uebersicht")),
+        ("Hilfslinien aus dem Lineal", "Ein Klick ins Lineal setzt eine Hilfslinie. Formen rasten mit einer Kante oder ihrer Mitte daran ein und bleiben hängen: Ziehen Sie die Linie weiter – oder geben Sie ihr eine Formel wie „platte_b/2“ –, wandern die Formen mit. Ein Schloss schützt alle Linien vor versehentlichem Verschieben.",
+         fig("hilfslinien.png", "Hilfslinien am Lineal, eine davon mit Formel"), link("hilfslinien")),
+        ("Werte, die zum Material passen", "Zehn Materialien vom Weichholz bis zum Aluminium, jedes mit Empfehlungen für Drehzahl, Vorschub, Zustellung, Fräser und Kühlung. Ist ein Wert zu schnell oder zu tief, sagt CncCraft es direkt unter dem Feld. In 3D sieht das Werkstück aus wie das Material.",
+         fig("material-aluminium.png", "Ein Werkstück aus Aluminium in der 3D-Ansicht"), link("materialien")),
+        ("2D-Entwurf und Bearbeitung", "Zeichnen Sie Linien, Splines, Rechtecke, Kreise, Ellipsen, Polygone und Text, importieren Sie DXF-Dateien, runden Sie Ecken ab und formen Sie Vektoren mit Versatz, Spiegeln, Trennen und Booleschen Operationen um. Ebenen halten größere Zeichnungen übersichtlich.",
          fig("ebenen.png", "Ebenen halten den Entwurf übersichtlich"), link("auswahlwerkzeug")),
-        ("Parametrisch entwerfen", "Legen Sie benannte Werte an und rechnen Sie in jedem Maßfeld mit Formeln. Bemaßen Sie Abstände und legen Sie Linien waagrecht oder senkrecht fest – ändert sich ein Wert, folgt die Zeichnung.",
-         fig("variablen.png", "Der Variablen-Dialog"), link("variablen")),
-        ("Werkzeugwege für die Fräse", "Profil, Ausschnitt, Tasche, Bohren und V-Carving: Werkzeug wählen, Tiefen eintragen, berechnen. Haltestege halten ausgeschnittene Teile an ihrem Platz.",
-         fig("tiefe.png", "Ein Werkzeugweg wird eingerichtet"), link("werkzeugwege-uebersicht")),
+        ("Werkzeugwege für die Fräse", "Profil, Ausschnitt, Tasche, Nut, Bohren und V-Carving: Werkzeug wählen, Tiefen eintragen, berechnen. Haltestege halten ausgeschnittene Teile an ihrem Platz; kleine Zeichnungen in den Hilfetexten erklären jede Strategie.",
+         fig("nut-werkzeugweg.png", "Ein Nut-Werkzeugweg wird eingerichtet"), link("werkzeugwege-uebersicht")),
         ("Vorschau in 2D und 3D", "Spielen Sie die Werkzeugwege ab und sehen Sie am Werkstück, was die Fräse abtragen wird – bevor Material verloren geht. Der Ansichtswürfel und das Achsenkreuz des Nullpunkts helfen bei der Orientierung.",
          fig("ansicht-3d.png", "Die 3D-Vorschau des Werkstücks"), link("vorschau-werkzeugwege")),
         ("Hell und Dunkel", "Das Programm folgt auf Wunsch dem Design Ihres Systems oder bleibt dauerhaft hell oder dunkel.",
@@ -190,6 +194,12 @@ def product_html(categories, order, pages, page_url):
         f'<div class="merkmal"><div class="text"><h3>{e(t)}</h3><p>{e(d)}</p><p><a href="{u}">Mehr dazu →</a></p></div>{f}</div>'
         for t, d, f, u in feats)
     faq = [
+        ("Was kostet CncCraft?",
+         "Nichts. CncCraft ist kostenlos – ohne Lizenzschlüssel, ohne Abo und ohne Konto. Alle Funktionen sind von Anfang an freigeschaltet."),
+        ("Brauche ich Vorkenntnisse in CAD?",
+         "Nein. CncCraft ist für Einsteiger gemacht: Sie zeichnen wie in einem einfachen Zeichenprogramm und machen Maße erst dann parametrisch, wenn Sie es brauchen. Jeder Schritt lässt sich rückgängig machen, und jedes Werkzeug erklärt sich mit einem Hilfetext."),
+        ("Was heißt „parametrisch“?",
+         "Ein Maß ist ein Wert, den Sie später ändern können – und alles, was daran hängt, folgt: Formen, Abstände, Hilfslinien und Werkzeugwege. So passt ein Entwurf mit einer Zahl auf eine andere Plattengröße."),
         ("Läuft CncCraft auf meinem Computer?",
          "Ja, wenn Sie einen Mac (ab macOS 12, Apple Silicon oder Intel), einen Windows-PC oder einen Linux-Rechner haben. Wie Sie das Programm bauen und installieren, steht unter „Installation“."),
         ("Ist CncCraft mit meiner Fräse kompatibel?",
@@ -201,22 +211,30 @@ def product_html(categories, order, pages, page_url):
     ]
     faq_html = "".join(f"<details><summary>{e(q)}</summary><p>{e(a)}</p></details>" for q, a in faq)
     lists = {
-        "Zeichnung": ["auswahlwerkzeug", "linie-polylinie", "rechteck", "kreis", "ellipse", "polygon", "text-erstellen", "knotenbearbeitung"],
-        "Vektoren bearbeiten und kombinieren": ["boolesche-operationen", "versatz", "spiegeln", "zentrieren", "in-kurven-umwandeln", "kopieren-einfuegen"],
-        "CNC-Werkzeugwege": ["profil-werkzeugweg", "ausschnitt-werkzeugweg", "taschen-werkzeugweg", "bohr-werkzeugweg", "vcarving-werkzeugweg"],
-        "Ausgabe": ["vorschau-werkzeugwege", "werkzeugwege-speichern", "werkzeugauswahl"],
+        "Parametrisch": ["parametrisch-uebersicht", "variablen", "formeln-in-feldern", "abstand-bemassen", "waagrecht-senkrecht", "hilfslinien"],
+        "Zeichnung": ["auswahlwerkzeug", "linie-polylinie", "spline", "rechteck", "kreis", "ellipse", "polygon", "text-erstellen", "knotenbearbeitung", "dxf-importieren", "bild-als-vorlage"],
+        "Vektoren bearbeiten und kombinieren": ["boolesche-operationen", "versatz", "spiegeln", "zentrieren", "in-kurven-umwandeln", "vektoren-trennen-verbinden", "ecken-abrunden", "gruppieren", "kopieren-einfuegen"],
+        "CNC-Werkzeugwege": ["profil-werkzeugweg", "ausschnitt-werkzeugweg", "taschen-werkzeugweg", "nut-werkzeugweg", "bohr-werkzeugweg", "vcarving-werkzeugweg"],
+        "Ausgabe": ["materialien", "werkzeugauswahl", "vorschau-werkzeugwege", "werkzeugwege-speichern"],
     }
     def column(h, slugs):
         items = "".join(f'<li><a href="{link(s)}">{e(pages[s]["title"])}</a></li>' for s in slugs)
         return f"<div><h3>{e(h)}</h3><ul>{items}</ul></div>"
 
     lst = "".join(column(h, slugs) for h, slugs in lists.items())
-    return (head("CncCraft – entwerfen, Werkzeugwege berechnen, fräsen", depth,
-                 "CncCraft: 2D-Entwurf, parametrische Maße, Werkzeugwege für CNC-Fräsen und eine Vorschau in 3D.") + top(depth, "produkt") +
-            f'<section class="produkt-held"><div class="innen"><div><h1>Das Werkzeugset für den Einstieg ins CNC-Fräsen</h1>'
-            f'<p>CncCraft führt Sie vom Entwurf über die Werkzeugwege bis zur fertigen Datei für Ihre Fräse – übersichtlich, mit Vorschau in 2D und 3D und mit Maßen, die mitdenken.</p>'
+    vorteile = [
+        ("Parametrisch", "Maße als Werte, Variablen und Formeln. Ändern Sie eine Zahl, folgt der ganze Entwurf – bis zum G-Code."),
+        ("Für Einsteiger", "Wenige, klare Werkzeuge mit Hilfetexten, Vorschläge zum Material, Warnungen vor zu harten Schnitten und Rückgängig für jeden Schritt."),
+        ("Kostenlos", "Keine Lizenz, kein Abo, kein Konto. Alle Funktionen sind von Anfang an da – für Mac, Windows und Linux."),
+    ]
+    vorteile_html = "".join(f'<div class="vorteil"><h3>{e(t)}</h3><p>{e(d)}</p></div>' for t, d in vorteile)
+    return (head("CncCraft – parametrisches CAD/CAM für Einsteiger, kostenlos", depth,
+                 "CncCraft: kostenloses parametrisches CAD/CAM für Einsteiger – 2D-Entwurf mit Variablen und Hilfslinien, Werkzeugwege für CNC-Fräsen, Materialbibliothek und Vorschau in 3D.") + top(depth, "produkt") +
+            f'<section class="produkt-held"><div class="innen"><div><span class="held-marke">Kostenlos · für Mac, Windows und Linux</span><h1>Parametrisches CAD für Einsteiger</h1>'
+            f'<p>CncCraft führt Sie vom Entwurf über die Werkzeugwege bis zur fertigen Datei für Ihre Fräse – mit Maßen, die mitdenken, Hilfslinien aus dem Lineal und Vorschau in 2D und 3D. Kostenlos, ohne Abo und ohne Konto.</p>'
             f'<div class="knoepfe"><a class="knopf primaer" href="{link("installation")}">Installation</a>'
             f'<a class="knopf" href="hilfe/Help/page/home/index.html">Zur Hilfe</a></div></div>{fig("oberflaeche.png", "CncCraft: Entwurf mit Werkzeugwegen")}</div></section>'
+            f'<section class="abschnitt"><div class="vorteile">{vorteile_html}</div></section>'
             f'<section class="abschnitt"><h2>Entfalten Sie Ihre Ideen</h2><p class="unter">Von der ersten Skizze bis zum Schnitt: alles in einem Programm.</p>{blocks}</section>'
             f'<section class="abschnitt"><h2>Funktionen im Überblick</h2><div class="liste-zwei" style="columns:1">'
             f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px">{lst}</div></div></section>'

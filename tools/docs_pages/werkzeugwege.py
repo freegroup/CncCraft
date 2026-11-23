@@ -5,14 +5,15 @@ C = "werkzeugwege"
 PAGES = [
     {
         "slug": "werkzeugwege-uebersicht", "cat": C, "title": "Werkzeugwege – Überblick",
-        "lead": "Ein Werkzeugweg sagt der Fräse, welche Formen sie wie bearbeiten soll. CncCraft kennt fünf Arten.",
+        "lead": "Ein Werkzeugweg sagt der Fräse, welche Formen sie wie bearbeiten soll. CncCraft kennt sechs Arten.",
         "body": """
-<p>Rechts im Fenster, unter „Platten-Setup“, liegen fünf Knöpfe für neue Werkzeugwege. Die Menüpunkte unter <em>Werkzeugwege</em> tun dasselbe.</p>
+<p>Rechts im Fenster, unter „Platten-Setup“, liegen sechs Knöpfe für neue Werkzeugwege. Die Menüpunkte unter <em>Werkzeugwege</em> tun dasselbe.</p>
 <table>
 <tr><th>Werkzeugweg</th><th>Wofür</th></tr>
 <tr><td>[[profil-werkzeugweg|Profil]]</td><td>Fährt an einer Kontur entlang – außen, innen oder genau auf der Linie.</td></tr>
 <tr><td>[[ausschnitt-werkzeugweg|Ausschnitt]]</td><td>Trennt ein Teil aus dem Material heraus, mit Haltestegen.</td></tr>
 <tr><td>[[taschen-werkzeugweg|Tasche]]</td><td>Räumt die Fläche innerhalb einer Kontur bis zu einer Tiefe aus.</td></tr>
+<tr><td>[[nut-werkzeugweg|Nut]]</td><td>Fräst eine Nut mit der Breite des Fräsers entlang einer Linie – genau so lang wie die Linie.</td></tr>
 <tr><td>[[bohr-werkzeugweg|Bohren]]</td><td>Bohrt in die Mitte von Kreisen und anderen Konturen.</td></tr>
 <tr><td>[[vcarving-werkzeugweg|V-Carving]]</td><td>Schnitzt Schrift und Zeichnungen mit einem V-Fräser; die Tiefe folgt der Breite.</td></tr>
 </table>
@@ -20,11 +21,12 @@ PAGES = [
 <ol>
 <li>Wählen Sie die Vektoren aus, die bearbeitet werden sollen.</li>
 <li>Klicken Sie rechts auf den Knopf der gewünschten Art. Ein Formular öffnet sich.</li>
-<li>Wählen Sie das Werkzeug und tragen Sie die Tiefen ein ([[werkzeugauswahl]]).</li>
+<li>Wählen Sie das Werkzeug und tragen Sie die Tiefen ein ([[werkzeugauswahl]]). Geht ein Wert über das, was das [[materialien|Material]] verträgt, steht eine Warnung unter dem Feld.</li>
 <li>Klicken Sie auf <strong>Anwenden</strong>. Der Werkzeugweg erscheint in der Liste und als farbige Linien in der Zeichnung.</li>
 </ol>
 {{img:tiefe.png|Das Formular für einen neuen Werkzeugweg}}
 <p>Danach verwalten Sie die Werkzeugwege in der [[werkzeugwegliste|Liste]], prüfen sie in der [[vorschau-werkzeugwege|Vorschau]] und geben sie mit [[werkzeugwege-speichern|Speichern]] aus.</p>
+<p>Fährt die Maus über eine Strategie oder Laufrichtung, zeigt der Hilfetext eine kleine Zeichnung: wo der Fräser fährt, in welche Richtung er dreht und was ausgeräumt wird.</p>
 <div class="hinweis"><p>Werkzeugwege merken sich, zu welchen Formen sie gehören. Ändern Sie eine Form oder eine Variable ([[variablen]]), berechnet CncCraft die Werkzeugwege neu.</p></div>
 """,
     },
@@ -38,7 +40,7 @@ PAGES = [
 <tr><th>Element</th><th>Bedeutung</th></tr>
 <tr><td>Griff links (⠿)</td><td>Ziehen ändert die Reihenfolge – so wird auch die Datei später geschrieben.</td></tr>
 <tr><td>Auge</td><td>Blendet den Werkzeugweg in Zeichnung, Vorschau und Ausgabe ein oder aus.</td></tr>
-<tr><td>Farbquadrat und Symbol</td><td>Die Art des Werkzeugwegs und seine Farbe in der Zeichnung.</td></tr>
+<tr><td>Farbquadrat und Symbol</td><td>Die Art des Werkzeugwegs und seine Farbe in der Zeichnung – die Farbe der Ebene seiner Formen. Bekommt die Ebene eine andere Farbe, folgen Eintrag und Fräsbahnen.</td></tr>
 <tr><td>Name</td><td>Ein Klick wählt den Werkzeugweg aus: Seine Formen werden in der Zeichnung gewählt, und er ist der „ausgewählte“ für Vorschau und Export. Doppelklick öffnet das Formular zum Ändern.</td></tr>
 <tr><td>Zeit</td><td>Die geschätzte Fräszeit in Minuten und Sekunden.</td></tr>
 </table>
@@ -57,7 +59,7 @@ PAGES = [
         "slug": "werkzeugauswahl", "cat": C, "title": "Werkzeuge und Schnittwerte",
         "lead": "Jeder Werkzeugweg bekommt ein Werkzeug mit passenden Werten für Vorschub, Drehzahl und Zustellung.",
         "body": """
-<p>Im Formular eines Werkzeugwegs wählen Sie im Feld <strong>Werkzeug</strong> aus einer eingebauten Liste. Sie enthält je Material (Weichholz, Hartholz, MDF, Acryl) Werkzeuge in mehreren Durchmessern:</p>
+<p>Im Formular eines Werkzeugwegs wählen Sie im Feld <strong>Werkzeug</strong> aus einer eingebauten Liste. Sie enthält je [[materialien|Material]] Werkzeuge in mehreren Durchmessern, mit Werten, die zu diesem Material passen:</p>
 <ul>
 <li><strong>Schaftfräser</strong> für Profile, Ausschnitte und Taschen,</li>
 <li><strong>Kugelfräser</strong>,</li>
@@ -77,6 +79,8 @@ PAGES = [
 <tr><td>Werkzeug-Nr.</td><td>Die Nummer, die in der G-Code-Datei für den Werkzeugwechsel steht.</td></tr>
 </table>
 <div class="neu-box"><p>Start- und Schnitttiefe nehmen Formeln und Variablen an, zum Beispiel <code>platte_d/2</code> oder <code>platte_d</code> ([[formeln-in-feldern]]).</p></div>
+<h2>Warnungen</h2>
+<p>Jedes Material hat Grenzen: höchster Vorschub, Drehzahlbereich und wie tief der Fräser je Durchgang gehen darf (zum Beispiel zwei Drittel des Durchmessers bei Hartholz). Überschreitet ein Feld eine Grenze, steht darunter eine Warnung mit dem, was das Material verträgt. Speichern Sie trotzdem, schreibt CncCraft die Warnung auch in den Kopf der G-Code-Datei.</p>
 <div class="achtung"><p>Die mitgelieferten Schnittwerte sind Ausgangswerte. Prüfen Sie Vorschub, Drehzahl und Zustellung immer für Ihre Fräse und Ihr Material und fräsen Sie zuerst eine Probe in Abfallmaterial.</p></div>
 """,
     },
@@ -125,9 +129,11 @@ PAGES = [
 <p>Wählen Sie geschlossene Vektoren und klicken Sie auf <strong>Taschen-Werkzeugweg</strong>. Neben den allgemeinen Feldern ([[werkzeugauswahl]]) wählen Sie die <strong>Ausräumstrategie</strong>:</p>
 <table>
 <tr><th>Strategie</th><th>So räumt der Fräser aus</th></tr>
-<tr><td><strong>Versatz</strong></td><td>In Ringen, die der Kontur nach innen folgen, bis die Fläche leer ist.</td></tr>
-<tr><td><strong>Raster</strong></td><td>In geraden, parallelen Bahnen. Der <strong>Rasterwinkel</strong> (in Grad) legt die Richtung fest.</td></tr>
+<tr><td><strong>Versatz</strong></td><td>In Ringen, die der Kontur folgen, von innen nach außen. Zwischen benachbarten Ringen bleibt der Fräser unten.</td></tr>
+<tr><td><strong>Raster</strong></td><td>Hin und her in geraden, parallelen Bahnen, danach eine Runde an der Wand entlang. Der <strong>Rasterwinkel</strong> (in Grad) legt die Richtung fest.</td></tr>
+<tr><td><strong>Spirale</strong></td><td>Eine durchgehende Spirale von innen nach außen: kein neuer Ansatz, jede Runde geht stufenlos in die nächste über.</td></tr>
 </table>
+{{img:taschen-werkzeugweg.png|Das Formular der Tasche mit den drei Strategien}}
 <p>Dazu kommt wie beim Profil die Laufrichtung <em>Gleichlauf</em> oder <em>Gegenlauf</em>.</p>
 <p>Der Abstand benachbarter Bahnen ist die <strong>Querzustellung</strong>; Tiefe und <strong>Zustellung</strong> bestimmen die Zahl der Ebenen, die nacheinander ausgeräumt werden.</p>
 """,
@@ -211,6 +217,58 @@ PAGES = [
 </table>
 <p>Klicken Sie anschließend auf <strong>Werkzeugpfade speichern …</strong> und wählen Sie Ziel und Dateinamen.</p>
 <div class="achtung"><p>Prüfen Sie jede neue Datei in der [[vorschau-werkzeugwege|Vorschau]] und fahren Sie sie zuerst ohne Material oder mit Abfall ab. Achten Sie darauf, dass Nullpunkt und Sicherheitshöhe ([[neuer-job]]) zu Ihrer Maschine passen.</p></div>
+""",
+    },
+    {
+        "slug": "nut-werkzeugweg", "cat": C, "title": "Nut-Werkzeugweg",
+        "lead": "Die Nut fräst entlang eines Vektors einen Kanal, so breit wie der Fräser.",
+        "neu": True,
+        "body": """
+<div class="neu-box"><p>Den Nut-Werkzeugweg gibt es in der Vorlage Spark nicht.</p></div>
+<p>Wählen Sie einen oder mehrere Vektoren – offen oder geschlossen – und klicken Sie auf <strong>Nut</strong>. Die Nut ist genau so breit wie der Fräser; eine Querzustellung gibt es darum nicht.</p>
+{{img:nut-werkzeugweg.png|Das Formular des Nut-Werkzeugwegs}}
+<table>
+<tr><th>Einstellung</th><th>Bedeutung</th></tr>
+<tr><td><strong>Seite</strong></td><td><em>Auf der Linie</em>: die Mitte der Nut liegt auf dem Vektor. <em>Links</em> / <em>Rechts</em>: die Nut liegt neben dem Vektor, eine Kante auf der Linie.</td></tr>
+<tr><td><strong>Kappe</strong></td><td>Bei offenen Linien: <em>Außen</em> – der Fräser fährt über den Endpunkt hinaus, die Nut wird um den Werkzeugradius länger. <em>Innen</em> – der Fräser stoppt einen halben Durchmesser vor dem Endpunkt, die Nut wird genau so lang wie der Vektor.</td></tr>
+<tr><td><strong>Fräsrichtung</strong></td><td><em>Gleichlauf</em> oder <em>Gegenlauf</em>.</td></tr>
+<tr><td><strong>Rampenwinkel</strong></td><td>Der Fräser taucht schräg statt senkrecht ein; 0° = senkrecht.</td></tr>
+</table>
+<div class="tipp"><p>Fahren Sie im Formular mit der Maus über eine Option: Ein Bild im Hinweis zeigt, was sie bewirkt – zum Beispiel wo bei <em>Innen</em> und <em>Außen</em> der Fräser stoppt, oder wie bei Gleich- und Gegenlauf Drehrichtung und Vorschub zueinander stehen.</p></div>
+""",
+    },
+    {
+        "slug": "materialien", "cat": C, "title": "Materialien und Grenzwerte",
+        "lead": "Jedes Werkstück ist aus einem Material. Es kennt seine Grenzen, empfiehlt Fräser und Kühlung und bestimmt das Aussehen in 3D.",
+        "neu": True,
+        "body": """
+<div class="neu-box"><p>Die Vorlage Spark kennt Materialien nur als Namen in der Werkzeugdatenbank. In CncCraft hat jedes Material Grenzwerte und Empfehlungen, und CncCraft warnt, wenn ein Werkzeugweg sie überschreitet – gerade für den Einstieg die wichtigste Hilfe gegen abgebrochene Fräser.</p></div>
+<h2>Material wählen</h2>
+<p>Beim Anlegen eines neuen Jobs ist das Material Pflicht: Erst wenn eines gewählt ist, lässt sich der Job erstellen ([[neuer-job]]). CncCraft schlägt dabei das zuletzt benutzte vor. Unter dem Auswahlfeld klappt der Bereich <strong>Empfehlungen</strong> Beschreibung, Schnittwerte, passende Fräser und Kühlung auf.</p>
+<p>Mitgeliefert werden <strong>Weichholz, Hartholz, Sperrholz, MDF, Acryl, HDPE/Kunststoff, Hartschaum, Aluminium, Messing</strong> und <strong>Kupfer</strong>.</p>
+<h2>Was ein Material weiß</h2>
+<table>
+<tr><th>Wert</th><th>Bedeutung</th></tr>
+<tr><td>Max. Vorschub</td><td>Schneller sollte der Fräser nicht durch das Material fahren (mm/min).</td></tr>
+<tr><td>Drehzahl</td><td>Der empfohlene Bereich der Spindel (U/min).</td></tr>
+<tr><td>Max. Zustellung</td><td>Wie tief je Durchgang höchstens, als Anteil des Fräserdurchmessers. Eine Faustregel für Holz: höchstens zwei Drittel des Durchmessers.</td></tr>
+<tr><td>Fräser</td><td>Welche Fräser passen: Schneidenzahl, Werkstoff, Spiralrichtung.</td></tr>
+<tr><td>Kühlung</td><td>Ob und womit gekühlt wird – etwa Isopropanol bei Aluminium.</td></tr>
+<tr><td>Aussehen</td><td>Wie das Werkstück in der 3D-Vorschau aussieht.</td></tr>
+</table>
+<h2>Warnungen</h2>
+<ul>
+<li>Im <strong>Werkzeugweg-Formular</strong> erscheint direkt unter Zustellung, Vorschub, Eintauchen oder Drehzahl ein Hinweis, wenn der Wert außerhalb der Empfehlung liegt – zum Beispiel 6 mm Zustellung mit einem 5-mm-Fräser in Hartholz.</li>
+<li>Im <strong>Kopf der G-Code-Datei</strong> steht ein Abschnitt „ACHTUNG: ZU SCHNELL ODER ZU TIEF FÜR DAS MATERIAL“ mit jedem betroffenen Werkzeugweg ([[werkzeugwege-speichern]]). Langsamer und flacher als empfohlen ist nie ein Problem und wird nicht gemeldet.</li>
+</ul>
+<h2>Aussehen in der 3D-Vorschau</h2>
+<p>Die [[vorschau-werkzeugwege|Vorschau]] zeigt das Werkstück im Aussehen seines Materials: Maserung bei Holz, die Lagen an der Sperrholzkante, gebürstetes und glänzendes Metall.</p>
+{{img:material-hartholz.png|Ein Werkstück aus Hartholz in der 3D-Vorschau}}
+{{img:material-aluminium.png|Dasselbe Werkstück aus Aluminium}}
+<h2>Eigene Materialien</h2>
+<p><strong>Verwalten …</strong> am Ende der Materialauswahl öffnet die Material-Verwaltung. Mit <strong>+</strong> legen Sie eine Kopie des gewählten Materials an – samt dessen Werkzeugen, die auf die Grenzen des neuen Materials gekürzt werden. Name, Beschreibung, Grenzwerte, Empfehlungen und Aussehen sind änderbar. Mitgelieferte Materialien und das Material des aktuellen Jobs lassen sich nicht löschen.</p>
+{{img:materialien.png|Die Material-Verwaltung}}
+<div class="achtung"><p>Die Grenzwerte sind vorsichtige Ausgangswerte für Hobbyfräsen. Ihre Maschine und Ihre Fräser können mehr oder weniger – fräsen Sie zuerst eine Probe in Abfallmaterial.</p></div>
 """,
     },
 ]
