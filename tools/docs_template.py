@@ -197,7 +197,7 @@ def product_html(categories, order, pages, page_url):
         ("Was kostet CncCraft?",
          "Nichts. CncCraft ist kostenlos – ohne Lizenzschlüssel, ohne Abo und ohne Konto. Alle Funktionen sind von Anfang an freigeschaltet."),
         ("Brauche ich Vorkenntnisse in CAD?",
-         "Nein. CncCraft ist für Einsteiger gemacht: Sie zeichnen wie in einem einfachen Zeichenprogramm und machen Maße erst dann parametrisch, wenn Sie es brauchen. Jeder Schritt lässt sich rückgängig machen, und jedes Werkzeug erklärt sich mit einem Hilfetext."),
+         "Nein. CncCraft ist für CNC-Einsteiger gemacht: Sie zeichnen wie in einem einfachen Zeichenprogramm und machen Maße erst dann parametrisch, wenn Sie es brauchen. Jeder Schritt lässt sich rückgängig machen, und jedes Werkzeug erklärt sich mit einem Hilfetext."),
         ("Was heißt „parametrisch“?",
          "Ein Maß ist ein Wert, den Sie später ändern können – und alles, was daran hängt, folgt: Formen, Abstände, Hilfslinien und Werkzeugwege. So passt ein Entwurf mit einer Zahl auf eine andere Plattengröße."),
         ("Läuft CncCraft auf meinem Computer?",
@@ -224,14 +224,14 @@ def product_html(categories, order, pages, page_url):
     lst = "".join(column(h, slugs) for h, slugs in lists.items())
     vorteile = [
         ("Parametrisch", "Maße als Werte, Variablen und Formeln. Ändern Sie eine Zahl, folgt der ganze Entwurf – bis zum G-Code."),
-        ("Für Einsteiger", "Wenige, klare Werkzeuge mit Hilfetexten, Vorschläge zum Material, Warnungen vor zu harten Schnitten und Rückgängig für jeden Schritt."),
+        ("Für CNC-Einsteiger", "Wenige, klare Werkzeuge mit Hilfetexten, Vorschläge zum Material, Warnungen vor zu harten Schnitten und Rückgängig für jeden Schritt."),
         ("Kostenlos", "Keine Lizenz, kein Abo, kein Konto. Alle Funktionen sind von Anfang an da – für Mac, Windows und Linux."),
     ]
     vorteile_html = "".join(f'<div class="vorteil"><h3>{e(t)}</h3><p>{e(d)}</p></div>' for t, d in vorteile)
-    return (head("CncCraft – parametrisches CAD/CAM für Einsteiger, kostenlos", depth,
-                 "CncCraft: kostenloses parametrisches CAD/CAM für Einsteiger – 2D-Entwurf mit Variablen und Hilfslinien, Werkzeugwege für CNC-Fräsen, Materialbibliothek und Vorschau in 3D.") + top(depth, "produkt") +
-            f'<section class="produkt-held"><div class="innen"><div><span class="held-marke">Kostenlos · für Mac, Windows und Linux</span><h1>Parametrisches CAD für Einsteiger</h1>'
-            f'<p>CncCraft führt Sie vom Entwurf über die Werkzeugwege bis zur fertigen Datei für Ihre Fräse – mit Maßen, die mitdenken, Hilfslinien aus dem Lineal und Vorschau in 2D und 3D. Kostenlos, ohne Abo und ohne Konto.</p>'
+    return (head("CncCraft – parametrisches CAD/CAM für CNC-Einsteiger, kostenlos", depth,
+                 "CncCraft: kostenloses parametrisches CAD/CAM für CNC-Einsteiger – 2D-Entwurf mit Variablen und Hilfslinien, Werkzeugwege für CNC-Fräsen, Materialbibliothek und Vorschau in 3D.") + top(depth, "produkt") +
+            f'<section class="produkt-held"><div class="innen"><div><span class="held-marke">CAD + CAM · Kostenlos · für Mac, Windows und Linux</span><h1>Parametrisches CAD/CAM für CNC-Einsteiger</h1>'
+            f'<p>Entwerfen (CAD) und Werkzeugwege berechnen (CAM) in einem Programm: CncCraft führt Sie von der ersten Zeichnung bis zum fertigen G-Code für Ihre CNC-Fräse – mit Maßen, die mitdenken, Hilfslinien aus dem Lineal, Schnittwerten passend zum Material und Vorschau in 2D und 3D. Kostenlos, ohne Abo und ohne Konto.</p>'
             f'<div class="knoepfe"><a class="knopf primaer" href="{link("installation")}">Installation</a>'
             f'<a class="knopf" href="hilfe/Help/page/home/index.html">Zur Hilfe</a></div></div>{fig("oberflaeche.png", "CncCraft: Entwurf mit Werkzeugwegen")}</div></section>'
             f'<section class="abschnitt"><div class="vorteile">{vorteile_html}</div></section>'
