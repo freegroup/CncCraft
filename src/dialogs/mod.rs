@@ -20,6 +20,7 @@ pub(in crate::app) mod shortcuts;
 mod tools;
 mod toolpath;
 mod unsaved_changes;
+mod update;
 mod variables;
 
 pub(in crate::app) use export::ExportScope;
@@ -120,7 +121,7 @@ pub(in crate::app) fn dialog_buttons(ui: &mut egui::Ui, add: impl FnOnce(&mut eg
 }
 
 /// The program's icon as a texture, made once and kept for every later dialog.
-fn app_icon(ctx: &egui::Context) -> egui::TextureHandle {
+pub(in crate::app) fn app_icon(ctx: &egui::Context) -> egui::TextureHandle {
     let id = Id::new("dialog_header_app_icon");
     if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
         return t;

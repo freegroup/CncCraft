@@ -130,6 +130,21 @@ impl App {
         crate::transform::to_gcode::ExportMeta { scope: Some(self.export_scope_text(count)), material: self.materials.get(&self.job.material).cloned(), ..Default::default() }
     }
 
+    /// Write all visible toolpaths as one G-code file to `path` (used by the MCP server, which has
+    /// no file dialog). Returns a short message.
+    pub(super) fn export_gcode_to(&self, path: &std::path::Path) -> Result<String, String> {
+        let indices = self.output_indices();
+        if indices.is_empty() {
+            return Err("no toolpaths to export".into());
+        }
+        let paths: Vec<&Toolpath> = indices.iter().map(|&i| &self.toolpaths[i]).collect();
+        let pp = self.pp().clone();
+        let meta = self.export_meta(indices.len());
+        let text = crate::transform::to_gcode::write_with_meta(&self.job, &paths, &pp, &meta);
+        std::fs::write(path, text).map_err(|e| e.to_string())?;
+        Ok(format!("wrote {} toolpath(s) to {}", indices.len(), path.display()))
+    }
+
     fn write_export(&mut self, indices: &[usize], per_tool: bool) {
         if self.selftest.is_some() {
             return;

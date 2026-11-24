@@ -28,6 +28,8 @@ base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rust-i18n = "3"
 sys-locale = "0.3"
+# update check: pure-Rust HTTPS (rustls), no system OpenSSL and no external program
+ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"

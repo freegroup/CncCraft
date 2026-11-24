@@ -13,9 +13,22 @@ impl App {
         ui.menu_button(t!("Ansicht"), |ui| self.view_menu(ui));
         ui.menu_button(t!("Werkzeugwege"), |ui| self.toolpath_menu(ui));
         ui.menu_button(t!("Hilfe"), |ui| {
-            self.menu_item(ui, &t!("Tastenkürzel"), Action::Shortcuts, true);
-            if ui.button(t!("Über CncCraft")).clicked() {
-                self.about = true;
+            if ui.button(t!("Nach Updates suchen…")).clicked() {
+                self.update_dialog = true;
+                self.update.check();
+                ui.close_menu();
+            }
+            if ui.button(t!("MCP-Konfiguration…")).clicked() {
+                self.demo_open = true;
+                ui.close_menu();
+            }
+            ui.separator();
+            if ui.button(t!("CncCraft auf GitHub")).clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/freegroup/CncCraft"));
+                ui.close_menu();
+            }
+            if ui.button(t!("Hilfe")).clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab("https://freegroup.github.io/CncCraft/hilfe/Help/page/home/index.html"));
                 ui.close_menu();
             }
         });

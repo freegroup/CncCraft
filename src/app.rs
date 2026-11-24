@@ -4,6 +4,9 @@
 mod align;
 mod array;
 mod cursor;
+mod demo;
+mod mcp;
+mod update;
 mod distance;
 #[path = "dialogs/mod.rs"]
 mod dialogs;
@@ -491,8 +494,18 @@ pub struct App {
     patterns: Vec<Pattern>,
     /// The open pattern dialog (create or edit), if any.
     pattern_dialog: Option<PatternDialog>,
-    shot: Option<(PathBuf, u32)>,
+    /// The virtual cursor and action queue for screen demos (see `demo`).
+    demo: demo::Demo,
+    /// The in-process MCP server (localhost), present only when started with `--mcp`.
+    mcp: Option<mcp::Mcp>,
+    /// Checks GitHub for a newer release (shown in the About window).
+    update: update::Update,
+    /// A pending screenshot: (path, frame counter, close the window afterwards). The command-line
+    /// `--screenshot` mode closes when done; an MCP screenshot of a running app must not.
+    shot: Option<(PathBuf, u32, bool)>,
     about: bool,
+    /// The "Check for updates" status dialog (GridCraft-style): shown while and after a check.
+    update_dialog: bool,
     /// The document as last saved, opened or created (as project text): what the changes are measured against.
     saved_text: String,
     /// "Don't save" was chosen: closing may go on.
@@ -651,6 +664,8 @@ pub struct App {
     sheet: sheet::Decorations,
     /// The "Tastenkürzel" window.
     shortcuts_open: bool,
+    /// Whether the Demo window (MCP address + built-in demos) is open.
+    demo_open: bool,
     /// The layers (shown or hidden) every shape is on.
     layers: crate::layers::Layers,
     /// The small window for a new layer, a new name or a layer being deleted.
@@ -743,8 +758,12 @@ impl App {
             offset_outside: true,
             patterns: Vec::new(),
             pattern_dialog: None,
-            shot: shot.map(|p| (p, 0)),
+            demo: demo::Demo::default(),
+            mcp: mcp::start(),
+            update: update::Update::default(),
+            shot: shot.map(|p| (p, 0, true)),
             about: false,
+            update_dialog: false,
             saved_text: String::new(),
             discard: false,
             unsaved: None,
@@ -837,6 +856,7 @@ impl App {
             swallow_press: false,
             sheet: sheet::Decorations::default(),
             shortcuts_open: false,
+            demo_open: false,
             dark,
             theme_choice,
             lang,
@@ -1016,6 +1036,10 @@ impl App {
             }
         }
         app.mark_clean();
+        // look for a newer release in the background (not in the screenshot or self-test runs)
+        if app.shot.is_none() && app.selftest.is_none() {
+            app.update.check();
+        }
         // a change that is not saved and the question about it, to review them
         if app.shot.is_some() && std::env::var("CNCCRAFT_SHOW_UNSAVED").is_ok() {
             app.add_shape(RectShape::new([60.0, 150.0], 30.0, 20.0));
@@ -2454,7 +2478,7 @@ impl App {
     }
 
     fn screenshot(&mut self, ctx: &egui::Context) {
-        let Some((_, frames)) = &mut self.shot else { return };
+        let Some((_, frames, _)) = &mut self.shot else { return };
         *frames += 1;
         let frame = *frames;
         ctx.request_repaint();
@@ -2468,7 +2492,8 @@ impl App {
                 self.open_guide_edit(id);
             }
         }
-        let Some((path, _)) = &self.shot else { return };
+        let Some((path, _, close_after)) = &self.shot else { return };
+        let close_after = *close_after;
         if frame == 110 {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
         }
@@ -2488,11 +2513,18 @@ impl App {
                 Ok(()) => eprintln!("Bild gespeichert: {}", path.display()),
                 Err(e) => eprintln!("Bild konnte nicht gespeichert werden: {e}"),
             }
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.shot = None;
+            // the command-line screenshot mode quits when done; an MCP screenshot leaves the app open
+            if close_after {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         }
         if frame > 400 {
             eprintln!("Kein Bild erhalten");
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            self.shot = None;
+            if close_after {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         }
     }
 }
@@ -2531,12 +2563,23 @@ impl eframe::App for App {
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.selftest_input(raw_input);
+        self.demo.feed(raw_input);
         self.take_tabs(raw_input);
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.egui_ctx = Some(ctx.clone());
         self.sync_theme(ctx);
+        // carry out any MCP tool calls that arrived since the last frame, and keep the frames
+        // coming while the virtual cursor is still playing a demo
+        self.pump_mcp(ctx);
+        if self.demo.busy() {
+            ctx.request_repaint();
+        }
+        // pick up a finished update check and repaint the window showing it, if one is open
+        if self.update.poll() && (self.about || self.update_dialog) {
+            ctx.request_repaint();
+        }
         // a layer was switched on or off: what is on it joins or leaves the picking and the cutting.
         // Pattern children are frozen too (passive ghosts of their source), in the same pass so the
         // flag stays stable frame to frame and does not trigger an endless recompute.
@@ -2634,6 +2677,8 @@ impl eframe::App for App {
         self.export_file_ui(ctx);
         self.unsaved_ui(ctx);
         self.about_ui(ctx);
+        self.update_ui(ctx);
+        self.demo_ui(ctx);
         if self.shortcuts_open {
             dialogs::shortcuts::window(ctx, &mut self.shortcuts_open);
         }
@@ -2649,11 +2694,36 @@ impl eframe::App for App {
             }
         }
         crate::widgets::toast::show(ctx);
+        self.demo.draw(ctx);
         self.screenshot(ctx);
     }
 }
 
 // ---------------- helpers ----------------
+
+/// The u64 shape ids in a JSON array argument (ignoring non-numbers).
+fn json_ids(v: Option<&serde_json::Value>) -> Vec<u64> {
+    v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).collect()).unwrap_or_default()
+}
+
+/// Map an MCP key name to an `egui::Key` (named keys, or a single letter/digit).
+fn parse_key(name: &str) -> Option<egui::Key> {
+    use egui::Key;
+    Some(match name.to_ascii_lowercase().as_str() {
+        "enter" | "return" => Key::Enter,
+        "escape" | "esc" => Key::Escape,
+        "tab" => Key::Tab,
+        "space" => Key::Space,
+        "delete" | "del" => Key::Delete,
+        "backspace" => Key::Backspace,
+        "up" => Key::ArrowUp,
+        "down" => Key::ArrowDown,
+        "left" => Key::ArrowLeft,
+        "right" => Key::ArrowRight,
+        s if s.len() == 1 => egui::Key::from_name(&s.to_ascii_uppercase())?,
+        _ => return None,
+    })
+}
 
 fn thumb_path(project: &std::path::Path) -> PathBuf {
     let mut p = project.as_os_str().to_owned();
@@ -2749,6 +2819,239 @@ fn fmt_time(min: f64) -> String {
 }
 
 impl App {
+    /// Carry out the MCP tool calls that arrived since the last frame. Pointer and keyboard tools
+    /// become [`demo::Step`]s played through the visible cursor; high-level tools act directly. Each
+    /// call is answered at once; the client paces itself with `window`/`wait`.
+    fn pump_mcp(&mut self, ctx: &egui::Context) {
+        use demo::Step;
+        use egui::{Modifiers, PointerButton, Pos2};
+        // take the calls out first so we do not borrow self.mcp across the handling
+        let calls: Vec<mcp::Call> = match &self.mcp {
+            Some(m) => m.rx.try_iter().collect(),
+            None => return,
+        };
+        for call in calls {
+            let a = &call.args;
+            let num = |k: &str| a.get(k).and_then(|v| v.as_f64());
+            let xy = |kx: &str, ky: &str| match (num(kx), num(ky)) {
+                (Some(x), Some(y)) => Some(Pos2::new(x as f32, y as f32)),
+                _ => None,
+            };
+            let secs_to_frames = |s: f64| (s * 60.0).round().max(1.0) as u32;
+            let result: Result<String, String> = match call.tool.as_str() {
+                "cursor" => {
+                    self.demo.on = a.get("on").and_then(|v| v.as_bool()).unwrap_or(true);
+                    Ok(format!("cursor {}", if self.demo.on { "on" } else { "off" }))
+                }
+                "move_to" => match xy("x", "y") {
+                    Some(p) => { self.demo.push([Step::MoveTo(p)]); Ok("moving".into()) }
+                    None => Err("need x, y".into()),
+                },
+                "click" => match xy("x", "y") {
+                    Some(p) => {
+                        let b = if a.get("button").and_then(|v| v.as_str()) == Some("right") { PointerButton::Secondary } else { PointerButton::Primary };
+                        self.demo.push([Step::MoveTo(p), Step::Press(b), Step::Wait(6), Step::Release(b), Step::Wait(4)]);
+                        Ok("clicked".into())
+                    }
+                    None => Err("need x, y".into()),
+                },
+                "double_click" => match xy("x", "y") {
+                    Some(p) => {
+                        self.demo.push([Step::MoveTo(p), Step::Press(PointerButton::Primary), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(2), Step::Press(PointerButton::Primary), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(4)]);
+                        Ok("double-clicked".into())
+                    }
+                    None => Err("need x, y".into()),
+                },
+                "long_press" => match xy("x", "y") {
+                    Some(p) => { self.demo.push([Step::MoveTo(p), Step::Hold(34), Step::Wait(4)]); Ok("long-pressed".into()) }
+                    None => Err("need x, y".into()),
+                },
+                "drag" => match (xy("x1", "y1"), xy("x2", "y2")) {
+                    (Some(a1), Some(a2)) => {
+                        self.demo.push([Step::MoveTo(a1), Step::Press(PointerButton::Primary), Step::Wait(3), Step::MoveTo(a2), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(4)]);
+                        Ok("dragged".into())
+                    }
+                    _ => Err("need x1,y1,x2,y2".into()),
+                },
+                "type_text" => match a.get("text").and_then(|v| v.as_str()) {
+                    Some(t) => { self.demo.push([Step::Type(t.to_string()), Step::Wait(2)]); Ok("typed".into()) }
+                    None => Err("need text".into()),
+                },
+                "press_key" => match a.get("key").and_then(|v| v.as_str()).and_then(parse_key) {
+                    Some(key) => {
+                        let m = Modifiers { command: a.get("cmd").and_then(|v| v.as_bool()).unwrap_or(false) || a.get("ctrl").and_then(|v| v.as_bool()).unwrap_or(false), shift: a.get("shift").and_then(|v| v.as_bool()).unwrap_or(false), alt: a.get("alt").and_then(|v| v.as_bool()).unwrap_or(false), ..Default::default() };
+                        // the MCP must never quit the program: ⌘Q / Ctrl+Q is refused
+                        if m.command && key == egui::Key::Q {
+                            Err("quitting the program is not allowed over the MCP".into())
+                        } else {
+                            self.demo.push([Step::Key(key, m), Step::Wait(2)]);
+                            Ok("key".into())
+                        }
+                    }
+                    None => Err("unknown key".into()),
+                },
+                "wait" => { self.demo.push([Step::Wait(secs_to_frames(num("seconds").unwrap_or(1.0)))]); Ok("waiting".into()) }
+                "new_job" => {
+                    let mut job = crate::toolpath::Job { width: num("width").unwrap_or(300.0), height: num("height").unwrap_or(200.0), thickness: num("thickness").unwrap_or(18.0), ..crate::toolpath::Job::default() };
+                    if let Some(m) = a.get("material").and_then(|v| v.as_str()) {
+                        job.material = m.to_string();
+                    }
+                    self.new_job(job);
+                    self.start_page = false;
+                    Ok("new job".into())
+                }
+                "list_materials" => Ok(serde_json::json!({"materials": self.materials.sorted().iter().map(|m| m.key.clone()).collect::<Vec<_>>()}).to_string()),
+                "list_tools" => {
+                    let tools: Vec<serde_json::Value> = self.lib.tools_for(&self.job.material).iter().map(|t| serde_json::json!({"name": t.name, "kind": format!("{:?}", t.kind), "diameter": t.diameter})).collect();
+                    Ok(serde_json::json!({"material": self.job.material, "tools": tools}).to_string())
+                }
+                "state" => Ok(self.mcp_state()),
+                "draw_rectangle" => match (num("cx"), num("cy"), num("width"), num("height")) {
+                    (Some(cx), Some(cy), Some(w), Some(h)) => {
+                        let mut r = RectShape::new([cx, cy], w, h);
+                        if let Some(cr) = num("corner_radius") { r.corner_radius = cr; }
+                        let id = self.add_shape(r);
+                        self.edit.selection = vec![id];
+                        Ok(id.to_string())
+                    }
+                    _ => Err("need cx, cy, width, height".into()),
+                },
+                "draw_circle" => match (num("cx"), num("cy"), num("radius")) {
+                    (Some(cx), Some(cy), Some(rad)) => { let id = self.add_shape(Circle::new([cx, cy], rad)); self.edit.selection = vec![id]; Ok(id.to_string()) }
+                    _ => Err("need cx, cy, radius".into()),
+                },
+                "draw_ellipse" => match (num("cx"), num("cy"), num("width"), num("height")) {
+                    (Some(cx), Some(cy), Some(w), Some(h)) => { let id = self.add_shape(Ellipse::new([cx, cy], w / 2.0, h / 2.0)); self.edit.selection = vec![id]; Ok(id.to_string()) }
+                    _ => Err("need cx, cy, width, height".into()),
+                },
+                "draw_polygon" => match (num("cx"), num("cy"), num("radius"), num("sides")) {
+                    (Some(cx), Some(cy), Some(rad), Some(s)) => { let id = self.add_shape(Polygon::new([cx, cy], rad, (s as u32).max(3))); self.edit.selection = vec![id]; Ok(id.to_string()) }
+                    _ => Err("need cx, cy, radius, sides".into()),
+                },
+                "add_text" => match (num("cx"), num("cy"), a.get("text").and_then(|v| v.as_str())) {
+                    (Some(cx), Some(cy), Some(txt)) => { let id = self.add_shape(Text::new([cx, cy], txt, num("height").unwrap_or(20.0))); self.edit.selection = vec![id]; Ok(id.to_string()) }
+                    _ => Err("need cx, cy, text".into()),
+                },
+                "delete_shapes" => {
+                    let ids = json_ids(a.get("ids"));
+                    self.push_undo();
+                    self.shapes.retain(|s| !ids.contains(&s.id));
+                    self.sync_patterns();
+                    self.edit.retain_existing(&self.shapes);
+                    self.recompute_all();
+                    Ok(format!("deleted {}", ids.len()))
+                }
+                "select" => {
+                    let ids = json_ids(a.get("ids"));
+                    self.edit.selection = self.shapes.iter().filter(|s| ids.contains(&s.id)).map(|s| s.id).collect();
+                    Ok(format!("selected {}", self.edit.selection.len()))
+                }
+                "set_variable" => match (a.get("name").and_then(|v| v.as_str()), a.get("expression").and_then(|v| v.as_str())) {
+                    (Some(n), Some(e)) => { self.vars.set(n, e); self.vars_dirty = true; Ok(format!("{n} = {e}")) }
+                    _ => Err("need name, expression".into()),
+                },
+                "add_toolpath" => {
+                    let kind = a.get("kind").and_then(|v| v.as_str()).filter(|k| matches!(*k, "profile" | "cutout" | "pocket" | "slot" | "drill" | "vcarve")).map(|k| k.to_string());
+                    let ids = json_ids(a.get("shape_ids"));
+                    let ids_ok = !ids.is_empty() && ids.iter().all(|id| self.shapes.iter().any(|s| s.id == *id));
+                    match (kind, ids_ok) {
+                        (None, _) => Err("kind must be profile, cutout, pocket, slot, drill or vcarve".into()),
+                        (_, false) => Err("shape_ids must be existing shapes".into()),
+                        (Some(kind), true) => {
+                            let job = self.job.clone();
+                            let leaked: &'static str = Box::leak(kind.into_boxed_str());
+                            let mut tp = default_toolpath(leaked, &self.lib, &job, ids);
+                            if let Some(d) = num("cut_depth") { tp.cut_depth = d; }
+                            if let Some(d) = num("start_depth") { tp.start_depth = d; }
+                            if let Some(dia) = num("tool_diameter") {
+                                let angle = if tp.tool.kind == crate::tools::ToolKind::VBit { Some(tp.tool.angle) } else { None };
+                                tp.tool = self.lib.pick(&job.material, tp.tool.kind, dia, angle);
+                            }
+                            if let Some(n) = a.get("name").and_then(|v| v.as_str()) { tp.name = n.to_string(); }
+                            let name = tp.name.clone();
+                            self.toolpaths.push(tp);
+                            self.recompute_all();
+                            Ok(format!("added toolpath {name}"))
+                        }
+                    }
+                }
+                "delete_toolpath" => {
+                    let i = num("index").unwrap_or(-1.0) as i64;
+                    if i >= 0 && (i as usize) < self.toolpaths.len() {
+                        let name = self.toolpaths.remove(i as usize).name;
+                        self.recompute_all();
+                        Ok(format!("deleted {name}"))
+                    } else {
+                        Err("index out of range".into())
+                    }
+                }
+                "save_project" => match a.get("path").and_then(|v| v.as_str()) {
+                    Some(p) => self.write_project(std::path::Path::new(p)).map(|_| format!("saved {p}")),
+                    None => Err("need path".into()),
+                },
+                "export_gcode" => match a.get("path").and_then(|v| v.as_str()) {
+                    Some(p) => self.export_gcode_to(std::path::Path::new(p)),
+                    None => Err("need path".into()),
+                },
+                "view" => match a.get("mode").and_then(|v| v.as_str()) {
+                    Some("3d") => { self.start_preview(false); Ok("3D".into()) }
+                    _ => { self.mode = ViewMode::TwoD; Ok("2D".into()) }
+                },
+                "window" => {
+                    let r = ctx.screen_rect();
+                    let port = self.mcp.as_ref().map(|m| m.port).unwrap_or(0);
+                    Ok(serde_json::json!({"width": r.width(), "height": r.height(), "busy": self.demo.busy(), "port": port}).to_string())
+                }
+                "demo_window" => {
+                    self.demo_open = a.get("open").and_then(|v| v.as_bool()).unwrap_or(true);
+                    Ok(format!("demo window {}", if self.demo_open { "open" } else { "closed" }))
+                }
+                "screenshot" => match a.get("path").and_then(|v| v.as_str()) {
+                    Some(path) => { self.shot = Some((PathBuf::from(path), 0, false)); Ok(format!("saving to {path}")) }
+                    None => Err("need path".into()),
+                },
+                other => Err(format!("unknown tool {other}")),
+            };
+            let _ = call.reply.send(result);
+        }
+        if self.mcp.is_some() {
+            ctx.request_repaint();
+        }
+    }
+
+    /// A JSON summary of the drawing for the MCP `state` tool: the job, every shape (id, kind,
+    /// centre and size in mm) and every toolpath (index, name, kind, cut depth, tool). This lets a
+    /// client find shape ids and see what it has built.
+    fn mcp_state(&self) -> String {
+        let shapes: Vec<serde_json::Value> = self.shapes.iter().map(|s| {
+            let kind = match &s.shape {
+                Shape::Rect(_) => "rectangle",
+                Shape::Circle(_) => "circle",
+                Shape::Ellipse(_) => "ellipse",
+                Shape::Polygon(_) => "polygon",
+                Shape::Text(_) => "text",
+                Shape::Path(_) => "path",
+                Shape::Spline(_) => "spline",
+                Shape::Compound(_) => "compound",
+                Shape::RefImage(_) => "image",
+            };
+            let (c, w, h) = match s.bounds() {
+                Some((lo, hi)) => ([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0], hi[0] - lo[0], hi[1] - lo[1]),
+                None => ([0.0, 0.0], 0.0, 0.0),
+            };
+            serde_json::json!({"id": s.id, "kind": kind, "cx": c[0], "cy": c[1], "width": w, "height": h})
+        }).collect();
+        let toolpaths: Vec<serde_json::Value> = self.toolpaths.iter().enumerate().map(|(i, tp)| {
+            serde_json::json!({"index": i, "name": tp.name, "tool": tp.tool.name, "cut_depth": tp.cut_depth})
+        }).collect();
+        serde_json::json!({
+            "job": {"width": self.job.width, "height": self.job.height, "thickness": self.job.thickness, "material": self.job.material},
+            "selection": self.edit.selection,
+            "shapes": shapes,
+            "toolpaths": toolpaths,
+        }).to_string()
+    }
+
     /// Pick the theme: follow the system, light or dark.
     /// Switch the interface language; it takes effect with the next frame.
     pub(super) fn set_lang(&mut self, ctx: &egui::Context, lang: crate::lang::Lang) {
