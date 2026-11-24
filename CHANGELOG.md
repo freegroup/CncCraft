@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/freegroup/CncCraft/compare/v1.27.0...v1.28.0) (2026-11-24)
+
+
+### Features
+
+* check for software updates and in-process MCP server ([d2563d6](https://github.com/freegroup/CncCraft/commit/d2563d699b34255cdd82008f8e4c9f8012d42eda)), closes [#1](https://github.com/freegroup/CncCraft/issues/1)
+
 # [1.27.0](https://github.com/freegroup/CncCraft/compare/v1.26.0...v1.27.0) (2026-11-23)
 
 
