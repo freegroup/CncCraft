@@ -346,9 +346,13 @@ const SNAP_RADIUS_MAX_PX: f64 = 30.0; // estimated
 /// The grid spacing the original stores in its settings (vcSnapGridSpacingMM, with grid
 /// snapping off and the grid hidden: vcSnapGridDoSnap 0, vcSnapGridVisible 0).
 const GRID_SPACING: f64 = 5.0;
-/// Angle step for Shift while drawing lines; the original accepts 0°..90° (Spark sub_100785420,
-/// which caps the step at 90.0 = 0x4056800000000000).
+/// Angle step for turning the selection with Shift held; the original accepts 0°..90° (Spark
+/// sub_100785420, which caps the step at 90.0 = 0x4056800000000000).
 const ANGLE_STEP: f64 = 15.0;
+/// Angle step for drawing a line/polyline with Shift held: 45° (0/45/90/…), the common pattern in
+/// PowerPoint, Keynote, Sketch, Affinity and Figma, where Shift constrains a drawn line to 45°
+/// increments. Still within the original's 0°..90° rule.
+const LINE_ANGLE_STEP: f64 = 45.0;
 
 struct Editor {
     tp: Toolpath,
@@ -2031,7 +2035,14 @@ impl App {
             } else {
                 let mut pts: Vec<Pos2> = self.poly.iter().map(|p| self.to_screen(*p)).collect();
                 if let Some(m) = resp.hover_pos() {
-                    pts.push(m);
+                    // show the live segment on its 45° step while Shift is held, matching the point
+                    // the next click will place
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    let end = match self.poly.last() {
+                        Some(&last) if shift => self.to_screen(shape_edit::snap_angle(last, self.to_mm(m), LINE_ANGLE_STEP)),
+                        _ => m,
+                    };
+                    pts.push(end);
                 }
                 painter.add(egui::Shape::line(pts, Stroke::new(1.3_f32, draw_col)));
             }
@@ -2232,9 +2243,10 @@ impl App {
                 }
             }
             DrawTool::Polyline | DrawTool::Spline => {
-                // Shift keeps the new segment on angle steps, otherwise the point snaps
+                // Shift keeps the new segment on 45° steps (0/45/90/…), as in PowerPoint, Keynote,
+                // Sketch and Affinity; otherwise the point snaps to geometry/grid
                 let mouse = mouse.map(|m| match self.poly.last() {
-                    Some(&last) if uniform => shape_edit::snap_angle(last, m, ANGLE_STEP),
+                    Some(&last) if uniform => shape_edit::snap_angle(last, m, LINE_ANGLE_STEP),
                     _ => self.snap(m),
                 });
                 if resp.double_clicked() {
