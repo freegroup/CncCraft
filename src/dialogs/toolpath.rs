@@ -52,6 +52,13 @@ impl App {
         let mut close = false;
         let mut apply = false;
         let mut open_tool_dlg = false;
+        // where the Anwenden button is drawn this frame, so add_toolpath can click it by its rect
+        // (never a guessed position) — set inside the button row below, applied after
+        let mut apply_rect: Option<egui::Rect> = None;
+        // likewise the cut-depth field and the per-pass depth ("Zustellung"/"Bohrtiefe je Hub"), so
+        // add_toolpath can type into them through the UI
+        let mut cut_depth_rect: Option<egui::Rect> = None;
+        let mut stepdown_rect: Option<egui::Rect> = None;
         let sel_count = self.edit.selection.len();
         let tools: Vec<Tool> = self.lib.tools_for(&self.job.material).into_iter().cloned().collect();
         // the job's material: the cutting values are checked against its limits
@@ -120,7 +127,7 @@ impl App {
                     // the depths take a number, a formula or variables ("platte_d/2"): a formula
                     // is kept on the toolpath and follows the variables
                     egui::Grid::new("tp_top_right").num_columns(2).spacing([8.0, 6.0]).min_col_width(LABELS + 13.0).show(ui, |ui| {
-                        depth_row(ui, &cut_label, 1, &mut tp.cut_depth, &mut tp.cut_expr, thickness + 5.0, depth_text, depth_input, &names, &resolved);
+                        cut_depth_rect = Some(depth_row(ui, &cut_label, 1, &mut tp.cut_depth, &mut tp.cut_expr, thickness + 5.0, depth_text, depth_input, &names, &resolved));
                         depth_row(ui, &t!("Starttiefe"), 0, &mut tp.start_depth, &mut tp.start_expr, thickness, depth_text, depth_input, &names, &resolved);
                     });
                 });
@@ -161,12 +168,12 @@ impl App {
                         if matches!(tp.strategy, Strategy::Drill) {
                             let tip = Tip::new(t!("Bohrtiefe je Hub"), t!("So tief bohrt der Bohrer auf einmal, dann fährt er ganz aus dem Loch, damit die Späne herauskommen. Die Tiefe wird in gleich große Hübe geteilt.")).icon(Icon::Drill);
                             ui.label(t!("Bohrtiefe je Hub")).tip(&tip);
-                            ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                            stepdown_rect = Some(ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip).rect);
                         } else {
                             let tip = Tip::new(t!("Zustellung"), t!("So tief schneidet der Fräser je Durchgang. Die Zieltiefe wird in gleich große Durchgänge geteilt."));
                             ui.label(t!("Zustellung")).tip(&tip);
                             ui.vertical(|ui| {
-                                ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip);
+                                stepdown_rect = Some(ui.add(mm(&mut tp.tool.stepdown, 50.0)).tip(&tip).rect);
                                 if let Some(m) = &material {
                                     if let Some(max) = m.depth_exceeded(tp.tool.stepdown, tp.tool.diameter) {
                                         limit_note(
@@ -324,7 +331,9 @@ impl App {
             });
             dialog_buttons(ui, |ui| {
                 let b = egui::Button::new(egui::RichText::new(t!("Anwenden")).color(INK).strong()).fill(ACCENT).min_size(Vec2::new(110.0, 28.0));
-                if ui.add(b).clicked() {
+                let resp = ui.add(b);
+                apply_rect = Some(resp.rect);
+                if resp.clicked() {
                     close = true;
                 }
                 if ui.add(egui::Button::new(t!("Schließen")).min_size(Vec2::new(90.0, 28.0))).clicked() {
@@ -335,6 +344,16 @@ impl App {
                 }
             });
         });
+        // the fields' live rects (asked from egui, not guessed), for the agent's mouse
+        if let Some(rect) = apply_rect {
+            self.control_rects.insert("editor.apply", rect);
+        }
+        if let Some(rect) = cut_depth_rect {
+            self.control_rects.insert("editor.cut_depth", rect);
+        }
+        if let Some(rect) = stepdown_rect {
+            self.control_rects.insert("editor.stepdown", rect);
+        }
         // the travel heights belong to the job: every toolpath follows them
         if (safe_z - self.job.safe_z).abs() > 1e-9 || (home_z - self.job.home_z).abs() > 1e-9 {
             self.job.safe_z = safe_z;
@@ -378,13 +397,15 @@ impl App {
 /// variables (with the suggestions every number field has), the result when it is a formula, and
 /// what is wrong with it when it can't be worked out.
 #[allow(clippy::too_many_arguments)]
-fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr: &mut Option<String>, max: f64, texts: &mut [String; 2], input: &mut input::ConstraintInput, names: &[String], resolved: &shape_edit::Resolved) {
+fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr: &mut Option<String>, max: f64, texts: &mut [String; 2], input: &mut input::ConstraintInput, names: &[String], resolved: &shape_edit::Resolved) -> egui::Rect {
     ui.label(label);
+    let mut field_rect = egui::Rect::NOTHING;
     ui.vertical(|ui| {
       let mut error: Option<String> = None;
       ui.horizontal(|ui| {
         let id = egui::Id::new(("depth_field", field));
         let resp = ui.add(egui::TextEdit::singleline(&mut texts[field]).id(id).font(egui::TextStyle::Monospace).desired_width(110.0));
+        field_rect = resp.rect;
         let ctx = ui.ctx().clone();
         let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
         let tab = ctx.input(|i| i.key_pressed(egui::Key::Tab));
@@ -423,6 +444,7 @@ fn depth_row(ui: &mut egui::Ui, label: &str, field: usize, value: &mut f64, expr
       }
     });
     ui.end_row();
+    field_rect
 }
 
 /// A value beyond what the job's material takes: a warning under its field, wrapped to the field

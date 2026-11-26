@@ -40,7 +40,7 @@ const STAGES: &[Stage] = &[
     stage("Form verschieben", move_shape),
     stage("Rahmen aufziehen und auswählen", band_select),
     stage("Knoten ziehen", drag_node),
-    stage("Rechteck an der Job-Ecke einrasten", draw_snapped_rect),
+    stage("Rechteck an der Ecke einer anderen Form einrasten", draw_snapped_rect),
     stage("Breite als Formel eintippen", type_width),
     stage("Tab ins Höhenfeld, Klick in die Arbeitsfläche übernimmt", tab_then_click),
     stage("Erneut klicken dreht nicht mehr (Drehen kommt später als Winkel-Constraint)", no_rotation),
@@ -1438,6 +1438,12 @@ fn ctrl_copy(app: &mut App) -> (Vec<Event>, Check) {
     let ell = find(app, |s| matches!(s, Shape::Ellipse(_))).expect("example has an ellipse");
     app.tool = DrawTool::Select;
     app.edit.selection.clear();
+    // this stage checks copy + move only. In the busy example scene the snap policies (especially
+    // equal-gap) would nudge the free-dragged copy, so switch them off for a clean move. They are
+    // the last snapping-dependent stage, so leaving them off for the rest is fine.
+    app.snap_to_geometry = false;
+    app.snap_to_center = false;
+    app.snap_to_gap = false;
     let c = ell.shape.center();
     let px = 50.0;
     let mm = px as f64 / app.zoom as f64;
@@ -1548,18 +1554,25 @@ fn no_rotation(app: &mut App) -> (Vec<Event>, Check) {
 fn draw_snapped_rect(app: &mut App) -> (Vec<Event>, Check) {
     app.tool = DrawTool::Rect;
     app.edit.selection.clear();
+    // an earlier stage switches snapping off for a clean move; this stage needs it on again
+    app.snap_to_geometry = true;
+    app.snap_to_center = true;
+    app.snap_to_gap = true;
+    // a shape to snap onto: its lower-left corner sits at (50, 50)
+    let anchor = app.add_shape(shape_edit::Rect::new([60.0, 60.0], 20.0, 20.0));
     let before: Vec<u64> = app.shapes.iter().map(|s| s.id).collect();
-    // start 4 px off the job's lower-left corner: inside the snap radius
-    let from = app.to_screen([0.0, 0.0]) + Vec2::new(4.0, -3.0);
-    let to = app.to_screen([40.0, 30.0]);
+    // start a new rectangle 4 px off that shape's lower-left corner (50, 50): inside the snap radius.
+    // The workpiece corner is no longer a snap anchor — only elements and groups are.
+    let from = app.to_screen([50.0, 50.0]) + Vec2::new(4.0, -3.0);
+    let to = app.to_screen([90.0, 80.0]);
     let check: Check = Box::new(move |app| {
-        let new: Vec<&Item> = app.shapes.iter().filter(|s| !before.contains(&s.id)).collect();
+        let new: Vec<&Item> = app.shapes.iter().filter(|s| !before.contains(&s.id) && s.id != anchor).collect();
         let Some(Shape::Rect(r)) = new.first().map(|s| &s.shape) else {
             return Err(format!("{} neue Formen, kein Rechteck", new.len()));
         };
         let lo = [r.center[0] - r.width / 2.0, r.center[1] - r.height / 2.0];
-        let msg = format!("Ecke {:.2}/{:.2} mm (Ziel 0/0)", lo[0], lo[1]);
-        if lo[0].abs() < 1e-9 && lo[1].abs() < 1e-9 {
+        let msg = format!("Ecke {:.2}/{:.2} mm (Ziel 50/50)", lo[0], lo[1]);
+        if (lo[0] - 50.0).abs() < 1e-9 && (lo[1] - 50.0).abs() < 1e-9 {
             Ok(msg)
         } else {
             Err(msg)
@@ -1646,6 +1659,11 @@ fn resize_corner(app: &mut App) -> (Vec<Event>, Check) {
 fn move_shape(app: &mut App) -> (Vec<Event>, Check) {
     let ell = find(app, |s| matches!(s, Shape::Ellipse(_))).expect("example has an ellipse");
     app.edit.selection.clear();
+    // this stage checks a plain move; the busy example scene would otherwise snap the shape, so
+    // switch the snap policies off (the snap stage re-enables them before it runs)
+    app.snap_to_geometry = false;
+    app.snap_to_center = false;
+    app.snap_to_gap = false;
     let c = ell.shape.center();
     let px = 60.0;
     let mm = px as f64 / app.zoom as f64;

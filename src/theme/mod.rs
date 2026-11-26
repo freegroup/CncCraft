@@ -109,6 +109,10 @@ pub fn gcode_text()        -> Color32 { with(|p| p.gcode_text) }
 pub fn sim_rapid()     -> Color32 { with(|p| p.sim_rapid) }
 pub fn sim_plunge()    -> Color32 { with(|p| p.sim_plunge) }
 pub fn board_desk()    -> Color32 { with(|p| p.board_desk) }
+/// The red construction lines dragged off the rulers.
+pub fn guide()         -> Color32 { with(|p| p.guide) }
+/// The alignment lines shown while a point snaps to existing geometry.
+pub fn snap_guide()    -> Color32 { with(|p| p.snap_guide) }
 
 // ---------------------------------------------------------------------------
 // Choosing and applying a theme.

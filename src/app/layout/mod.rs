@@ -15,6 +15,7 @@ mod canvas_bars;
 mod title_bar;
 mod tool_column;
 mod toolpath_panel;
+pub(in crate::app) use toolpath_panel::op_control;
 mod widgets;
 
 pub(in crate::app) use tool_column::{tool_tip, ToolForm, GROUP_COUNT};

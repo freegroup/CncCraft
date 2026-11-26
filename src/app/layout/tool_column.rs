@@ -88,7 +88,7 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Group => Tip::new(t!("Gruppieren"), t!("Die Auswahl wird eine Gruppe: Ein Klick wählt dann alles. Gruppen lassen sich wieder gruppieren.")).shortcut(cmd("G")).when_disabled(pick_two),
         Icon::Ungroup => Tip::new(t!("Gruppe auflösen"), t!("Löst die äußerste Gruppe der Auswahl auf, eine Ebene je Klick.")).shortcut(cmd("⇧G")).when_disabled(t!("Erst eine Gruppe auswählen.")),
         Icon::ImportDxf => Tip::new(t!("DXF importieren"), t!("Holt eine Zeichnung aus einer DXF-Datei (R12, R14 und neuer) als eine Gruppe. Rechtsklick auf die Form lädt sie neu von der Platte.")),
-        Icon::Job => Tip::new(t!("Job einrichten"), t!("Größe und Dicke der Platte, Material und wo der Nullpunkt liegt.")),
+        Icon::Job => Tip::new(t!("Werkstück einrichten"), t!("Größe und Dicke der Platte, Material und wo der Nullpunkt liegt.")),
         Icon::Variables => Tip::new(t!("Variablen"), t!("Benannte Werte wie \u{201e}breite\u{201c}, die Ma\u{00df}e, Tiefen und Abst\u{00e4}nde verwenden. \u{00c4}ndert man den Wert, folgt alles.")),
         Icon::InsertImage => Tip::new(t!("Bild einfügen"), t!("Ein Bild (PNG, JPEG) als transparente Vorlage auf die Bild-Ebene laden.")),
         Icon::Calibrate => Tip::new(t!("Bild kalibrieren"), t!("Zwei Punkte im Bild anklicken und den echten Abstand eingeben. Das Bild wird danach so skaliert, dass es 1:1 zum Arbeitskoordinatensystem passt.")),
@@ -123,7 +123,10 @@ impl App {
                 ui.spacing_mut().item_spacing = Vec2::splat(GAP);
                 let chevron = if self.tools_open { "‹" } else { "›" };
                 let hint = if self.tools_open { t!("Werkzeugleiste verkleinern") } else { t!("Werkzeugleiste erweitern") };
-                if ui.add(egui::Button::new(egui::RichText::new(chevron).size(16.0).color(ink())).min_size(Vec2::new(26.0, 22.0)).rounding(4.0)).on_hover_text(hint).clicked() {
+                let fold = ui.add(egui::Button::new(egui::RichText::new(chevron).size(16.0).color(ink())).min_size(Vec2::new(26.0, 22.0)).rounding(4.0)).on_hover_text(hint);
+                // where it is, for the panel commands that click it with the visible mouse
+                self.control_rects.insert("panel.tools", fold.rect);
+                if fold.clicked() {
                     self.tools_open = !self.tools_open;
                     self.flyout = None;
                 }

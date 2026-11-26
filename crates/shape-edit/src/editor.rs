@@ -3,7 +3,7 @@
 
 use crate::geometry::dist;
 use crate::handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
-use crate::snap::{SnapKind, Snapping};
+use crate::snap::{MoveSnap, SnapKind, Snapping};
 use crate::{Editable, Grip, GripKind, Pt, SelectionStyle};
 
 /// Smallest scale factor a resize may reach, so a shape can't collapse or flip inside out.
@@ -94,6 +94,9 @@ pub struct Editor<S> {
     pub snapping: Snapping,
     /// What the pointer snapped to during the current gesture (for a marker on screen).
     pub last_snap: Option<(Pt, SnapKind)>,
+    /// When a Move drag aligned the shape to another on one or both axes: the caught column (x) and
+    /// row (y), each drawn as an alignment guide. Independent of `last_snap` (which marks a point).
+    pub move_snap: Option<MoveSnap>,
     /// The corner handles turn the selection instead of resizing it. Clicking a selected shape
     /// again switches this on and off ("click again to transform", as in the original).
     pub rotate_mode: bool,
@@ -105,6 +108,8 @@ pub struct Editor<S> {
     clicked_selected: bool,
     /// Snap targets of the shapes the gesture doesn't change, gathered when it starts.
     targets: Vec<(Pt, SnapKind)>,
+    /// Bounding boxes of the shapes and groups the gesture doesn't change (for the gap policy).
+    target_boxes: Vec<(Pt, Pt)>,
     moved: bool,
     toggle_on_release: Option<u64>,
     /// The press landed on one of several selected shapes: if it ends without moving, the click
@@ -120,11 +125,13 @@ impl<S> Default for Editor<S> {
             priority_layer: 0,
             snapping: Snapping::default(),
             last_snap: None,
+            move_snap: None,
             rotate_mode: false,
             angle_step: 15.0,
             gesture: None,
             clicked_selected: false,
             targets: vec![],
+            target_boxes: vec![],
             moved: false,
             toggle_on_release: None,
             narrow_on_release: None,
@@ -140,6 +147,23 @@ fn put<S: Editable>(shapes: &mut [S], s: S) {
     if let Some(slot) = shapes.iter_mut().find(|x| x.id() == s.id()) {
         *slot = s;
     }
+}
+
+/// The snap anchors of a bounding box `lo..hi`: its four corners (Node), the middle of each edge
+/// (MidPoint) and its centre (Centre). Used so a group snaps as one block.
+fn bbox_snap_points(lo: Pt, hi: Pt) -> Vec<(Pt, SnapKind)> {
+    let (mx, my) = ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0);
+    vec![
+        ([lo[0], lo[1]], SnapKind::Node),
+        ([hi[0], lo[1]], SnapKind::Node),
+        ([hi[0], hi[1]], SnapKind::Node),
+        ([lo[0], hi[1]], SnapKind::Node),
+        ([mx, lo[1]], SnapKind::MidPoint),
+        ([mx, hi[1]], SnapKind::MidPoint),
+        ([lo[0], my], SnapKind::MidPoint),
+        ([hi[0], my], SnapKind::MidPoint),
+        ([mx, my], SnapKind::Centre),
+    ]
 }
 
 /// The directions any of the shapes locks against resizing (see [`Editable::locked_axes`]).
@@ -165,9 +189,51 @@ impl<S: Editable> Editor<S> {
         self.gesture.is_some()
     }
 
-    /// Snap targets of every shape except those in `skip`.
+    /// Snap targets of every shape except those in `skip`: each shape's own geometry, plus — for a
+    /// group — the corners, edge middles and centre of the whole group's bounding box, so a shape
+    /// snaps to a group as one block, not only to its members.
     pub fn targets(shapes: &[S], skip: &[u64]) -> Vec<(Pt, SnapKind)> {
-        shapes.iter().filter(|s| !skip.contains(&s.id())).flat_map(Editable::snap_points).collect()
+        let mut out: Vec<(Pt, SnapKind)> = shapes.iter().filter(|s| !skip.contains(&s.id())).flat_map(Editable::snap_points).collect();
+        for (_, lo, hi) in Self::group_boxes(shapes, skip) {
+            out.extend(bbox_snap_points(lo, hi));
+        }
+        out
+    }
+
+    /// Combined bounding box of each group among the non-skipped, visible shapes: `(group id, lo, hi)`.
+    fn group_boxes(shapes: &[S], skip: &[u64]) -> Vec<(u64, Pt, Pt)> {
+        let mut groups: Vec<(u64, Pt, Pt)> = vec![];
+        for s in shapes.iter().filter(|s| !skip.contains(&s.id()) && !s.hidden()) {
+            let (Some(g), Some((lo, hi))) = (s.group(), s.bounds()) else { continue };
+            match groups.iter_mut().find(|(id, _, _)| *id == g) {
+                Some((_, glo, ghi)) => {
+                    *glo = [glo[0].min(lo[0]), glo[1].min(lo[1])];
+                    *ghi = [ghi[0].max(hi[0]), ghi[1].max(hi[1])];
+                }
+                None => groups.push((g, lo, hi)),
+            }
+        }
+        groups
+    }
+
+    /// The bounding box of every "block" except those in `skip`, for the gap (equal-spacing) policy:
+    /// a whole group counts as one box, and every loose shape as its own box.
+    pub fn target_boxes(shapes: &[S], skip: &[u64]) -> Vec<(Pt, Pt)> {
+        let mut out: Vec<(Pt, Pt)> = Self::group_boxes(shapes, skip).into_iter().map(|(_, lo, hi)| (lo, hi)).collect();
+        for s in shapes.iter().filter(|s| !skip.contains(&s.id()) && !s.hidden() && s.group().is_none()) {
+            if let Some((lo, hi)) = s.bounds() {
+                out.push((lo, hi));
+            }
+        }
+        out
+    }
+
+    /// Snap targets for MOVING a shape: the bounding-box points (corners, edge middles, centre) of
+    /// every block — each loose shape and each whole group. Bounding boxes, not raw facet nodes, so
+    /// snapping lands edges exactly and is the same at every zoom (a facetted circle has dozens of
+    /// nodes; snapping to one of them, not its extent, left a gap when zoomed out — the user's bug).
+    pub fn move_targets(shapes: &[S], skip: &[u64]) -> Vec<(Pt, SnapKind)> {
+        Self::target_boxes(shapes, skip).into_iter().flat_map(|(lo, hi)| bbox_snap_points(lo, hi)).collect()
     }
 
     /// Where `p` snaps to among all shapes (for drawing tools, outside a gesture).
@@ -283,6 +349,7 @@ impl<S: Editable> Editor<S> {
         self.narrow_on_release = None;
         self.gesture = None;
         self.last_snap = None;
+        self.move_snap = None;
         self.clicked_selected = false;
         let started = match tool {
             Tool::Select => self.press_select(shapes, p, view, additive),
@@ -290,11 +357,19 @@ impl<S: Editable> Editor<S> {
         };
         // snap onto everything the gesture doesn't change
         self.targets = match &self.gesture {
-            Some(Gesture::Move { .. }) | Some(Gesture::Resize { .. }) => Self::targets(shapes, &self.selection),
+            // moving snaps the shape's bounding box onto other blocks' bounding boxes (zoom-stable,
+            // edge-exact), not onto every facet node
+            Some(Gesture::Move { .. }) => Self::move_targets(shapes, &self.selection),
+            Some(Gesture::Resize { .. }) => Self::targets(shapes, &self.selection),
             Some(Gesture::Node { index, orig }) => {
                 let own = orig.nodes().and_then(|n| n.get(*index).copied());
                 Self::targets(shapes, &[]).into_iter().filter(|(q, _)| Some(*q) != own).collect()
             }
+            _ => vec![],
+        };
+        // bounding boxes of the resting shapes/groups, for the gap (equal-spacing) policy while moving
+        self.target_boxes = match &self.gesture {
+            Some(Gesture::Move { .. }) => Self::target_boxes(shapes, &self.selection),
             _ => vec![],
         };
         started
@@ -422,14 +497,48 @@ impl<S: Editable> Editor<S> {
 
     /// Pointer moved to `p` with the button held. `uniform` keeps the aspect ratio on corners.
     pub fn drag(&mut self, shapes: &mut [S], mut p: Pt, uniform: bool) {
-        if matches!(self.gesture, Some(Gesture::Move { .. } | Gesture::Resize { .. } | Gesture::Node { .. })) {
+        // Resize and node drags move a single handle, so the pointer itself is what snaps. A Move
+        // drag is different: the pointer sits somewhere inside the shape, far from any target, so
+        // snapping the pointer catches nothing. There the shape's own geometry snaps (handled in the
+        // Move branch below, like draw2d's SnapToGeometry), so the pointer must stay raw here.
+        if matches!(self.gesture, Some(Gesture::Resize { .. } | Gesture::Node { .. })) {
             p = self.snapped(p);
+        } else if matches!(self.gesture, Some(Gesture::Move { .. })) {
+            self.last_snap = None;
+            self.move_snap = None;
         }
         let step = self.angle_step;
         let Some(g) = &mut self.gesture else { return };
         match g {
             Gesture::Move { start, orig } => {
-                let (dx, dy) = (p[0] - start[0], p[1] - start[1]);
+                let (mut dx, mut dy) = (p[0] - start[0], p[1] - start[1]);
+                // the moved shapes' combined bounding box at the tentative position
+                let source_box = orig.iter().filter_map(Editable::bounds).fold(None, |acc: Option<(Pt, Pt)>, (lo, hi)| {
+                    let (lo, hi) = ([lo[0] + dx, lo[1] + dy], [hi[0] + dx, hi[1] + dy]);
+                    Some(match acc {
+                        Some((alo, ahi)) => ([alo[0].min(lo[0]), alo[1].min(lo[1])], [ahi[0].max(hi[0]), ahi[1].max(hi[1])]),
+                        None => (lo, hi),
+                    })
+                });
+                if let Some(source_box) = source_box {
+                    // snap the moved box's bounding-box points (corners, edge middles, centre) onto the
+                    // resting blocks' bounding boxes, each axis independently — bounding boxes, not
+                    // facet nodes, so the result is edge-exact and the same at every zoom
+                    let (slo, shi) = source_box;
+                    let sources = bbox_snap_points(slo, shi);
+                    if let Some(snap) = self.snapping.snap_move(&sources, source_box, &self.targets, &self.target_boxes) {
+                        dx += snap.offset[0];
+                        dy += snap.offset[1];
+                        // a single marker for the corner that caught (x guide preferred, else y)
+                        self.last_snap = match (snap.x_guide, snap.y_guide) {
+                            (Some((x, k)), Some((y, _))) => Some(([x, y], k)),
+                            (Some((x, k)), None) => sources.iter().map(|(s, _)| s[1]).next().map(|sy| ([x, sy + snap.offset[1]], k)),
+                            (None, Some((y, k))) => sources.iter().map(|(s, _)| s[0]).next().map(|sx| ([sx + snap.offset[0], y], k)),
+                            (None, None) => None,
+                        };
+                        self.move_snap = Some(snap);
+                    }
+                }
                 self.moved |= dx != 0.0 || dy != 0.0;
                 for o in orig.iter() {
                     put(shapes, o.translated(dx, dy));
@@ -512,7 +621,9 @@ impl<S: Editable> Editor<S> {
     /// Button released. Finishes the gesture and says what it did.
     pub fn release(&mut self, shapes: &[S]) -> Outcome {
         self.targets.clear();
+        self.target_boxes.clear();
         self.last_snap = None;
+        self.move_snap = None;
         let Some(g) = self.gesture.take() else { return Outcome::Unchanged };
         match g {
             Gesture::Move { .. } if self.moved => Outcome::Moved,
@@ -571,7 +682,9 @@ impl<S: Editable> Editor<S> {
     /// Abort the gesture and put every shape back as it was when it started.
     pub fn cancel(&mut self, shapes: &mut [S]) {
         self.targets.clear();
+        self.target_boxes.clear();
         self.last_snap = None;
+        self.move_snap = None;
         match self.gesture.take() {
             Some(Gesture::Move { orig, .. }) | Some(Gesture::Resize { orig, .. }) | Some(Gesture::Rotate { orig, .. }) => {
                 for o in orig {
@@ -870,17 +983,45 @@ mod tests {
     }
 
     #[test]
-    fn moving_snaps_the_grabbed_point_onto_another_shape() {
-        // grab the first square by its corner and drop it near the second one's corner
+    fn moving_snaps_the_shape_onto_another_shape() {
+        // drag the first square so one of its corners comes near the second square's corner: the
+        // whole shape snaps by that corner (draw2d's SnapToGeometry snaps the figure, not the
+        // pointer), landing the corners exactly on each other
         let mut shapes = vec![square(1, 0.0, 0.0, 10.0), square(2, 30.0, 0.0, 10.0)];
         let mut ed = Editor::default();
         ed.snapping = Snapping { radius: 1.5, ..Snapping::default() };
-        ed.press(&shapes, [10.0, 10.0], VIEW, Tool::Select, false);
-        ed.drag(&mut shapes, [29.2, 10.6], false);
-        assert_eq!(ed.last_snap, Some(([30.0, 10.0], SnapKind::Node)));
+        ed.press(&shapes, [5.0, 5.0], VIEW, Tool::Select, false);
+        // delta ~(+19.3, +0.4): the bottom-right corner lands near the second square's [30, 0]
+        ed.drag(&mut shapes, [24.3, 5.4], false);
+        assert_eq!(ed.last_snap, Some(([30.0, 0.0], SnapKind::Node)));
         ed.release(&shapes);
         assert_eq!(bounds(&shapes[0]), ([20.0, 0.0], [30.0, 10.0]), "corner landed exactly on the corner");
         assert_eq!(ed.last_snap, None);
+    }
+
+    #[test]
+    fn moving_snaps_by_the_bounding_box_not_a_facet_node() {
+        // a many-sided polygon (a facetted "circle") whose nodes are NOT on its bbox corners: the
+        // rightmost extent is at x=10 but the nearest node to a target is inside. Snapping must use
+        // the bounding box, so the shape's right edge lands exactly on the target's left edge — no
+        // gap (the zoom-out bug: a facet node, not the extent, used to catch and leave a gap).
+        let blob = Poly {
+            id: 1,
+            // extremes at x=0 and x=10, y=0 and y=10, but the side nodes are pulled inward
+            pts: vec![[5.0, 0.0], [10.0, 5.0], [5.0, 10.0], [0.0, 5.0]],
+            closed: true,
+        };
+        let target = square(2, 30.0, 0.0, 10.0); // its left edge is at x=30
+        let mut shapes = vec![blob, target];
+        let mut ed = Editor::default();
+        ed.snapping = Snapping { radius: 1.5, ..Snapping::default() };
+        ed.press(&shapes, [5.0, 5.0], VIEW, Tool::Select, false);
+        // move right so the blob's bbox right edge (x=10 → ~29.4) comes near the target's left (30)
+        ed.drag(&mut shapes, [24.4, 5.0], false);
+        ed.release(&shapes);
+        let (lo, hi) = bounds(&shapes[0]);
+        assert!((hi[0] - 30.0).abs() < 1e-9, "the blob's right extent sits exactly on x=30, got {}", hi[0]);
+        assert!((lo[0] - 20.0).abs() < 1e-9, "width is kept (20..30)");
     }
 
     #[test]
@@ -898,7 +1039,7 @@ mod tests {
     fn node_drag_snaps_to_grid() {
         let mut shapes = vec![Poly { id: 7, pts: vec![[0.0, 0.0], [10.0, 0.0]], closed: false }];
         let mut ed = Editor::default();
-        ed.snapping = Snapping { geometry: false, grid: Some(5.0), radius: 1.0, ..Snapping::default() };
+        ed.snapping = Snapping { policies: crate::snap::SnapPolicies { geometry: false, center: false, gap: false }, grid: Some(5.0), radius: 1.0 };
         ed.selection = vec![7];
         assert_eq!(ed.press(&shapes, [10.0, 0.0], VIEW, Tool::Nodes, false), Started::Node);
         ed.drag(&mut shapes, [14.7, 5.4], false);

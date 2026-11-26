@@ -35,9 +35,9 @@ pub(super) struct GuideEdit {
     pub(super) input: ConstraintInput,
 }
 
-/// Red of the construction lines, like Sketch's ruler guides.
+/// Red of the construction lines, like Sketch's ruler guides (from the active theme).
 pub(super) fn guide_colour() -> Color32 {
-    Color32::from_rgb(0xe0, 0x30, 0x30)
+    crate::theme::guide()
 }
 
 impl App {
@@ -609,7 +609,174 @@ impl App {
         }
     }
 
+    // ---------------- the agent API (MCP) ----------------
+    //
+    // Each guide command works on the real construction lines and shows the virtual mouse doing it:
+    // the rulers are turned on, the cursor glides to the line's handle on the ruler (or to the lock
+    // in the rulers' corner) and the move is played as a drag, so a recording shows exactly what a
+    // person would do. The state change itself goes through the same undoable methods the ruler uses,
+    // so ids are known at once and every command can return them.
+
+    /// All construction lines as JSON (id, axis, offset, formula, attached shape ids), plus whether
+    /// the lines are locked and the rulers shown.
+    pub(crate) fn agent_guides_list(&self) -> String {
+        let guides: Vec<serde_json::Value> = self.guides.iter().map(|g| {
+            let axis = match g.axis {
+                GuideAxis::Vertical => "vertical",
+                GuideAxis::Horizontal => "horizontal",
+            };
+            let attached: Vec<u64> = g.attached.iter().map(|a| a.shape).collect();
+            serde_json::json!({"id": g.id, "axis": axis, "offset": g.offset, "expr": g.expr, "attached": attached})
+        }).collect();
+        serde_json::json!({"rulers_shown": self.rulers_shown(), "locked": self.guides_locked, "guides": guides}).to_string()
+    }
+
+    /// Make sure the rulers (and with them the guides) are visible and the cursor is shown, so a
+    /// guide command is something the recording can see.
+    fn agent_prepare_guides(&mut self) {
+        if !self.rulers_shown() {
+            self.set_rulers_shown(true);
+        }
+        self.demo.on = true;
+    }
+
+    /// The screen point of a guide's handle on the ruler (where the cursor goes to grab it).
+    fn guide_handle_point(&self, id: u64) -> Option<Pos2> {
+        self.guides.iter().find(|g| g.id == id).map(|g| self.guide_handle_rect(g).center())
+    }
+
+    /// The screen point a guide's handle would sit at if the guide were at `offset` (the drop point
+    /// of a move drag).
+    fn guide_offset_point(&self, id: u64, offset: f64) -> Option<Pos2> {
+        self.guides.iter().find(|g| g.id == id).map(|g| {
+            let moved = crate::guides::Guide { offset, ..g.clone() };
+            self.guide_handle_rect(&moved).center()
+        })
+    }
+
+    /// Add a construction line (vertical = an X value, horizontal = a Y value) at `offset` mm. The
+    /// cursor glides to where the line meets its ruler and the line appears only once it arrives.
+    /// Returns {"id": ...} (the id the line will have).
+    pub(crate) fn agent_guide_add(&mut self, axis: &str, offset: f64) -> Result<String, String> {
+        if self.guides_locked {
+            return Err("construction lines are locked (unlock them first)".into());
+        }
+        let axis = match axis {
+            "vertical" | "v" | "x" => GuideAxis::Vertical,
+            "horizontal" | "h" | "y" => GuideAxis::Horizontal,
+            _ => return Err("axis must be \"vertical\" or \"horizontal\"".into()),
+        };
+        self.agent_prepare_guides();
+        // the id this line will take (the add runs after the cursor arrives, but no other command
+        // is processed in between, so the id is stable)
+        let id = self.next_guide_id;
+        // where on the ruler the new line will meet it
+        let at = {
+            let probe = crate::guides::Guide::new(id, axis, offset);
+            self.guide_handle_rect(&probe).center()
+        };
+        let script = super::agent_script::Script::new()
+            .move_to(at)
+            .act(move |app, _| {
+                let made = app.add_guide(axis, offset);
+                app.guide_selected = Some(made);
+            });
+        self.run_script(script);
+        Ok(serde_json::json!({"id": id}).to_string())
+    }
+
+    /// Move construction line `id` to a new distance (mm). The cursor glides to the line's handle,
+    /// drags it to its new place and only then does the line move. Returns {"id": ...}.
+    pub(crate) fn agent_guide_move(&mut self, id: u64, offset: f64) -> Result<String, String> {
+        if self.guides_locked {
+            return Err("construction lines are locked (unlock them first)".into());
+        }
+        let Some(from) = self.guide_handle_point(id) else {
+            return Err(format!("no construction line with id {id}"));
+        };
+        self.agent_prepare_guides();
+        let to = self.guide_offset_point(id, offset).unwrap_or(from);
+        // press on the handle, drag to the drop point, then — released — the line moves there
+        let script = super::agent_script::Script::new()
+            .move_to(from)
+            .press()
+            .move_to(to)
+            .release()
+            .act(move |app, _| {
+                app.guide_selected = Some(id);
+                app.move_guide(id, offset);
+            });
+        self.run_script(script);
+        Ok(serde_json::json!({"id": id}).to_string())
+    }
+
+    /// Delete construction line `id` (its shapes stay put). The cursor glides to its handle, and the
+    /// line is removed only once the mouse has arrived. Returns {"deleted": id}.
+    pub(crate) fn agent_guide_delete(&mut self, id: u64) -> Result<String, String> {
+        if self.guides_locked {
+            return Err("construction lines are locked (unlock them first)".into());
+        }
+        let Some(at) = self.guide_handle_point(id) else {
+            return Err(format!("no construction line with id {id}"));
+        };
+        self.agent_prepare_guides();
+        let script = super::agent_script::Script::new()
+            .move_to(at)
+            .click()
+            .act(move |app, _| {
+                app.guide_selected = Some(id);
+                app.delete_selected_guide();
+            });
+        self.run_script(script);
+        Ok(serde_json::json!({"deleted": id}).to_string())
+    }
+
+    /// Delete every construction line, one after another, as a recording shows it: the cursor glides
+    /// to each line's handle in turn and the line is removed only when the mouse has reached it.
+    /// Returns {"deleted": [ids...]}.
+    pub(crate) fn agent_guides_delete_all(&mut self, _ctx: &egui::Context) -> Result<String, String> {
+        if self.guides_locked {
+            return Err("construction lines are locked (unlock them first)".into());
+        }
+        let ids: Vec<u64> = self.guides.iter().map(|g| g.id).collect();
+        if ids.is_empty() {
+            return Ok(serde_json::json!({"deleted": ids}).to_string());
+        }
+        self.agent_prepare_guides();
+        // one move-then-delete per line, so the cursor visits each handle and the line goes only
+        // once the mouse is there. Handle points are fixed per line and don't shift as others go,
+        // so they are worked out now and the script is flat (move, click, delete, next line).
+        let points: Vec<(u64, Pos2)> = ids.iter().filter_map(|&id| self.guide_handle_point(id).map(|p| (id, p))).collect();
+        let mut script = super::agent_script::Script::new();
+        for (id, at) in points {
+            script = script
+                .move_to(at)
+                .click()
+                .act(move |app, _| {
+                    app.guide_selected = Some(id);
+                    app.delete_selected_guide();
+                });
+        }
+        self.run_script(script);
+        Ok(serde_json::json!({"deleted": ids}).to_string())
+    }
+
+    /// Lock or unlock every construction line. The cursor glides to the lock in the rulers' corner
+    /// and the lines lock only once it clicks. Locked lines can't be added, moved, edited or
+    /// deleted (shapes still snap).
+    pub(crate) fn agent_guides_set_locked(&mut self, _ctx: &egui::Context, locked: bool) -> Result<String, String> {
+        self.agent_prepare_guides();
+        let at = self.ruler_corner().center();
+        let script = super::agent_script::Script::new()
+            .move_to(at)
+            .click()
+            .act(move |app, ctx| app.set_guides_locked(ctx, locked));
+        self.run_script(script);
+        Ok(if locked { "locking all construction lines".into() } else { "unlocking all construction lines".into() })
+    }
+
 }
+
 
 /// The constraints' value label (`fields::value_label`: same font, fill, frame and corners),
 /// standing upright and reading upwards, centred on `at`; for numbers beside the left ruler.

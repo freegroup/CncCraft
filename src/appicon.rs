@@ -1,9 +1,17 @@
 //! The program's icon, drawn in code (so there is no picture file to ship): a teal rounded square
 //! with a white mark of eight rounded petals around the centre – four straight ones and four that
 //! reach into the corners – after the picture the person chose.
+//!
+//! The rounded square does not fill the whole canvas: it sits inside a transparent margin, on the
+//! macOS icon grid (the content square is ~82% of the tile, the rest clear). Without that margin the
+//! icon touched every edge and the Dock drew it noticeably larger than its neighbours.
 
 const TEAL_TOP: [f32; 3] = [0.20, 0.78, 0.75];
 const TEAL_BOTTOM: [f32; 3] = [0.10, 0.62, 0.62];
+
+/// Transparent border around the rounded square, in parts of the tile (each side). macOS's icon
+/// grid insets the content to ~824/1024, i.e. ~0.098 per side.
+const MARGIN: f32 = 0.098;
 
 /// Half the width of the mark, in parts of the icon's width.
 const HALF: f32 = 0.31;
@@ -44,6 +52,14 @@ fn in_mark(p: [f32; 2], petals: &[Vec<[f32; 2]>]) -> bool {
     petals.iter().any(|poly| inside_polygon(q, poly) || (0..poly.len()).any(|i| dist_to_segment(q, poly[i], poly[(i + 1) % poly.len()]) < ROUND))
 }
 
+/// Map a tile point (0..1 over the whole canvas) into the content square's own 0..1 space, or
+/// `None` if it falls in the transparent margin.
+fn to_content(p: [f32; 2]) -> Option<[f32; 2]> {
+    let span = 1.0 - 2.0 * MARGIN;
+    let q = [(p[0] - MARGIN) / span, (p[1] - MARGIN) / span];
+    (q[0] >= 0.0 && q[0] <= 1.0 && q[1] >= 0.0 && q[1] <= 1.0).then_some(q)
+}
+
 /// Whether the point lies in the rounded square.
 fn in_square(p: [f32; 2]) -> bool {
     let r = 0.22;
@@ -62,7 +78,9 @@ pub fn rgba(size: u32) -> Vec<u8> {
             let (mut cover, mut white, mut r, mut g, mut b) = (0.0, 0.0, 0.0, 0.0, 0.0);
             for sy in 0..SAMPLES {
                 for sx in 0..SAMPLES {
-                    let p = [(x as f32 + (sx as f32 + 0.5) / SAMPLES as f32) / size as f32, (y as f32 + (sy as f32 + 0.5) / SAMPLES as f32) / size as f32];
+                    let tile = [(x as f32 + (sx as f32 + 0.5) / SAMPLES as f32) / size as f32, (y as f32 + (sy as f32 + 0.5) / SAMPLES as f32) / size as f32];
+                    // into the content square's own space; the margin around it stays transparent
+                    let Some(p) = to_content(tile) else { continue };
                     if !in_square(p) {
                         continue;
                     }
@@ -102,14 +120,19 @@ mod tests {
         let n = 128;
         let px = rgba(n);
         let at = |x: u32, y: u32| &px[((y * n + x) * 4) as usize..((y * n + x) * 4 + 4) as usize];
-        assert_eq!(at(0, 0)[3], 0, "a corner of the rounded square is transparent");
+        assert_eq!(at(0, 0)[3], 0, "a corner of the tile is transparent");
+        // the margin around the rounded square is transparent (macOS icon grid)
+        assert_eq!(at(n / 2, (n as f32 * MARGIN * 0.5) as u32)[3], 0, "the top margin is clear");
         let centre = at(n / 2, n / 2);
         assert!(centre[3] == 255 && centre[0] < 120, "the petals leave the centre teal");
-        let top_petal = at(n / 2, (n as f32 * (0.5 - 0.6 * HALF)) as u32);
+        // petal/edge samples are taken inside the content square (map a content-space y into the tile)
+        let tile_y = |cy: f32| (n as f32 * (MARGIN + (1.0 - 2.0 * MARGIN) * cy)) as u32;
+        let top_petal = at(n / 2, tile_y(0.5 - 0.6 * HALF));
         assert!(top_petal[0] > 240 && top_petal[1] > 240 && top_petal[2] > 240, "the upper petal is white");
-        let corner_petal = at((n as f32 * (0.5 - 0.85 * HALF)) as u32, (n as f32 * (0.5 - 0.85 * HALF)) as u32);
+        let tile_xy = |c: f32| (n as f32 * (MARGIN + (1.0 - 2.0 * MARGIN) * c)) as u32;
+        let corner_petal = at(tile_xy(0.5 - 0.85 * HALF), tile_xy(0.5 - 0.85 * HALF));
         assert!(corner_petal[0] > 240, "the corner petal is white");
-        let edge = at(n / 2, 6);
-        assert!(edge[3] == 255 && edge[0] < 120 && edge[1] > 120, "the square is teal");
+        let edge = at(n / 2, tile_y(0.05));
+        assert!(edge[3] == 255 && edge[0] < 120 && edge[1] > 120, "the square is teal just inside its top edge");
     }
 }

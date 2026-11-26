@@ -10,6 +10,10 @@ use shape_edit::selection_bounds;
 use super::tool_column::GAP;
 use super::widgets::toolbar_group;
 
+/// Space between the toolbar's groups, well wider than the spacing between icons inside a group, so
+/// the groups read as separate blocks.
+const GROUP_GAP: f32 = 11.0;
+
 impl App {
     /// The toolbar over the drawing area: snapping and grid on the left; 2D/3D and zoom at the
     /// right end, as in the original.
@@ -34,9 +38,6 @@ impl App {
                     if grid.clicked() {
                         self.snap_grid = !self.snap_grid;
                     }
-                    if icon_button_tip(ui, Icon::Snap, self.snap_geometry, Tip::new(t!("An Geometrie einrasten"), t!("Punkte springen auf Ecken, Mitten und Linien vorhandener Formen."))).clicked() {
-                        self.snap_geometry = !self.snap_geometry;
-                    }
                     if icon_button_tip(ui, Icon::Dimensions, self.show_dims, Tip::new(t!("Maße anzeigen"), t!("Blaue Maße sind Constraints. Linien: blau = frei, schwarz = Länge festgelegt."))).clicked() {
                         self.show_dims = !self.show_dims;
                     }
@@ -45,6 +46,22 @@ impl App {
                         self.set_rulers_shown(!rulers);
                     }
                 });
+                // a clear gap between groups, so they read as separate (the 4 px item spacing
+                // between the group boxes was too small to tell one group from the next)
+                ui.add_space(GROUP_GAP);
+                // the three snap policies, each its own switch (all on at once = snap to everything)
+                toolbar_group(ui, &t!("Einrasten"), |ui| {
+                    if icon_button_tip(ui, Icon::Snap, self.snap_to_geometry, Tip::new(t!("An Geometrie einrasten"), t!("Die Form rastet mit ihrer Bounding-Box auf Kanten, Ecken und Knoten anderer Formen und Gruppen ein."))).clicked() {
+                        self.snap_to_geometry = !self.snap_to_geometry;
+                    }
+                    if icon_button_tip(ui, Icon::SnapCenter, self.snap_to_center, Tip::new(t!("An Mitte einrasten"), t!("Die Mitte der Form rastet auf die Mitte einer anderen Form oder Gruppe ein."))).clicked() {
+                        self.snap_to_center = !self.snap_to_center;
+                    }
+                    if icon_button_tip(ui, Icon::SnapGap, self.snap_to_gap, Tip::new(t!("An gleichen Abstand einrasten"), t!("Die Form rastet auf den gleichen Abstand zu einem Nachbarn ein; der Abstand wird als Pfeil angezeigt."))).clicked() {
+                        self.snap_to_gap = !self.snap_to_gap;
+                    }
+                });
+                ui.add_space(GROUP_GAP);
                 toolbar_group(ui, &t!("Constraints"), |ui| {
                     if icon_button_tip(ui, Icon::Distance, self.dim_mode.is_some(), Tip::new(t!("Abstand bemaßen"), t!("Zwei Punkte oder einen Punkt und eine Linie wählen, dann den Abstand eingeben.")).shortcut("D")).clicked() {
                         self.toggle_dim_mode();
@@ -64,7 +81,9 @@ impl App {
                     let mut idx = if self.mode == ViewMode::ThreeD { 1 } else { 0 };
                     let toggle = SlideToggle::new("view_toggle_slide", &["2D", "3D"]).width(72.0);
                     let hint = if idx == 1 { t!("Zur 2D-Ansicht wechseln") } else { t!("Zur 3D-Ansicht wechseln") };
-                    toggle.show(ui, &mut idx).on_hover_text(hint);
+                    let shown = toggle.show(ui, &mut idx).on_hover_text(hint);
+                    // where it is, for the view command that clicks it with the visible mouse
+                    self.control_rects.insert("view.toggle", shown.rect);
                     self.mode = if idx == 1 { ViewMode::ThreeD } else { ViewMode::TwoD };
                 });
             });

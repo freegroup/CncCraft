@@ -271,6 +271,14 @@ impl Pen<'_> {
         self.p.add(Shape::convex_polygon(vec![tip, tip - dir * 4.5 + side, tip - dir * 4.5 - side], self.k.line, Stroke::NONE));
     }
 
+    /// An open, thin arrow head (two short strokes) — elegant rather than a filled wedge.
+    fn thin_arrow(&self, tip: Pos2, dir: Vec2) {
+        let n = Vec2::new(-dir.y, dir.x);
+        let thin = Stroke::new(1.3_f32, self.k.line);
+        self.p.line_segment([tip, tip - dir * 3.6 + n * 2.6], thin);
+        self.p.line_segment([tip, tip - dir * 3.6 - n * 2.6], thin);
+    }
+
     /// Draw the slab (top, left and right side) and return it, to draw the work on its top.
     fn slab(&self) -> Slab {
         let w = self.wood();
@@ -432,6 +440,16 @@ impl Pen<'_> {
                     self.line(&[from, to]);
                 }
             }
+            Icon::SnapCenter => {
+                // two slim concentric rings with a centre dot and short cross ticks — thin lines
+                let thin = Stroke::new(1.3_f32, self.k.line);
+                self.p.add(Shape::closed_line(self.disc(0.0, 0.0, 8.5), thin));
+                self.p.add(Shape::closed_line(self.disc(0.0, 0.0, 3.0), thin));
+                for (a, b) in [((-11.0, 0.0), (-8.0, 0.0)), ((8.0, 0.0), (11.0, 0.0)), ((0.0, -11.0), (0.0, -8.0)), ((0.0, 8.0), (0.0, 11.0))] {
+                    self.p.line_segment([self.at(a.0, a.1), self.at(b.0, b.1)], thin);
+                }
+                self.dot(0.0, 0.0);
+            }
             Icon::Offset => {
                 self.solid(self.rrect(0.0, 0.0, 10.0, 8.0, 1.5));
                 self.dashed_rect(Rect::from_center_size(self.c, Vec2::new(22.0, 20.0)));
@@ -526,18 +544,26 @@ impl Pen<'_> {
                 }
             }
             Icon::Snap => {
-                // a horseshoe magnet and the point it pulls in
-                let outer: Vec<Pos2> = (0..=16).map(|k| self.c + Vec2::new(0.0, 1.0) + Vec2::angled(PI * k as f32 / 16.0) * 9.0).collect();
-                let inner: Vec<Pos2> = (0..=16).rev().map(|k| self.c + Vec2::new(0.0, 1.0) + Vec2::angled(PI * k as f32 / 16.0) * 4.0).collect();
-                let mut shape = vec![self.at(9.0, -6.0)];
-                shape.extend(outer);
-                shape.extend([self.at(-9.0, -6.0), self.at(-4.0, -6.0)]);
-                shape.extend(inner);
-                shape.push(self.at(4.0, -6.0));
-                self.solid(shape);
-                self.p.line_segment([self.at(-9.0, -3.0), self.at(-4.0, -3.0)], Stroke::new(1.4_f32, self.k.back));
-                self.p.line_segment([self.at(4.0, -3.0), self.at(9.0, -3.0)], Stroke::new(1.4_f32, self.k.back));
-                self.dot(0.0, -10.0);
+                // SnapToGeometry (bounding box): a slim dashed box with solid corner L-marks and a
+                // snapping dot — elegant thin lines, not a heavy filled magnet
+                let thin = Stroke::new(1.3_f32, self.k.line);
+                let b = Rect::from_center_size(self.c, Vec2::splat(18.0));
+                self.p.extend(Shape::dashed_line(&[b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom(), b.left_top()], thin, 2.6, 2.2));
+                let corner = 4.0;
+                for (cx, cy, dx, dy) in [(-9.0, -9.0, 1.0, 1.0), (9.0, -9.0, -1.0, 1.0), (9.0, 9.0, -1.0, -1.0), (-9.0, 9.0, 1.0, -1.0)] {
+                    self.p.line_segment([self.at(cx, cy), self.at(cx + dx * corner, cy)], thin);
+                    self.p.line_segment([self.at(cx, cy), self.at(cx, cy + dy * corner)], thin);
+                }
+                self.dot(0.0, 0.0);
+            }
+            Icon::SnapGap => {
+                // two slim outlined boxes with a measured gap (a thin double arrow) between them
+                let thin = Stroke::new(1.3_f32, self.k.line);
+                self.p.add(Shape::closed_line(self.rrect(-8.0, 0.0, 5.0, 14.0, 1.0), thin));
+                self.p.add(Shape::closed_line(self.rrect(8.0, 0.0, 5.0, 14.0, 1.0), thin));
+                self.p.line_segment([self.at(-4.5, 0.0), self.at(4.5, 0.0)], thin);
+                self.thin_arrow(self.at(-4.5, 0.0), Vec2::new(-1.0, 0.0));
+                self.thin_arrow(self.at(4.5, 0.0), Vec2::new(1.0, 0.0));
             }
             Icon::ZoomFit | Icon::ZoomSelection => {
                 let b = Rect::from_center_size(self.at(-3.0, -3.0), Vec2::new(16.0, 14.0));

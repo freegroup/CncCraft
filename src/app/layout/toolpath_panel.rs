@@ -40,7 +40,10 @@ impl App {
     pub(in crate::app) fn toolpath_panel(&mut self, ctx: &egui::Context) {
         if !self.paths_open {
             egui::SidePanel::right("toolpaths_folded").exact_width(30.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::surface()).inner_margin(4.0).stroke(Stroke::new(1.0_f32, hairline()))).show(ctx, |ui| {
-                if ui.button("‹").on_hover_text(t!("Werkzeugpfade zeigen")).clicked() {
+                let unfold = ui.button("‹").on_hover_text(t!("Werkzeugpfade zeigen"));
+                // where it is, for the panel commands that click it with the visible mouse
+                self.control_rects.insert("panel.milling", unfold.rect);
+                if unfold.clicked() {
                     self.paths_open = true;
                 }
             });
@@ -60,7 +63,9 @@ impl App {
                 ui.set_width(ui.available_width());
                 ui.set_min_height(ui.available_height().max(60.0));
                 group_title(ui, &t!("Werkzeugpfade"), |ui| {
-                    if ui.button("›").on_hover_text(t!("Werkzeugpfade einklappen")).clicked() {
+                    let fold = ui.button("›").on_hover_text(t!("Werkzeugpfade einklappen"));
+                    self.control_rects.insert("panel.milling", fold.rect);
+                    if fold.clicked() {
                         self.paths_open = false;
                     }
                 });
@@ -95,7 +100,7 @@ impl App {
                 if !valid {
                     ui.label(egui::RichText::new("⚠").color(crate::theme::warning())).on_hover_text(t!("Die Platte hat keine gültige Größe: bitte einrichten"));
                 }
-                ui.label(egui::RichText::new(t!("Platten-Setup")).color(ink()));
+                ui.label(egui::RichText::new(t!("Werkstück")).color(ink()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(format!("{:.0} × {:.0} × {:.1} mm", self.job.width, self.job.height, self.job.thickness)).color(muted()));
                     ui.label(egui::RichText::new(self.materials.label(&self.job.material)).color(muted()));
@@ -132,7 +137,10 @@ impl App {
             for (icon, kind, header, text) in ops {
                 let on = self.editor.as_ref().is_some_and(|e| e.kind == kind && e.index.is_none());
                 let tip = Tip::new(header, text).big();
-                if icon_button_tip(ui, icon, on, tip).clicked() {
+                let resp = icon_button_tip(ui, icon, on, tip);
+                // where each operation button is, for add_toolpath to click it with the visible mouse
+                self.control_rects.insert(op_control(kind), resp.rect);
+                if resp.clicked() {
                     self.open_editor(kind);
                 }
             }
@@ -146,13 +154,20 @@ impl App {
         let width = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
         ui.horizontal(|ui| {
             let size = Vec2::new(width, 28.0);
-            if ui.add(egui::Button::new(t!("▶ Simulieren")).min_size(size)).clicked() {
+            // each button reports where it is, for the agent commands that click it with the mouse
+            let simulate = ui.add(egui::Button::new(t!("▶ Simulieren")).min_size(size));
+            self.control_rects.insert("milling.simulate", simulate.rect);
+            if simulate.clicked() {
                 self.start_preview(true);
             }
-            if ui.add(egui::Button::new(t!("Vorschau")).min_size(size)).on_hover_text(t!("Zeigt das fertig gefräste Material sofort")).clicked() {
+            let preview = ui.add(egui::Button::new(t!("Vorschau")).min_size(size)).on_hover_text(t!("Zeigt das fertig gefräste Material sofort"));
+            self.control_rects.insert("milling.preview", preview.rect);
+            if preview.clicked() {
                 self.start_preview(false);
             }
-            if ui.add(egui::Button::new(t!("Exportieren…")).min_size(size)).on_hover_text(t!("Werkzeugpfade exportieren")).clicked() {
+            let export = ui.add(egui::Button::new(t!("Exportieren…")).min_size(size)).on_hover_text(t!("Werkzeugpfade exportieren"));
+            self.control_rects.insert("milling.export", export.rect);
+            if export.clicked() {
                 self.export_dialog = true;
             }
         });
@@ -219,8 +234,10 @@ impl App {
                 });
             });
         });
-        ui.checkbox(&mut self.paths_in_3d, t!("G-Code-Fahrt im 3D einblenden"))
+        let resp = ui.checkbox(&mut self.paths_in_3d, t!("G-Code-Fahrt im 3D einblenden"))
             .on_hover_text(t!("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb."));
+        // where the toggle is, for the gcode_motion command to click it with the visible mouse
+        self.control_rects.insert("milling.gcode_motion", resp.rect);
     }
 
     /// The toolpath list: hide/show all, then one row per toolpath with its eye, colour, name
@@ -455,5 +472,19 @@ impl App {
             self.edit.selection = tp.shape_ids.clone();
             self.editor = Some(Editor::new(tp, Some(i), kind));
         }
+    }
+}
+
+/// The `control_rects` key for an operation button of a given strategy kind ("profile" →
+/// "op.profile"), so add_toolpath can find and click it.
+pub(in crate::app) fn op_control(kind: &str) -> &'static str {
+    match kind {
+        "cutout" => "op.cutout",
+        "profile" => "op.profile",
+        "pocket" => "op.pocket",
+        "slot" => "op.slot",
+        "drill" => "op.drill",
+        "vcarve" => "op.vcarve",
+        _ => "op.profile",
     }
 }

@@ -18,6 +18,10 @@ pub struct Palette {
     pub sheet_label_edge: Color32,
     pub constraint: Color32,
     pub primary: Color32,
+    /// Construction lines dragged off the rulers (Sketch's red guide lines).
+    pub guide: Color32,
+    /// The alignment lines shown while a point snaps to existing geometry.
+    pub snap_guide: Color32,
 
     // --- interface -----------------------------------------------------------
     pub canvas: Color32,

@@ -30,6 +30,9 @@ rust-i18n = "3"
 sys-locale = "0.3"
 # update check: pure-Rust HTTPS (rustls), no system OpenSSL and no external program
 ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
+openh264 = "0.9"
+mp4 = "0.14"
+bytes = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"

@@ -1,13 +1,18 @@
 //! The main window: design tools on the left, the 2D/3D view in the middle and the
 //! toolpath tools on the right, like the original.
 
-mod align;
+mod agent;
+mod agent_script;
 mod array;
 mod cursor;
 mod demo;
-mod mcp;
 mod update;
+// The geometric constraints each live in their own file under `constraints/`, but stay direct
+// children of `app` (via `#[path]`) so their `super::` still reaches the main window's state.
+#[path = "app/constraints/distance.rs"]
 mod distance;
+#[path = "app/constraints/align.rs"]
+mod align;
 #[path = "dialogs/mod.rs"]
 mod dialogs;
 use dialogs::{dialog_buttons, dialog_group};
@@ -22,6 +27,11 @@ mod importing;
 mod layers_ui;
 mod layout;
 mod menus;
+mod menu_drive;
+mod script;
+mod script_ui;
+mod text_overlay;
+pub(crate) use text_overlay::Slot as OverlaySlot;
 mod selftest;
 mod selftest_vector_ops;
 mod shortcuts;
@@ -40,6 +50,8 @@ use tooltip::{Tip, WithTip};
 use layout::ToolForm;
 
 use shortcuts::Action;
+
+use crate::mcp;
 
 use crate::gcode;
 use crate::geom::{dist, Item, Pt, Region};
@@ -149,6 +161,10 @@ pub(crate) enum Icon {
     Transform,
     Grid,
     Snap,
+    /// Snap to the centre of another shape/group (two thin rings with a dot).
+    SnapCenter,
+    /// Snap to an equal gap/spacing (two little boxes with a measured gap between).
+    SnapGap,
     ZoomFit,
     ZoomSelection,
     /// Opens the variables dialog (an f(x) button next to Job setup).
@@ -330,7 +346,8 @@ const SNAP_RADIUS_MAX_PX: f64 = 30.0; // estimated
 /// The grid spacing the original stores in its settings (vcSnapGridSpacingMM, with grid
 /// snapping off and the grid hidden: vcSnapGridDoSnap 0, vcSnapGridVisible 0).
 const GRID_SPACING: f64 = 5.0;
-/// Angle step for Shift while drawing lines; the original accepts 0°..88° (0x100785420).
+/// Angle step for Shift while drawing lines; the original accepts 0°..90° (Spark sub_100785420,
+/// which caps the step at 90.0 = 0x4056800000000000).
 const ANGLE_STEP: f64 = 15.0;
 
 struct Editor {
@@ -459,6 +476,8 @@ pub struct App {
     /// Simulation quality in grid points per mm (the original's toolpath.simulation_quality).
     sim_quality: f64,
     start_page: bool,
+    /// Which page of the start-page carousel is showing (0 = welcome, 1 = PatternMaster, 2 = HoruCNC).
+    start_page_idx: usize,
     job_dialog: Option<(Job, bool)>,
     /// The job the person set up last (size, units, zero point, material): a new job starts from
     /// it. Remembered between runs.
@@ -503,6 +522,8 @@ pub struct App {
     /// A pending screenshot: (path, frame counter, close the window afterwards). The command-line
     /// `--screenshot` mode closes when done; an MCP screenshot of a running app must not.
     shot: Option<(PathBuf, u32, bool)>,
+    /// A video recording of the window in progress (the `recording_start` command).
+    recorder: Option<crate::recording::Recorder>,
     about: bool,
     /// The "Check for updates" status dialog (GridCraft-style): shown while and after a check.
     update_dialog: bool,
@@ -529,10 +550,12 @@ pub struct App {
     export_settings: crate::export::Settings,
     export_scope: dialogs::ExportScope,
     tools_open: bool,
-    /// Snapping switches (View menu) and what a drawing tool's pointer snapped to.
-    snap_geometry: bool,
+    /// Snapping switches and what a drawing tool's pointer snapped to. The three move-snap policies
+    /// are switched on their own or together: geometry (bounding box), centre, gap (equal spacing).
+    snap_to_geometry: bool,
+    snap_to_center: bool,
+    snap_to_gap: bool,
     snap_grid: bool,
-    snap_job: bool,
     grid_spacing: f64,
     snap_mark: Option<(Pt, SnapKind)>,
     /// Snap radius in whole pixels, kept between the slider's limits.
@@ -623,6 +646,26 @@ pub struct App {
     guide_press: Option<(u64, f64)>,
     /// Where each guide's number label was drawn last frame (for the long press).
     guide_labels: Vec<(u64, Rect)>,
+    /// The visible-menu driver for MCP menu commands: the screen rect of each top-level menu button
+    /// (by menu name) and each menu item (by command id), recorded while they are drawn, plus the
+    /// command being driven through the menu right now. Lets an MCP menu command open the real
+    /// menu with the cursor and click the item, so a recording shows what a person would do.
+    menu_button_rects: std::collections::HashMap<String, Rect>,
+    menu_item_rects: std::collections::HashMap<&'static str, Rect>,
+    /// Where the controls the agent commands click were drawn last frame, by name: the panels' fold
+    /// buttons ("panel.tools", "panel.milling") and the 2D/3D toggle ("view.toggle"). The commands
+    /// move the visible mouse there and really click, like a person.
+    control_rects: std::collections::HashMap<&'static str, Rect>,
+    menu_drive: Option<menu_drive::MenuDrive>,
+    /// Interleaves visible-cursor gestures with the changes they stand for, so an agent command only
+    /// happens once the mouse has arrived (see `agent_script.rs`).
+    agent_script: agent_script::AgentScript,
+    /// Frames the virtual cursor has been idle (nothing playing): it hides itself after a short rest.
+    cursor_idle: u32,
+    /// The changing subtitle caption (the `text_subtitle` command), if one is showing.
+    text_overlay: Option<text_overlay::TextOverlay>,
+    /// The standing title caption (the `title_overlay` command), if one is showing.
+    title_overlay: Option<text_overlay::TextOverlay>,
     distance_edit: Option<distance::DistanceEdit>,
     distance_labels: Vec<(usize, Rect)>,
     /// The dimension lines of the distances shown without their value (the faint view): they can
@@ -666,6 +709,19 @@ pub struct App {
     shortcuts_open: bool,
     /// Whether the Demo window (MCP address + built-in demos) is open.
     demo_open: bool,
+    /// The script window (a second window): its open flag, the script text, and the player.
+    script_open: bool,
+    /// Whether the script window was open last frame, so the sample is offered only on a fresh open.
+    script_was_open: bool,
+    script_text: String,
+    script: script::Script,
+    /// The script editor's autocomplete state.
+    script_editor: crate::scripting::editor::EditorState,
+    /// The command help window (every command, its parameters and what they mean) and its search.
+    command_help_open: bool,
+    command_help_filter: String,
+    /// When the agent guide was last copied (egui time), for the short "copied" note on its button.
+    agent_md_copied: Option<f64>,
     /// The layers (shown or hidden) every shape is on.
     layers: crate::layers::Layers,
     /// The small window for a new layer, a new name or a layer being deleted.
@@ -730,6 +786,7 @@ impl App {
             sim_rate: cc.storage.and_then(|s| s.get_string("cnccraft_sim_rate")).and_then(|v| v.parse::<f64>().ok()).map_or(1.0, |v| v.clamp(SIM_RATE_MIN, SIM_RATE_MAX)),
             sim_quality: cc.storage.and_then(|s| s.get_string("cnccraft_sim_quality")).and_then(|v| v.parse().ok()).unwrap_or(sim::SIMULATION_QUALITY),
             start_page: true,
+            start_page_idx: 0,
             job_dialog: None,
             last_job: cc.storage.and_then(|s| s.get_string("cnccraft_last_job")).and_then(|json| serde_json::from_str(&json).ok()),
             postprocs: gcode::builtins(),
@@ -762,6 +819,7 @@ impl App {
             mcp: mcp::start(),
             update: update::Update::default(),
             shot: shot.map(|p| (p, 0, true)),
+            recorder: None,
             about: false,
             update_dialog: false,
             saved_text: String::new(),
@@ -777,9 +835,10 @@ impl App {
             export_settings: crate::export::Settings::default(),
             export_scope: dialogs::ExportScope::All,
             tools_open: cc.storage.and_then(|s| s.get_string("cnccraft_tools_open")).map_or(true, |v| v != "false"),
-            snap_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_geometry")).map_or(true, |v| v != "false"),
+            snap_to_geometry: cc.storage.and_then(|s| s.get_string("cnccraft_snap_to_geometry")).map_or(true, |v| v != "false"),
+            snap_to_center: cc.storage.and_then(|s| s.get_string("cnccraft_snap_to_center")).map_or(true, |v| v != "false"),
+            snap_to_gap: cc.storage.and_then(|s| s.get_string("cnccraft_snap_to_gap")).map_or(true, |v| v != "false"),
             snap_grid: cc.storage.and_then(|s| s.get_string("cnccraft_snap_grid")).is_some_and(|v| v == "true"),
-            snap_job: cc.storage.and_then(|s| s.get_string("cnccraft_snap_job")).map_or(true, |v| v != "false"),
             grid_spacing: cc.storage.and_then(|s| s.get_string("cnccraft_grid_spacing")).and_then(|v| v.parse().ok()).unwrap_or(GRID_SPACING),
             snap_mark: None,
             snap_radius_px: cc.storage.and_then(|s| s.get_string("cnccraft_snap_radius")).and_then(|v| v.parse().ok()).unwrap_or(SNAP_RADIUS_PX),
@@ -834,6 +893,14 @@ impl App {
             corner_tab: false,
             guide_press: None,
             guide_labels: Vec::new(),
+            menu_button_rects: std::collections::HashMap::new(),
+            menu_item_rects: std::collections::HashMap::new(),
+            control_rects: std::collections::HashMap::new(),
+            menu_drive: None,
+            agent_script: agent_script::AgentScript::default(),
+            cursor_idle: 0,
+            text_overlay: None,
+            title_overlay: None,
             distance_edit: None,
             distance_labels: Vec::new(),
             distance_lines: Vec::new(),
@@ -857,6 +924,16 @@ impl App {
             sheet: sheet::Decorations::default(),
             shortcuts_open: false,
             demo_open: false,
+            script_open: false,
+            script_was_open: false,
+            // the saved script survives a restart; empty when there is none yet (the sample is
+            // offered when the window first opens)
+            script_text: cc.storage.and_then(|s| s.get_string("cnccraft_script")).unwrap_or_default(),
+            script: script::Script::default(),
+            script_editor: crate::scripting::editor::EditorState::default(),
+            command_help_open: false,
+            command_help_filter: String::new(),
+            agent_md_copied: None,
             dark,
             theme_choice,
             lang,
@@ -1436,14 +1513,13 @@ impl App {
     }
 
     /// Pick distances in millimetres for the current zoom: 8 px to grab, handles 4 px outside.
-    /// Snapping for this frame: the pixel radius in mm at the current zoom, plus the job's
-    /// corners and centre.
+    /// Snapping for this frame: the pixel radius in mm at the current zoom. Snap targets are the
+    /// elements' and groups' own geometry only (the workpiece itself is not a snap anchor).
     fn update_snapping(&mut self) {
-        let (w, h) = (self.job.width, self.job.height);
-        let extra = if self.snap_job { vec![[0.0, 0.0], [w, 0.0], [w, h], [0.0, h], [w / 2.0, h / 2.0]] } else { vec![] };
         // whole pixels between the slider's limits, as the original keeps it (0x10054e190)
         self.snap_radius_px = self.snap_radius_px.round().clamp(SNAP_RADIUS_MIN_PX, SNAP_RADIUS_MAX_PX);
-        self.edit.snapping = Snapping { geometry: self.snap_geometry, grid: self.snap_grid.then_some(self.grid_spacing), extra, radius: self.snap_radius_px / self.zoom as f64 };
+        let policies = shape_edit::SnapPolicies { geometry: self.snap_to_geometry, center: self.snap_to_center, gap: self.snap_to_gap };
+        self.edit.snapping = Snapping { policies, grid: self.snap_grid.then_some(self.grid_spacing), radius: self.snap_radius_px / self.zoom as f64 };
         self.edit.angle_step = ANGLE_STEP;
     }
 
@@ -1534,6 +1610,31 @@ impl App {
         if self.edit.selection.is_empty() {
             self.status = "Tipp: zuerst Vektoren auswählen, dann den Werkzeugweg berechnen".into();
         }
+    }
+
+    /// Draw one equal-spacing guide from the gap policy: a double-headed arrow across the gap with
+    /// the distance in millimetres on a small chip at its middle (like the green gap arrows in a
+    /// layout tool).
+    fn draw_gap_guide(&self, painter: &egui::Painter, gap: &shape_edit::GapGuide) {
+        let col = crate::theme::snap_guide();
+        let (a, b) = (self.to_screen(gap.from), self.to_screen(gap.to));
+        let stroke = Stroke::new(1.3_f32, col);
+        painter.line_segment([a, b], stroke);
+        // little arrow heads pointing outward at each end
+        let dir = (b - a).normalized();
+        for (tip, d) in [(a, -dir), (b, dir)] {
+            let n = Vec2::new(-d.y, d.x);
+            painter.line_segment([tip, tip - d * 5.0 + n * 3.0], stroke);
+            painter.line_segment([tip, tip - d * 5.0 - n * 3.0], stroke);
+        }
+        // the measured distance, on a chip so it stays readable over the drawing
+        let mid = a + (b - a) * 0.5;
+        let text = format!("{:.2}", gap.len);
+        let galley = painter.layout_no_wrap(text, FontId::proportional(11.0), col);
+        let pad = Vec2::new(4.0, 1.5);
+        let rect = Rect::from_center_size(mid, galley.size() + pad * 2.0);
+        painter.rect(rect, 3.0, crate::theme::SHEET_LABEL, Stroke::new(1.0_f32, col));
+        painter.galley(rect.min + pad, galley, col);
     }
 
     fn canvas(&mut self, ui: &mut egui::Ui) {
@@ -1837,31 +1938,65 @@ impl App {
         // what the pointer snapped to
         if let Some((q, kind)) = self.edit.last_snap.or(self.snap_mark) {
             let c = self.to_screen(q);
-            let col = Color32::from_rgb(0x1e, 0x6f, 0xd9);
+            let col = crate::theme::snap_guide();
             let line = Stroke::new(1.5_f32, col);
+            // alignment guides, as in the draw2d SnapToGeometry/SnapToCenter policies: a dashed line
+            // runs the whole width and height through the caught column/row, so it is obvious the
+            // shape lined up on existing geometry. While MOVING, x and y snap independently, so each
+            // guide is shown on its own (a shape far to the side still lines up on the same height).
+            // Grid has its own cross marker, so guides there would only be noise.
+            let guide = Stroke::new(1.0_f32, col.gamma_multiply(0.6));
+            let r = self.canvas_rect;
+            let vline = |x: f32| egui::Shape::dashed_line(&[Pos2::new(x.round() + 0.5, r.top()), Pos2::new(x.round() + 0.5, r.bottom())], guide, 6.0, 4.0);
+            let hline = |y: f32| egui::Shape::dashed_line(&[Pos2::new(r.left(), y.round() + 0.5), Pos2::new(r.right(), y.round() + 0.5)], guide, 6.0, 4.0);
+            if let Some(snap) = self.edit.move_snap.clone() {
+                // a Move drag: show the full-length alignment line only for edge/centre alignment.
+                // A gap pull (marked MidPoint) is shown by its own gap arrows instead — painting a
+                // line through the box edge there would be misleading, since nothing lines up on it.
+                if let Some((x, k)) = snap.x_guide {
+                    if k != SnapKind::MidPoint {
+                        painter.add(vline(self.to_screen([x, 0.0]).x));
+                    }
+                }
+                if let Some((y, k)) = snap.y_guide {
+                    if k != SnapKind::MidPoint {
+                        painter.add(hline(self.to_screen([0.0, y]).y));
+                    }
+                }
+                // the gaps we snapped to, painted as labelled double arrows (the chosen gap, and the
+                // reference gap it matched)
+                for gap in &snap.gaps {
+                    self.draw_gap_guide(&painter, gap);
+                }
+            } else if kind != SnapKind::Grid {
+                // a drawing-tool hover: a point caught on both axes
+                painter.add(vline(c.x));
+                painter.add(hline(c.y));
+            }
             match kind {
                 SnapKind::Centre => {
                     painter.circle_stroke(c, 5.0, line);
                 }
-                SnapKind::MidPoint => {
-                    painter.add(egui::Shape::closed_line(vec![c + Vec2::new(0.0, -6.0), c + Vec2::new(6.0, 4.0), c + Vec2::new(-6.0, 4.0)], line));
-                }
+                // a gap pull is marked MidPoint; its feedback is the gap arrows, so draw no point
+                // marker or label here (segment midpoints no longer snap, so MidPoint only means gap)
+                SnapKind::MidPoint => {}
                 SnapKind::Grid => {
                     painter.line_segment([c + Vec2::new(-6.0, 0.0), c + Vec2::new(6.0, 0.0)], line);
                     painter.line_segment([c + Vec2::new(0.0, -6.0), c + Vec2::new(0.0, 6.0)], line);
                 }
-                SnapKind::Node | SnapKind::Job => {
+                SnapKind::Node => {
                     painter.rect_stroke(Rect::from_center_size(c, Vec2::splat(10.0)), 0.0, line);
                 }
             }
-            let label = match kind {
-                SnapKind::Node => t!("Knoten"),
-                SnapKind::Centre => t!("Mitte"),
-                SnapKind::MidPoint => t!("Halbe Strecke"),
-                SnapKind::Job => t!("Job-Punkt"),
-                SnapKind::Grid => t!("Raster"),
-            };
-            painter.text(c + Vec2::new(9.0, -9.0), Align2::LEFT_BOTTOM, label, FontId::proportional(11.0), col);
+            if kind != SnapKind::MidPoint {
+                let label = match kind {
+                    SnapKind::Node => t!("Knoten"),
+                    SnapKind::Centre => t!("Mitte"),
+                    SnapKind::MidPoint => unreachable!(),
+                    SnapKind::Grid => t!("Raster"),
+                };
+                painter.text(c + Vec2::new(9.0, -9.0), Align2::LEFT_BOTTOM, label, FontId::proportional(11.0), col);
+            }
         }
 
         // rubber band and the shape being drawn
@@ -2477,6 +2612,30 @@ impl App {
         }
     }
 
+    /// Capture the window into the video recording, if one is running: request a screenshot when a
+    /// video frame is due and feed the arriving picture to the recorder. Runs every frame, after the
+    /// window is drawn, so the picture holds the virtual cursor, its status panel and any caption.
+    /// Skipped while a PNG screenshot is pending, so the two never fight over the screenshot event.
+    fn pump_recording(&mut self, ctx: &egui::Context) {
+        if self.recorder.is_none() || self.shot.is_some() {
+            return;
+        }
+        let now = ctx.input(|i| i.time);
+        // pick up a picture asked for on an earlier frame
+        let image = ctx.input(|i| i.raw.events.iter().find_map(|e| match e {
+            egui::Event::Screenshot { image, .. } => Some(image.clone()),
+            _ => None,
+        }));
+        if let (Some(img), Some(rec)) = (image, self.recorder.as_mut()) {
+            rec.frame(img, now);
+        }
+        // ask for the next one when it is due, and keep the frames coming so the video is steady
+        if self.recorder.as_ref().is_some_and(|r| r.wants_frame(now)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
+        }
+        ctx.request_repaint();
+    }
+
     fn screenshot(&mut self, ctx: &egui::Context) {
         let Some((_, frames, _)) = &mut self.shot else { return };
         *frames += 1;
@@ -2535,14 +2694,17 @@ impl eframe::App for App {
         storage.set_string("cnccraft_lang", self.lang.code().to_string());
         storage.set_string("cnccraft_post_idx", self.post_idx.to_string());
         storage.set_string("cnccraft_gcode_in_3d", self.paths_in_3d.to_string());
+        // the script survives a restart, so a demo being written is not lost
+        storage.set_string("cnccraft_script", self.script_text.clone());
         let paths: Vec<String> = self.recent_files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         if let Ok(json) = serde_json::to_string(&paths) {
             storage.set_string("cnccraft_recent", json);
         }
         storage.set_string("cnccraft_tools_open", self.tools_open.to_string());
-        storage.set_string("cnccraft_snap_geometry", self.snap_geometry.to_string());
+        storage.set_string("cnccraft_snap_to_geometry", self.snap_to_geometry.to_string());
+        storage.set_string("cnccraft_snap_to_center", self.snap_to_center.to_string());
+        storage.set_string("cnccraft_snap_to_gap", self.snap_to_gap.to_string());
         storage.set_string("cnccraft_snap_grid", self.snap_grid.to_string());
-        storage.set_string("cnccraft_snap_job", self.snap_job.to_string());
         storage.set_string("cnccraft_grid_spacing", self.grid_spacing.to_string());
         storage.set_string("cnccraft_snap_radius", self.snap_radius_px.to_string());
         storage.set_string("cnccraft_show_dims", self.show_dims.to_string());
@@ -2573,8 +2735,27 @@ impl eframe::App for App {
         // carry out any MCP tool calls that arrived since the last frame, and keep the frames
         // coming while the virtual cursor is still playing a demo
         self.pump_mcp(ctx);
-        if self.demo.busy() {
+        self.drive_menu(ctx);
+        self.drive_agent_script(ctx);
+        self.drive_script(ctx);
+        if self.demo.busy() || self.demo.animating() {
             ctx.request_repaint();
+        }
+        // after a short rest with nothing playing, the virtual cursor hides itself (about 1.5 s at
+        // 60 fps); any new MCP command or script step turns it back on
+        if self.demo.on {
+            let active = self.demo.busy() || self.menu_drive_busy() || self.script_busy() || self.script_playing();
+            if active {
+                self.cursor_idle = 0;
+            } else {
+                self.cursor_idle += 1;
+                if self.cursor_idle >= 90 {
+                    self.demo.on = false;
+                    self.cursor_idle = 0;
+                } else {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(16));
+                }
+            }
         }
         // pick up a finished update check and repaint the window showing it, if one is open
         if self.update.poll() && (self.about || self.update_dialog) {
@@ -2679,6 +2860,8 @@ impl eframe::App for App {
         self.about_ui(ctx);
         self.update_ui(ctx);
         self.demo_ui(ctx);
+        self.script_ui(ctx);
+        self.command_help_ui(ctx);
         if self.shortcuts_open {
             dialogs::shortcuts::window(ctx, &mut self.shortcuts_open);
         }
@@ -2694,20 +2877,18 @@ impl eframe::App for App {
             }
         }
         crate::widgets::toast::show(ctx);
-        self.demo.draw(ctx);
+        // the caption first, so the virtual cursor passes over it
+        self.draw_text_overlay(ctx);
+        self.demo.draw(ctx, self.canvas_rect);
+        self.pump_recording(ctx);
         self.screenshot(ctx);
     }
 }
 
 // ---------------- helpers ----------------
 
-/// The u64 shape ids in a JSON array argument (ignoring non-numbers).
-fn json_ids(v: Option<&serde_json::Value>) -> Vec<u64> {
-    v.and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).collect()).unwrap_or_default()
-}
-
 /// Map an MCP key name to an `egui::Key` (named keys, or a single letter/digit).
-fn parse_key(name: &str) -> Option<egui::Key> {
+pub(crate) fn parse_key(name: &str) -> Option<egui::Key> {
     use egui::Key;
     Some(match name.to_ascii_lowercase().as_str() {
         "enter" | "return" => Key::Enter,
@@ -2819,237 +3000,25 @@ fn fmt_time(min: f64) -> String {
 }
 
 impl App {
-    /// Carry out the MCP tool calls that arrived since the last frame. Pointer and keyboard tools
-    /// become [`demo::Step`]s played through the visible cursor; high-level tools act directly. Each
-    /// call is answered at once; the client paces itself with `window`/`wait`.
+    /// Carry out the MCP tool calls that arrived since the last frame. Each call is looked up in the
+    /// tool registry and run on the app here (the UI thread), so pointer and keyboard tools play
+    /// through the visible cursor and act on the real widgets and dialogs — the point of the server
+    /// is to drive CncCraft exactly as a person would, for recordings. The client paces itself with
+    /// `window`/`wait`.
     fn pump_mcp(&mut self, ctx: &egui::Context) {
-        use demo::Step;
-        use egui::{Modifiers, PointerButton, Pos2};
         // take the calls out first so we do not borrow self.mcp across the handling
         let calls: Vec<mcp::Call> = match &self.mcp {
             Some(m) => m.rx.try_iter().collect(),
             None => return,
         };
         for call in calls {
-            let a = &call.args;
-            let num = |k: &str| a.get(k).and_then(|v| v.as_f64());
-            let xy = |kx: &str, ky: &str| match (num(kx), num(ky)) {
-                (Some(x), Some(y)) => Some(Pos2::new(x as f32, y as f32)),
-                _ => None,
-            };
-            let secs_to_frames = |s: f64| (s * 60.0).round().max(1.0) as u32;
-            let result: Result<String, String> = match call.tool.as_str() {
-                "cursor" => {
-                    self.demo.on = a.get("on").and_then(|v| v.as_bool()).unwrap_or(true);
-                    Ok(format!("cursor {}", if self.demo.on { "on" } else { "off" }))
-                }
-                "move_to" => match xy("x", "y") {
-                    Some(p) => { self.demo.push([Step::MoveTo(p)]); Ok("moving".into()) }
-                    None => Err("need x, y".into()),
-                },
-                "click" => match xy("x", "y") {
-                    Some(p) => {
-                        let b = if a.get("button").and_then(|v| v.as_str()) == Some("right") { PointerButton::Secondary } else { PointerButton::Primary };
-                        self.demo.push([Step::MoveTo(p), Step::Press(b), Step::Wait(6), Step::Release(b), Step::Wait(4)]);
-                        Ok("clicked".into())
-                    }
-                    None => Err("need x, y".into()),
-                },
-                "double_click" => match xy("x", "y") {
-                    Some(p) => {
-                        self.demo.push([Step::MoveTo(p), Step::Press(PointerButton::Primary), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(2), Step::Press(PointerButton::Primary), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(4)]);
-                        Ok("double-clicked".into())
-                    }
-                    None => Err("need x, y".into()),
-                },
-                "long_press" => match xy("x", "y") {
-                    Some(p) => { self.demo.push([Step::MoveTo(p), Step::Hold(34), Step::Wait(4)]); Ok("long-pressed".into()) }
-                    None => Err("need x, y".into()),
-                },
-                "drag" => match (xy("x1", "y1"), xy("x2", "y2")) {
-                    (Some(a1), Some(a2)) => {
-                        self.demo.push([Step::MoveTo(a1), Step::Press(PointerButton::Primary), Step::Wait(3), Step::MoveTo(a2), Step::Wait(3), Step::Release(PointerButton::Primary), Step::Wait(4)]);
-                        Ok("dragged".into())
-                    }
-                    _ => Err("need x1,y1,x2,y2".into()),
-                },
-                "type_text" => match a.get("text").and_then(|v| v.as_str()) {
-                    Some(t) => { self.demo.push([Step::Type(t.to_string()), Step::Wait(2)]); Ok("typed".into()) }
-                    None => Err("need text".into()),
-                },
-                "press_key" => match a.get("key").and_then(|v| v.as_str()).and_then(parse_key) {
-                    Some(key) => {
-                        let m = Modifiers { command: a.get("cmd").and_then(|v| v.as_bool()).unwrap_or(false) || a.get("ctrl").and_then(|v| v.as_bool()).unwrap_or(false), shift: a.get("shift").and_then(|v| v.as_bool()).unwrap_or(false), alt: a.get("alt").and_then(|v| v.as_bool()).unwrap_or(false), ..Default::default() };
-                        // the MCP must never quit the program: ⌘Q / Ctrl+Q is refused
-                        if m.command && key == egui::Key::Q {
-                            Err("quitting the program is not allowed over the MCP".into())
-                        } else {
-                            self.demo.push([Step::Key(key, m), Step::Wait(2)]);
-                            Ok("key".into())
-                        }
-                    }
-                    None => Err("unknown key".into()),
-                },
-                "wait" => { self.demo.push([Step::Wait(secs_to_frames(num("seconds").unwrap_or(1.0)))]); Ok("waiting".into()) }
-                "new_job" => {
-                    let mut job = crate::toolpath::Job { width: num("width").unwrap_or(300.0), height: num("height").unwrap_or(200.0), thickness: num("thickness").unwrap_or(18.0), ..crate::toolpath::Job::default() };
-                    if let Some(m) = a.get("material").and_then(|v| v.as_str()) {
-                        job.material = m.to_string();
-                    }
-                    self.new_job(job);
-                    self.start_page = false;
-                    Ok("new job".into())
-                }
-                "list_materials" => Ok(serde_json::json!({"materials": self.materials.sorted().iter().map(|m| m.key.clone()).collect::<Vec<_>>()}).to_string()),
-                "list_tools" => {
-                    let tools: Vec<serde_json::Value> = self.lib.tools_for(&self.job.material).iter().map(|t| serde_json::json!({"name": t.name, "kind": format!("{:?}", t.kind), "diameter": t.diameter})).collect();
-                    Ok(serde_json::json!({"material": self.job.material, "tools": tools}).to_string())
-                }
-                "state" => Ok(self.mcp_state()),
-                "draw_rectangle" => match (num("cx"), num("cy"), num("width"), num("height")) {
-                    (Some(cx), Some(cy), Some(w), Some(h)) => {
-                        let mut r = RectShape::new([cx, cy], w, h);
-                        if let Some(cr) = num("corner_radius") { r.corner_radius = cr; }
-                        let id = self.add_shape(r);
-                        self.edit.selection = vec![id];
-                        Ok(id.to_string())
-                    }
-                    _ => Err("need cx, cy, width, height".into()),
-                },
-                "draw_circle" => match (num("cx"), num("cy"), num("radius")) {
-                    (Some(cx), Some(cy), Some(rad)) => { let id = self.add_shape(Circle::new([cx, cy], rad)); self.edit.selection = vec![id]; Ok(id.to_string()) }
-                    _ => Err("need cx, cy, radius".into()),
-                },
-                "draw_ellipse" => match (num("cx"), num("cy"), num("width"), num("height")) {
-                    (Some(cx), Some(cy), Some(w), Some(h)) => { let id = self.add_shape(Ellipse::new([cx, cy], w / 2.0, h / 2.0)); self.edit.selection = vec![id]; Ok(id.to_string()) }
-                    _ => Err("need cx, cy, width, height".into()),
-                },
-                "draw_polygon" => match (num("cx"), num("cy"), num("radius"), num("sides")) {
-                    (Some(cx), Some(cy), Some(rad), Some(s)) => { let id = self.add_shape(Polygon::new([cx, cy], rad, (s as u32).max(3))); self.edit.selection = vec![id]; Ok(id.to_string()) }
-                    _ => Err("need cx, cy, radius, sides".into()),
-                },
-                "add_text" => match (num("cx"), num("cy"), a.get("text").and_then(|v| v.as_str())) {
-                    (Some(cx), Some(cy), Some(txt)) => { let id = self.add_shape(Text::new([cx, cy], txt, num("height").unwrap_or(20.0))); self.edit.selection = vec![id]; Ok(id.to_string()) }
-                    _ => Err("need cx, cy, text".into()),
-                },
-                "delete_shapes" => {
-                    let ids = json_ids(a.get("ids"));
-                    self.push_undo();
-                    self.shapes.retain(|s| !ids.contains(&s.id));
-                    self.sync_patterns();
-                    self.edit.retain_existing(&self.shapes);
-                    self.recompute_all();
-                    Ok(format!("deleted {}", ids.len()))
-                }
-                "select" => {
-                    let ids = json_ids(a.get("ids"));
-                    self.edit.selection = self.shapes.iter().filter(|s| ids.contains(&s.id)).map(|s| s.id).collect();
-                    Ok(format!("selected {}", self.edit.selection.len()))
-                }
-                "set_variable" => match (a.get("name").and_then(|v| v.as_str()), a.get("expression").and_then(|v| v.as_str())) {
-                    (Some(n), Some(e)) => { self.vars.set(n, e); self.vars_dirty = true; Ok(format!("{n} = {e}")) }
-                    _ => Err("need name, expression".into()),
-                },
-                "add_toolpath" => {
-                    let kind = a.get("kind").and_then(|v| v.as_str()).filter(|k| matches!(*k, "profile" | "cutout" | "pocket" | "slot" | "drill" | "vcarve")).map(|k| k.to_string());
-                    let ids = json_ids(a.get("shape_ids"));
-                    let ids_ok = !ids.is_empty() && ids.iter().all(|id| self.shapes.iter().any(|s| s.id == *id));
-                    match (kind, ids_ok) {
-                        (None, _) => Err("kind must be profile, cutout, pocket, slot, drill or vcarve".into()),
-                        (_, false) => Err("shape_ids must be existing shapes".into()),
-                        (Some(kind), true) => {
-                            let job = self.job.clone();
-                            let leaked: &'static str = Box::leak(kind.into_boxed_str());
-                            let mut tp = default_toolpath(leaked, &self.lib, &job, ids);
-                            if let Some(d) = num("cut_depth") { tp.cut_depth = d; }
-                            if let Some(d) = num("start_depth") { tp.start_depth = d; }
-                            if let Some(dia) = num("tool_diameter") {
-                                let angle = if tp.tool.kind == crate::tools::ToolKind::VBit { Some(tp.tool.angle) } else { None };
-                                tp.tool = self.lib.pick(&job.material, tp.tool.kind, dia, angle);
-                            }
-                            if let Some(n) = a.get("name").and_then(|v| v.as_str()) { tp.name = n.to_string(); }
-                            let name = tp.name.clone();
-                            self.toolpaths.push(tp);
-                            self.recompute_all();
-                            Ok(format!("added toolpath {name}"))
-                        }
-                    }
-                }
-                "delete_toolpath" => {
-                    let i = num("index").unwrap_or(-1.0) as i64;
-                    if i >= 0 && (i as usize) < self.toolpaths.len() {
-                        let name = self.toolpaths.remove(i as usize).name;
-                        self.recompute_all();
-                        Ok(format!("deleted {name}"))
-                    } else {
-                        Err("index out of range".into())
-                    }
-                }
-                "save_project" => match a.get("path").and_then(|v| v.as_str()) {
-                    Some(p) => self.write_project(std::path::Path::new(p)).map(|_| format!("saved {p}")),
-                    None => Err("need path".into()),
-                },
-                "export_gcode" => match a.get("path").and_then(|v| v.as_str()) {
-                    Some(p) => self.export_gcode_to(std::path::Path::new(p)),
-                    None => Err("need path".into()),
-                },
-                "view" => match a.get("mode").and_then(|v| v.as_str()) {
-                    Some("3d") => { self.start_preview(false); Ok("3D".into()) }
-                    _ => { self.mode = ViewMode::TwoD; Ok("2D".into()) }
-                },
-                "window" => {
-                    let r = ctx.screen_rect();
-                    let port = self.mcp.as_ref().map(|m| m.port).unwrap_or(0);
-                    Ok(serde_json::json!({"width": r.width(), "height": r.height(), "busy": self.demo.busy(), "port": port}).to_string())
-                }
-                "demo_window" => {
-                    self.demo_open = a.get("open").and_then(|v| v.as_bool()).unwrap_or(true);
-                    Ok(format!("demo window {}", if self.demo_open { "open" } else { "closed" }))
-                }
-                "screenshot" => match a.get("path").and_then(|v| v.as_str()) {
-                    Some(path) => { self.shot = Some((PathBuf::from(path), 0, false)); Ok(format!("saving to {path}")) }
-                    None => Err("need path".into()),
-                },
-                other => Err(format!("unknown tool {other}")),
-            };
+            let result = mcp::tools::dispatch(self, ctx, &call.tool, &call.args)
+                .unwrap_or_else(|| mcp::ToolResult::err(format!("unknown tool {}", call.tool)));
             let _ = call.reply.send(result);
         }
         if self.mcp.is_some() {
             ctx.request_repaint();
         }
-    }
-
-    /// A JSON summary of the drawing for the MCP `state` tool: the job, every shape (id, kind,
-    /// centre and size in mm) and every toolpath (index, name, kind, cut depth, tool). This lets a
-    /// client find shape ids and see what it has built.
-    fn mcp_state(&self) -> String {
-        let shapes: Vec<serde_json::Value> = self.shapes.iter().map(|s| {
-            let kind = match &s.shape {
-                Shape::Rect(_) => "rectangle",
-                Shape::Circle(_) => "circle",
-                Shape::Ellipse(_) => "ellipse",
-                Shape::Polygon(_) => "polygon",
-                Shape::Text(_) => "text",
-                Shape::Path(_) => "path",
-                Shape::Spline(_) => "spline",
-                Shape::Compound(_) => "compound",
-                Shape::RefImage(_) => "image",
-            };
-            let (c, w, h) = match s.bounds() {
-                Some((lo, hi)) => ([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0], hi[0] - lo[0], hi[1] - lo[1]),
-                None => ([0.0, 0.0], 0.0, 0.0),
-            };
-            serde_json::json!({"id": s.id, "kind": kind, "cx": c[0], "cy": c[1], "width": w, "height": h})
-        }).collect();
-        let toolpaths: Vec<serde_json::Value> = self.toolpaths.iter().enumerate().map(|(i, tp)| {
-            serde_json::json!({"index": i, "name": tp.name, "tool": tp.tool.name, "cut_depth": tp.cut_depth})
-        }).collect();
-        serde_json::json!({
-            "job": {"width": self.job.width, "height": self.job.height, "thickness": self.job.thickness, "material": self.job.material},
-            "selection": self.edit.selection,
-            "shapes": shapes,
-            "toolpaths": toolpaths,
-        }).to_string()
     }
 
     /// Pick the theme: follow the system, light or dark.

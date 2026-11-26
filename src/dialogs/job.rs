@@ -11,7 +11,7 @@ impl App {
         let mut cancel = false;
         // "Verwalten…" was clicked: open the manager on this material
         let mut manage_materials: Option<String> = None;
-        let title = if *is_new { t!("Job erstellen") } else { t!("Job einrichten") };
+        let title = if *is_new { t!("Werkstück erstellen") } else { t!("Werkstück einrichten") };
         dialogs::window("job_dialog_win", ctx)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
@@ -22,7 +22,7 @@ impl App {
                 let f = if job.inches { 1.0 / 25.4 } else { 1.0 };
                 let unit = if job.inches { "in" } else { "mm" };
 
-                dialog_group(ui, &t!("Auftragsgröße"), |ui| {
+                dialog_group(ui, &t!("Größe"), |ui| {
                     // size fields on the left, a 3D block sketch on the right
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {

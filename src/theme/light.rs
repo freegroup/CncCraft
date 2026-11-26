@@ -14,6 +14,8 @@ pub fn palette() -> Palette {
         sheet_label_edge: Color32::from_rgb(0xb4, 0xb8, 0xc0),
         constraint:       Color32::from_rgb(0x1e, 0x6f, 0xd9),
         primary:          Color32::from_rgb(0x2a, 0x6c, 0xf0),
+        guide:            Color32::from_rgb(0xe0, 0x30, 0x30),
+        snap_guide:       Color32::from_rgb(0x1e, 0x6f, 0xd9),
 
         canvas:        Color32::from_rgb(0xf2, 0xf2, 0xf2),
         ink:           Color32::from_rgb(0x1f, 0x29, 0x37),

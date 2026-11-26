@@ -6,20 +6,30 @@ use super::shortcuts::{self, Action};
 use super::{App, DrawTool};
 
 impl App {
-    /// The menus, one button each in the menu bar.
+    /// The menus, one button each in the menu bar. Every button's and item's screen rect is
+    /// recorded as it is drawn (by menu name / command id), so an MCP menu command can open the
+    /// real menu with the cursor and click the item (see `menu_drive.rs`).
     pub(super) fn menus(&mut self, ui: &mut egui::Ui) {
-        ui.menu_button(t!("Datei"), |ui| self.file_menu(ui));
-        ui.menu_button(t!("Bearbeiten"), |ui| self.edit_menu(ui));
-        ui.menu_button(t!("Ansicht"), |ui| self.view_menu(ui));
-        ui.menu_button(t!("Werkzeugwege"), |ui| self.toolpath_menu(ui));
-        ui.menu_button(t!("Hilfe"), |ui| {
+        let b = ui.menu_button(t!("Datei"), |ui| self.file_menu(ui));
+        self.menu_button_rects.insert("Datei".into(), b.response.rect);
+        let b = ui.menu_button(t!("Bearbeiten"), |ui| self.edit_menu(ui));
+        self.menu_button_rects.insert("Bearbeiten".into(), b.response.rect);
+        let b = ui.menu_button(t!("Ansicht"), |ui| self.view_menu(ui));
+        self.menu_button_rects.insert("Ansicht".into(), b.response.rect);
+        let b = ui.menu_button(t!("Werkzeugwege"), |ui| self.toolpath_menu(ui));
+        self.menu_button_rects.insert("Werkzeugwege".into(), b.response.rect);
+        let b = ui.menu_button(t!("Hilfe"), |ui| {
             if ui.button(t!("Nach Updates suchen…")).clicked() {
                 self.update_dialog = true;
                 self.update.check();
                 ui.close_menu();
             }
-            if ui.button(t!("MCP-Konfiguration…")).clicked() {
+            if ui.button(t!("Agentensteuerung (MCP)…")).clicked() {
                 self.demo_open = true;
+                ui.close_menu();
+            }
+            if ui.button(t!("Skript…")).clicked() {
+                self.script_open = true;
                 ui.close_menu();
             }
             ui.separator();
@@ -32,6 +42,7 @@ impl App {
                 ui.close_menu();
             }
         });
+        self.menu_button_rects.insert("Hilfe".into(), b.response.rect);
     }
 
     fn file_menu(&mut self, ui: &mut egui::Ui) {
@@ -102,7 +113,7 @@ impl App {
             ui.close_menu();
         }
         ui.separator();
-        if ui.button(t!("Job einrichten…")).clicked() {
+        if ui.button(t!("Werkstück einrichten…")).clicked() {
             self.job_dialog = Some((self.job.clone(), false));
             ui.close_menu();
         }
@@ -143,22 +154,29 @@ impl App {
             ui.checkbox(shown, t!(name));
         }
         ui.separator();
-        ui.checkbox(&mut self.show_dims, t!("Maße anzeigen"));
+        let resp = ui.checkbox(&mut self.show_dims, t!("Maße anzeigen"));
+        self.menu_item_rects.insert("view.toggleDimensions", resp.rect);
     }
 
     fn toolpath_menu(&mut self, ui: &mut egui::Ui) {
         for (k, l) in [("profile", t!("Profil")), ("pocket", t!("Tasche")), ("drill", t!("Bohren")), ("vcarve", t!("V-Carving")), ("cutout", t!("Ausschnitt"))] {
-            if ui.button(l).clicked() {
+            let resp = ui.button(l);
+            self.menu_item_rects.insert(toolpath_cmd(k), resp.rect);
+            if resp.clicked() {
                 self.open_editor(k);
                 ui.close_menu();
             }
         }
         ui.separator();
-        if ui.button(t!("Alle neu berechnen")).clicked() {
+        let resp = ui.button(t!("Alle neu berechnen"));
+        self.menu_item_rects.insert("toolpath.recomputeAll", resp.rect);
+        if resp.clicked() {
             self.recompute_all();
             ui.close_menu();
         }
-        if ui.button(t!("Vorschau")).clicked() {
+        let resp = ui.button(t!("Vorschau"));
+        self.menu_item_rects.insert("toolpath.preview", resp.rect);
+        if resp.clicked() {
             self.start_preview(false);
             ui.close_menu();
         }
@@ -174,12 +192,30 @@ impl App {
         }
     }
 
-    /// A menu entry showing its keys from the shortcut table; runs the action when clicked.
+    /// A menu entry showing its keys from the shortcut table; runs the action when clicked. Records
+    /// the item's screen rect by its command id (when it is a catalog command), so the visible-menu
+    /// driver can move the cursor onto it.
     pub(super) fn menu_item(&mut self, ui: &mut egui::Ui, label: &str, action: Action, enabled: bool) {
         let button = egui::Button::new(label).shortcut_text(shortcuts::keys_for(action));
-        if ui.add_enabled(enabled, button).clicked() {
+        let resp = ui.add_enabled(enabled, button);
+        if let Some(id) = super::agent::cmd_id_for_action(action) {
+            self.menu_item_rects.insert(id, resp.rect);
+        }
+        if resp.clicked() {
             self.run(action);
             ui.close_menu();
         }
+    }
+}
+
+/// The catalog command id of a toolpath editor kind, for recording its menu-item rect.
+fn toolpath_cmd(kind: &str) -> &'static str {
+    match kind {
+        "profile" => "toolpath.profile",
+        "pocket" => "toolpath.pocket",
+        "drill" => "toolpath.drill",
+        "vcarve" => "toolpath.vcarve",
+        "cutout" => "toolpath.cutout",
+        _ => "toolpath.profile",
     }
 }

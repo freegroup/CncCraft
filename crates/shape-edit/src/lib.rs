@@ -42,7 +42,7 @@ pub use geometry::Contour;
 pub use handles::{anchor_for, handle_at, handle_point, selection_bounds, Handle};
 pub use item::{can_group, group_items, ungroup_items, Item, Source};
 pub use region::{Region, Ring};
-pub use snap::{snap_angle, SnapKind, Snapping};
+pub use snap::{snap_angle, GapGuide, MoveSnap, SnapKind, SnapPolicies, Snapping};
 pub use vars::{Resolved, VarEvent, Variable, Variables};
 pub use vector::{Corner, CornerKind};
 

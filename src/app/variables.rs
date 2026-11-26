@@ -1,5 +1,5 @@
 //! Variables in the app: the dialog that lists and edits them (opened with the f(x) button next
-//! to "Job einrichten"), working out their values, and keeping the sizes that are bound to them
+//! to "Werkstück einrichten"), working out their values, and keeping the sizes that are bound to them
 //! up to date. The sums themselves are in `shape_edit::vars` and `shape_edit::calc`.
 //!
 //! A size typed as a formula or variable ("hoehe", "breite/2 - rand") is kept on its shape as
