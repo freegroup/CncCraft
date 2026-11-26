@@ -84,6 +84,16 @@ fn main() -> eframe::Result<()> {
         }
         return Ok(());
     }
+    // `--export-commands file.html` writes the full script/MCP command reference as an HTML fragment,
+    // from the same catalogue the automation server advertises (so the help can never drift from it)
+    if let Some(path) = args.iter().position(|a| a == "--export-commands").and_then(|i| args.get(i + 1)) {
+        let html = scripting::command_reference_html();
+        match std::fs::write(path, html) {
+            Ok(()) => println!("Befehlsreferenz gespeichert: {path}"),
+            Err(e) => eprintln!("Befehlsreferenz nicht gespeichert: {e}"),
+        }
+        return Ok(());
+    }
     let options = eframe::NativeOptions {
         persistence_path,
         viewport: egui::ViewportBuilder::default().with_title("CncCraft").with_icon(std::sync::Arc::new(appicon::icon_data(256))).with_inner_size([1400.0, 860.0]).with_min_inner_size([1000.0, 640.0]),

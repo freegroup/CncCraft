@@ -78,6 +78,36 @@ pub fn agent_md() -> String {
     md
 }
 
+/// The full command reference as an HTML fragment (no `<html>`/`<body>`), for the help website's
+/// scripting page. Generated from the same [`catalog`] the automation server advertises, so the
+/// published list of commands can never drift from the program. The docs build injects it where it
+/// finds the marker `<!--COMMANDS-->`.
+pub fn command_reference_html() -> String {
+    fn esc(s: &str) -> String {
+        s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    }
+    let mut h = String::new();
+    h.push_str("<p>Every line of a script is one of these commands. Parameters are written <code>name=value</code>; required ones are marked. <em>Returns</em> is what a later line can use through a variable (for example <code>$name.id</code>). This list is generated from the program itself, so it always matches your version.</p>\n");
+    for tool in catalog() {
+        h.push_str(&format!("<h3 id=\"cmd-{}\"><code>{}</code></h3>\n<p>{}</p>\n", esc(&tool.name), esc(&tool.name), esc(&tool.description)));
+        if tool.params.is_empty() {
+            h.push_str("<p><em>No parameters.</em></p>\n");
+        } else {
+            h.push_str("<table>\n<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>\n");
+            for p in &tool.params {
+                let values = if p.values.is_empty() { String::new() } else { esc(&p.values.join(", ")) };
+                h.push_str(&format!(
+                    "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+                    esc(&p.name), esc(&p.kind), if p.required { "yes" } else { "no" }, values, esc(&p.description),
+                ));
+            }
+            h.push_str("</table>\n");
+        }
+        h.push_str(&format!("<p><em>Returns:</em> {}</p>\n", esc(&tool.returns)));
+    }
+    h
+}
+
 /// A plausible value for a parameter in a generated example line.
 fn sample_value(p: &crate::mcp::tools::ParamInfo) -> String {
     if let Some(first) = p.values.first() {

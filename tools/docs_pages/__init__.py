@@ -5,7 +5,7 @@ Nur Funktionen, die CncCraft wirklich hat, werden beschrieben; Funktionen der Vo
 fehlen (z. B. Laser, Bildbearbeitung, Werkzeugdatenbank-Dialoge, Maschinenverwaltung), kommen
 nicht vor.
 """
-from . import erste_schritte, entwurf, parametrisch, werkzeugwege, versionen
+from . import erste_schritte, entwurf, parametrisch, werkzeugwege, automatisierung, versionen
 
 CATEGORIES = [
     {"id": "erste-schritte", "title": "Erste Schritte", "symbol": "▶",
@@ -24,10 +24,14 @@ CATEGORIES = [
      "title_en": "Toolpaths",
      "text": "Profil, Ausschnitt, Tasche, Bohren, V-Carving – berechnen, ansehen, ausgeben.",
      "text_en": "Profile, cut-out, pocket, drilling, V-carving – compute, preview, output."},
+    {"id": "automatisierung", "title": "Automatisierung", "symbol": "▷",
+     "title_en": "Automation",
+     "text": "Skripte und der eingebaute Server: CncCraft Schritt für Schritt steuern – gut für kurze Videos für TikTok & Co. (Pilotfunktion).",
+     "text_en": "Scripts and the built-in server: drive CncCraft step by step – great for short videos for TikTok and the like (pilot feature)."},
     {"id": "versionen", "title": "Versionen", "symbol": "★",
      "title_en": "Versions",
      "text": "Der Funktionsumfang der aktuellen Version und was gegenüber dem Original neu ist.",
      "text_en": "What the current version can do and what is new compared with the original."},
 ]
 
-PAGES = erste_schritte.PAGES + entwurf.PAGES + parametrisch.PAGES + werkzeugwege.PAGES + versionen.PAGES
+PAGES = erste_schritte.PAGES + entwurf.PAGES + parametrisch.PAGES + werkzeugwege.PAGES + automatisierung.PAGES + versionen.PAGES

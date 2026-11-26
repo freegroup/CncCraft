@@ -28,6 +28,8 @@ pub mod editor;
 pub mod help;
 pub mod skill;
 
+pub use skill::command_reference_html;
+
 /// A parsed statement: an optional variable to bind the result to, which tool to run, its raw
 /// arguments (references still as `$name.field` text), and the line it came from.
 #[derive(Clone, Debug, PartialEq)]
