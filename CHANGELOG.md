@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/freegroup/CncCraft/compare/v1.28.0...v1.29.0) (2026-11-26)
+
+
+### Features
+
+* MCP tool modules, scripting, recording, text overlay, agent scripts ([b5b09dd](https://github.com/freegroup/CncCraft/commit/b5b09ddd3aa784a558359db3e34115cb5389412e))
+
 # [1.28.0](https://github.com/freegroup/CncCraft/compare/v1.27.0...v1.28.0) (2026-11-24)
 
 
