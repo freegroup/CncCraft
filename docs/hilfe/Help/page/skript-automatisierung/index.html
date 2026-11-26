@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scripts and automation – CncCraft Help</title>
-<meta name="description" content="A small script drives CncCraft step by step – the visible mouse shows every click.">
+<meta name="description" content="A small script drives CncCraft step by step – the visible mouse shows every click. Great for short videos for TikTok, Instagram and the like.">
 <link rel="icon" type="image/png" href="../../../../assets/favicon.png">
 <link rel="stylesheet" href="../../../../assets/site.css">
 </head><body data-help-root="../../../">
@@ -34,7 +34,6 @@
 <li><a href="../../../../hilfe/Help/page/tastenkuerzel/index.html">Keyboard shortcuts<span class="pille">New</span></a></li>
 <li><a href="../../../../hilfe/Help/page/dateien-speichern/index.html">Saving and opening files<span class="pille">New</span></a></li>
 <li><a href="../../../../hilfe/Help/page/rueckgaengig-wiederholen/index.html">Undo and redo</a></li>
-<li><a href="../../../../hilfe/Help/page/skript-automatisierung/index.html" aria-current="page">Scripts and automation<span class="pille">New</span></a></li>
 </ul>
 <h2>Design tools</h2><ul>
 <li><a href="../../../../hilfe/Help/page/auswahlwerkzeug/index.html">Select and move</a></li>
@@ -84,16 +83,23 @@
 <li><a href="../../../../hilfe/Help/page/nut-werkzeugweg/index.html">Slot toolpath<span class="pille">New</span></a></li>
 <li><a href="../../../../hilfe/Help/page/materialien/index.html">Materials and limits<span class="pille">New</span></a></li>
 </ul>
+<h2>Automation</h2><ul>
+<li><a href="../../../../hilfe/Help/page/skript-automatisierung/index.html" aria-current="page">Scripts and automation<span class="pille">New</span></a></li>
+</ul>
 <h2>Versions</h2><ul>
 <li><a href="../../../../hilfe/Help/page/version-0-1-0/index.html">Version 0.1.0 – feature set</a></li>
 </ul>
-</nav><main><article><div class="brotkrumen"><a href="../../../../hilfe/Help/page/home/index.html">Help</a><span>›</span>Getting started<span>›</span>Scripts and automation</div><h1>Scripts and automation <span class="pille">New in CncCraft</span></h1><p class="einleitung">A small script drives CncCraft step by step – the visible mouse shows every click.</p>
+</nav><main><article><div class="brotkrumen"><a href="../../../../hilfe/Help/page/home/index.html">Help</a><span>›</span>Automation<span>›</span>Scripts and automation</div><h1>Scripts and automation <span class="pille">New in CncCraft</span></h1><p class="einleitung">A small script drives CncCraft step by step – the visible mouse shows every click. Great for short videos for TikTok, Instagram and the like.</p>
 <div class="pilot-box"><p><strong>This is a pilot feature (beta).</strong> Scripting and the built-in
 automation server are new, still being refined and may change. They are meant mainly for recording
 demos; everyday work needs none of it.</p></div>
 <p>CncCraft can run a <strong>script</strong>: a plain list of commands, one per line, that it carries
 out by moving the <strong>visible mouse</strong> and clicking the real buttons – so it looks exactly
-like someone using the program. This is ideal for recording short demo videos.</p>
+like someone using the program.</p>
+<div class="tipp"><p>This is a nice way to build <strong>short demo videos for TikTok, Instagram or
+YouTube Shorts</strong>: the big visible cursor, the on-screen captions and the steady, repeatable
+moves make clean, hands-free clips. Record the window, set a title and a subtitle, pick the speed,
+and let the script draw and mill while the mouse shows every step.</p></div>
 <h2>The script window</h2>
 <p>Open it with <em>Help ▸ Script…</em>. It is its own window you can move anywhere. It has an
 editor with autocomplete and syntax highlighting, a <strong>Run</strong> and a <strong>Stop</strong>
@@ -119,7 +125,532 @@ how a shape lines up on an edge, a centre or an equal gap.</p>
 <p>Behind the scenes the same commands are an <strong>automation server</strong> running inside
 CncCraft on your own computer only (localhost). An AI assistant can connect to it and build a drawing
 for you while the visible mouse shows every move. Nothing leaves your machine.</p>
-</article><div class="blaettern"><a href="../../../../hilfe/Help/page/rueckgaengig-wiederholen/index.html"><small>Back</small>Undo and redo</a><a class="weiter" href="../../../../hilfe/Help/page/auswahlwerkzeug/index.html"><small>Next</small>Select and move</a></div></main></div><footer class="fuss"><div class="innen">
+<h2>All commands</h2>
+<p>These are every command a script (and the automation server) understands – the same set the AI
+assistant sees in <code>agent.md</code>.</p>
+<p>Every line of a script is one of these commands. Parameters are written <code>name=value</code>; required ones are marked. <em>Returns</em> is what a later line can use through a variable (for example <code>$name.id</code>). This list is generated from the program itself, so it always matches your version.</p>
+<h3 id="cmd-agent_md"><code>agent_md</code></h3>
+<p>Get the agent guide (Markdown): what CncCraft and its script language are for, the syntax, coordinates and pacing rules, every command with its parameters and return value, and example scripts. Read it first to write scripts.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text: the agent guide as Markdown.</p>
+<h3 id="cmd-state"><code>state</code></h3>
+<p>Report the current job (size, material), the shapes (id, kind, centre, size in mm) and the toolpaths (index, name, tool, depth). Use it to find shape ids before adding toolpaths.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"job": {"width", "height", "thickness", "material"}, "selection": [ids], "shapes": [{"id", "kind", "cx", "cy", "width", "height"}], "toolpaths": [{"index", "name", "tool", "cut_depth"}]}.</p>
+<h3 id="cmd-list_materials"><code>list_materials</code></h3>
+<p>List the material keys available for a job (e.g. for new_job).</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"materials": [keys]}.</p>
+<h3 id="cmd-list_tools"><code>list_tools</code></h3>
+<p>List the cutters available for the current job's material (name, kind, diameter in mm).</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"material", "tools": [{"name", "kind", "diameter"}]}.</p>
+<h3 id="cmd-window"><code>window</code></h3>
+<p>Report the window size, whether the cursor is still playing (busy), the MCP port, which side panels are open, the view (2d or 3d), the replay speed and the recording. With width and/or height (logical points), it resizes the window first — set a steady size before recording_start.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>height</code></td><td>number</td><td>no</td><td></td><td>New window height in points (optional; keeps the current height if left out).</td></tr>
+<tr><td><code>width</code></td><td>number</td><td>no</td><td></td><td>New window width in points (optional; keeps the current width if left out).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"width", "height", "busy", "port", "panels": {"tools", "milling"}, "view", "replay_speed", "recording": path or null}.</p>
+<h3 id="cmd-new_job"><code>new_job</code></h3>
+<p>Start a new job with a size (mm), thickness (mm) and material key (e.g. Softwood, Hardwood, Plywood, MDF, Acrylic, Aluminium).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>width</code></td><td>number</td><td>yes</td><td></td><td>Width of the material in mm (x).</td></tr>
+<tr><td><code>height</code></td><td>number</td><td>yes</td><td></td><td>Height of the material in mm (y).</td></tr>
+<tr><td><code>material</code></td><td>string</td><td>no</td><td></td><td>Material key from list_materials, e.g. Plywood or MDF.</td></tr>
+<tr><td><code>thickness</code></td><td>number</td><td>no</td><td></td><td>Material thickness in mm (default 18).</td></tr>
+</table>
+<p><em>Returns:</em> Text "new job".</p>
+<h3 id="cmd-draw_rectangle"><code>draw_rectangle</code></h3>
+<p>Add a rectangle by its centre (cx, cy in mm) and width/height (mm); optional corner_radius (mm). Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>cx</code></td><td>number</td><td>yes</td><td></td><td>Centre x in mm (from the left edge of the material).</td></tr>
+<tr><td><code>cy</code></td><td>number</td><td>yes</td><td></td><td>Centre y in mm (from the bottom edge of the material).</td></tr>
+<tr><td><code>width</code></td><td>number</td><td>yes</td><td></td><td>Width in mm.</td></tr>
+<tr><td><code>height</code></td><td>number</td><td>yes</td><td></td><td>Height in mm.</td></tr>
+<tr><td><code>corner_radius</code></td><td>number</td><td>no</td><td></td><td>Rounded corners: their radius in mm (default 0, sharp).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new rectangle's shape id.</p>
+<h3 id="cmd-draw_circle"><code>draw_circle</code></h3>
+<p>Add a circle by centre (cx, cy in mm) and radius (mm). Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>cx</code></td><td>number</td><td>yes</td><td></td><td>Centre x in mm (from the left edge of the material).</td></tr>
+<tr><td><code>cy</code></td><td>number</td><td>yes</td><td></td><td>Centre y in mm (from the bottom edge of the material).</td></tr>
+<tr><td><code>radius</code></td><td>number</td><td>yes</td><td></td><td>Radius in mm.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new circle's shape id.</p>
+<h3 id="cmd-draw_ellipse"><code>draw_ellipse</code></h3>
+<p>Add an ellipse by centre (cx, cy in mm) and full width/height (mm). Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>cx</code></td><td>number</td><td>yes</td><td></td><td>Centre x in mm (from the left edge of the material).</td></tr>
+<tr><td><code>cy</code></td><td>number</td><td>yes</td><td></td><td>Centre y in mm (from the bottom edge of the material).</td></tr>
+<tr><td><code>width</code></td><td>number</td><td>yes</td><td></td><td>Full width in mm.</td></tr>
+<tr><td><code>height</code></td><td>number</td><td>yes</td><td></td><td>Full height in mm.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new ellipse's shape id.</p>
+<h3 id="cmd-draw_polygon"><code>draw_polygon</code></h3>
+<p>Add a regular polygon by centre (cx, cy in mm), radius (mm) and number of sides (&gt;=3). Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>cx</code></td><td>number</td><td>yes</td><td></td><td>Centre x in mm (from the left edge of the material).</td></tr>
+<tr><td><code>cy</code></td><td>number</td><td>yes</td><td></td><td>Centre y in mm (from the bottom edge of the material).</td></tr>
+<tr><td><code>radius</code></td><td>number</td><td>yes</td><td></td><td>Distance from the centre to a corner, in mm.</td></tr>
+<tr><td><code>sides</code></td><td>number</td><td>yes</td><td></td><td>Number of sides (3 or more).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new polygon's shape id.</p>
+<h3 id="cmd-add_text"><code>add_text</code></h3>
+<p>Add text by centre (cx, cy in mm), the text and the letter height (mm, default 20). Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>cx</code></td><td>number</td><td>yes</td><td></td><td>Centre x in mm (from the left edge of the material).</td></tr>
+<tr><td><code>cy</code></td><td>number</td><td>yes</td><td></td><td>Centre y in mm (from the bottom edge of the material).</td></tr>
+<tr><td><code>text</code></td><td>string</td><td>yes</td><td></td><td>The text to write.</td></tr>
+<tr><td><code>height</code></td><td>number</td><td>no</td><td></td><td>Letter height in mm (default 20).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new text's shape id.</p>
+<h3 id="cmd-drag_shape"><code>drag_shape</code></h3>
+<p>Drag a shape with the visible mouse: the cursor goes to the shape, presses, glides and releases so the top-left corner of the shape's outline box lands at (left, top). It is the app's own drag, so the shape snaps to the grid and to construction lines (and attaches to a line it lands on), as by hand. Returns {"id", "from", "to"}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>id</code></td><td>number</td><td>yes</td><td></td><td>The shape's id (from a drawing tool's result or the state tool).</td></tr>
+<tr><td><code>left</code></td><td>number</td><td>yes</td><td></td><td>Where the left edge of the shape should end up, in mm from the left edge of the material.</td></tr>
+<tr><td><code>top</code></td><td>number</td><td>yes</td><td></td><td>Where the top edge of the shape should end up, in mm from the bottom edge of the material.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id", "from": {"left", "top"}, "to": {"left", "top"}} — the place asked for; the shape may snap a little to the grid or a construction line (read it back with state).</p>
+<h3 id="cmd-delete_shapes"><code>delete_shapes</code></h3>
+<p>Delete shapes by their ids. Returns {"deleted": [...]}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>ids</code></td><td>array</td><td>yes</td><td></td><td>The ids of the shapes to delete.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"deleted": [ids]}.</p>
+<h3 id="cmd-select"><code>select</code></h3>
+<p>Select shapes by their ids (clears the previous selection). Returns {"selected": [...]}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>ids</code></td><td>array</td><td>yes</td><td></td><td>The ids of the shapes to select.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"selected": [ids]}.</p>
+<h3 id="cmd-set_variable"><code>set_variable</code></h3>
+<p>Create or change a document variable: a name and an expression (a number or formula). Shapes and toolpaths bound to it follow.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>name</code></td><td>string</td><td>yes</td><td></td><td>The variable's name, e.g. plate_w.</td></tr>
+<tr><td><code>expression</code></td><td>string</td><td>yes</td><td></td><td>A number or formula, e.g. 120 or plate_w/2.</td></tr>
+</table>
+<p><em>Returns:</em> Text "NAME = EXPRESSION".</p>
+<h3 id="cmd-add_toolpath"><code>add_toolpath</code></h3>
+<p>Create a milling toolpath, all through the UI: the visible mouse clicks the shapes to select them (Shift for the extra ones), opens the milling panel if needed, clicks the operation's button, types the depths into the editor's fields when given, and clicks Anwenden. Fields left out keep the material's standard value. All shapes must be on screen (run view_fit first if needed).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>kind</code></td><td>string</td><td>yes</td><td>profile, cutout, pocket, slot, drill, vcarve</td><td>The milling operation: profile (along the outline), cutout (cut the part free), pocket (clear the inside), slot, drill (holes) or vcarve.</td></tr>
+<tr><td><code>shape_ids</code></td><td>array</td><td>yes</td><td></td><td>The ids of the shapes to cut (from a drawing tool's result or the state tool).</td></tr>
+<tr><td><code>cut_depth</code></td><td>string</td><td>no</td><td></td><td>How deep the cut goes in total (the 'Zieltiefe' field): a number in mm or a variable/formula like platte_d or platte_d/2 (optional).</td></tr>
+<tr><td><code>max_depth_per_pass</code></td><td>string</td><td>no</td><td></td><td>The most the cutter takes per pass (the 'Zustellung' field, 'Bohrtiefe je Hub' for drilling): a number in mm or a formula (optional).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"kind", "shape_ids": [ids], "cut_depth", "max_depth_per_pass"} — the toolpath is computed once the mouse has clicked Anwenden; read it back with state.</p>
+<h3 id="cmd-delete_toolpath"><code>delete_toolpath</code></h3>
+<p>Delete a toolpath by its index in the list (0-based).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>index</code></td><td>number</td><td>yes</td><td></td><td>Position of the toolpath in the list, starting at 0 (see the state tool).</td></tr>
+</table>
+<p><em>Returns:</em> Text "deleted NAME".</p>
+<h3 id="cmd-guides_list"><code>guides_list</code></h3>
+<p>List the construction lines (ruler guides): id, axis (vertical = an X value, horizontal = a Y value), offset in mm, formula and attached shape ids, plus whether the lines are locked and the rulers shown.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"rulers_shown", "locked", "guides": [{"id", "axis", "offset", "expr", "attached": [shape ids]}]}.</p>
+<h3 id="cmd-guide_add"><code>guide_add</code></h3>
+<p>Add a construction line (ruler guide): axis "vertical" (an X value, measured from the left edge) or "horizontal" (a Y value, from the bottom), at offset mm. Turns the rulers on if needed. Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>axis</code></td><td>string</td><td>yes</td><td>vertical, horizontal</td><td>vertical: a line at an x value; horizontal: a line at a y value.</td></tr>
+<tr><td><code>offset</code></td><td>number</td><td>yes</td><td></td><td>Distance in mm from the left edge (vertical) or the bottom edge (horizontal).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N} — the new construction line's id.</p>
+<h3 id="cmd-guide_move"><code>guide_move</code></h3>
+<p>Move a construction line (from guides_list) to a new distance (mm). The visible mouse drags it on the ruler; any attached shapes follow. Returns {"id": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>id</code></td><td>number</td><td>yes</td><td></td><td>The construction line's id (from guide_add or guides_list).</td></tr>
+<tr><td><code>offset</code></td><td>number</td><td>yes</td><td></td><td>The new distance in mm from the left edge (vertical) or the bottom edge (horizontal).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"id": N}.</p>
+<h3 id="cmd-guide_delete"><code>guide_delete</code></h3>
+<p>Delete a construction line by its id (from guides_list); its shapes stay put. Returns {"deleted": id}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>id</code></td><td>number</td><td>yes</td><td></td><td>The construction line's id (from guide_add or guides_list).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"deleted": id}.</p>
+<h3 id="cmd-guides_delete_all"><code>guides_delete_all</code></h3>
+<p>Delete every construction line: the mouse glides from one guide's handle to the next and removes each. Shapes stay put. Returns {"deleted": [ids...]}.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"deleted": [ids]}.</p>
+<h3 id="cmd-guides_lock_all"><code>guides_lock_all</code></h3>
+<p>Lock every construction line (the mouse clicks the lock in the rulers' corner). Locked lines can't be added, moved, edited or deleted; shapes still snap to them.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text "locking all construction lines".</p>
+<h3 id="cmd-guides_unlock_all"><code>guides_unlock_all</code></h3>
+<p>Unlock every construction line (the mouse clicks the lock in the rulers' corner), so they can be moved, edited and deleted again.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text "unlocking all construction lines".</p>
+<h3 id="cmd-save_project"><code>save_project</code></h3>
+<p>Save the project to an absolute .cnccraft path.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>path</code></td><td>string</td><td>yes</td><td></td><td>Absolute path of the .cnccraft project file.</td></tr>
+</table>
+<p><em>Returns:</em> Text "saved PATH".</p>
+<h3 id="cmd-export_gcode"><code>export_gcode</code></h3>
+<p>Write the visible toolpaths as a G-code file to an absolute path.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>path</code></td><td>string</td><td>yes</td><td></td><td>Absolute path of the G-code file to write.</td></tr>
+</table>
+<p><em>Returns:</em> Text saying which file was written.</p>
+<h3 id="cmd-view"><code>view</code></h3>
+<p>Switch to the 2D or 3D view: the visible mouse clicks the 2D/3D toggle in the canvas bar (nothing is clicked if the view already is the one asked for). Returns {"mode", "changed"}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>mode</code></td><td>string</td><td>yes</td><td>2d, 3d</td><td>2d: the drawing; 3d: the board in 3D (the cuts show once the preview runs: toolpath_preview).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"mode": "2d"|"3d", "changed": true|false}.</p>
+<h3 id="cmd-panel_tools_open"><code>panel_tools_open</code></h3>
+<p>Open the tool column on the left: the visible mouse moves to the panel's fold button (the chevron) and clicks it. Nothing is clicked if it already is open. Returns {"panel", "open", "changed"}.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"panel": "tools"|"milling", "open": true|false, "changed": true|false}.</p>
+<h3 id="cmd-panel_tools_close"><code>panel_tools_close</code></h3>
+<p>Close the tool column on the left: the visible mouse moves to the panel's fold button (the chevron) and clicks it. Nothing is clicked if it already is closed. Returns {"panel", "open", "changed"}.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"panel": "tools"|"milling", "open": true|false, "changed": true|false}.</p>
+<h3 id="cmd-panel_milling_open"><code>panel_milling_open</code></h3>
+<p>Open the milling (toolpath) panel on the right: the visible mouse moves to the panel's fold button (the chevron) and clicks it. Nothing is clicked if it already is open. Returns {"panel", "open", "changed"}.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"panel": "tools"|"milling", "open": true|false, "changed": true|false}.</p>
+<h3 id="cmd-panel_milling_close"><code>panel_milling_close</code></h3>
+<p>Close the milling (toolpath) panel on the right: the visible mouse moves to the panel's fold button (the chevron) and clicks it. Nothing is clicked if it already is closed. Returns {"panel", "open", "changed"}.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"panel": "tools"|"milling", "open": true|false, "changed": true|false}.</p>
+<h3 id="cmd-demo_window"><code>demo_window</code></h3>
+<p>Open or close the in-app Demo &amp; remote-control window.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>open</code></td><td>boolean</td><td>no</td><td></td><td>true opens the window, false closes it (default true).</td></tr>
+</table>
+<p><em>Returns:</em> Text "demo window open" or "demo window closed".</p>
+<h3 id="cmd-script_window"><code>script_window</code></h3>
+<p>Open or close the script window (its own OS window for writing and playing a script of commands).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>open</code></td><td>boolean</td><td>no</td><td></td><td>true opens the window, false closes it (default true).</td></tr>
+</table>
+<p><em>Returns:</em> Text "script window open" or "script window closed".</p>
+<h3 id="cmd-screenshot"><code>screenshot</code></h3>
+<p>Save a PNG of the window to an absolute path (does not close the app).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>path</code></td><td>string</td><td>yes</td><td></td><td>Absolute path of the PNG file to write.</td></tr>
+</table>
+<p><em>Returns:</em> Text "saving to PATH" (the PNG is written on the next frame).</p>
+<h3 id="cmd-file_new"><code>file_new</code></h3>
+<p>New job — The mouse opens the File menu and clicks "New job". Keys: ⌘N.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-file_open"><code>file_open</code></h3>
+<p>Open… — The mouse opens the File menu and clicks "Open…". Keys: ⌘O.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-file_save"><code>file_save</code></h3>
+<p>Save — The mouse opens the File menu and clicks "Save". Keys: ⌘S.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-file_save_as"><code>file_save_as</code></h3>
+<p>Save as… — The mouse opens the File menu and clicks "Save as…". Keys: ⇧⌘S.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-file_export_toolpaths"><code>file_export_toolpaths</code></h3>
+<p>Save toolpaths… — The mouse opens the File menu and clicks "Save toolpaths…".</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-file_start_page"><code>file_start_page</code></h3>
+<p>Start page — The mouse opens the File menu and clicks "Start page".</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_undo"><code>edit_undo</code></h3>
+<p>Undo — The mouse opens the Edit menu and clicks "Undo". Keys: ⌘Z.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_redo"><code>edit_redo</code></h3>
+<p>Redo — The mouse opens the Edit menu and clicks "Redo". Keys: ⇧⌘Z.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_cut"><code>edit_cut</code></h3>
+<p>Cut — The mouse opens the Edit menu and clicks "Cut". Keys: ⌘X.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_copy"><code>edit_copy</code></h3>
+<p>Copy — The mouse opens the Edit menu and clicks "Copy". Keys: ⌘C.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_paste"><code>edit_paste</code></h3>
+<p>Paste — The mouse opens the Edit menu and clicks "Paste". Keys: ⌘V.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_duplicate"><code>edit_duplicate</code></h3>
+<p>Duplicate — The mouse opens the Edit menu and clicks "Duplicate". Keys: ⌘D.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_delete"><code>edit_delete</code></h3>
+<p>Delete — The mouse opens the Edit menu and clicks "Delete". Keys: ⌫.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_group"><code>edit_group</code></h3>
+<p>Group — The mouse opens the Edit menu and clicks "Group". Keys: ⌘G.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_ungroup"><code>edit_ungroup</code></h3>
+<p>Ungroup — The mouse opens the Edit menu and clicks "Ungroup". Keys: ⇧⌘G.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_select_all"><code>edit_select_all</code></h3>
+<p>Select all — The mouse opens the Edit menu and clicks "Select all". Keys: ⌘A.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_node_edit"><code>edit_node_edit</code></h3>
+<p>Edit nodes — The mouse opens the Edit menu and clicks "Edit nodes". Keys: N.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_job_setup"><code>edit_job_setup</code></h3>
+<p>Set up workpiece… — The mouse opens the Edit menu and clicks "Set up workpiece…".</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-edit_cancel"><code>edit_cancel</code></h3>
+<p>Cancel — The mouse opens the Edit menu and clicks "Cancel". Keys: Esc.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_select"><code>tool_select</code></h3>
+<p>Select — Tools › Select. Keys: S.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_line"><code>tool_line</code></h3>
+<p>Draw line — Tools › Draw line. Keys: L.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_spline"><code>tool_spline</code></h3>
+<p>Draw spline — Tools › Draw spline. Keys: P.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_rectangle"><code>tool_rectangle</code></h3>
+<p>Draw rectangle — Tools › Draw rectangle. Keys: R.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_circle"><code>tool_circle</code></h3>
+<p>Draw circle — Tools › Draw circle. Keys: C.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_offset"><code>tool_offset</code></h3>
+<p>Offset vectors — Tools › Offset vectors. Keys: O.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_dimension"><code>tool_dimension</code></h3>
+<p>Bemaßen — Tools › Bemaßen. Keys: D.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-tool_align"><code>tool_align</code></h3>
+<p>Waagrecht/Senkrecht — Tools › Waagrecht/Senkrecht. Keys: H.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-view_2d"><code>view_2d</code></h3>
+<p>2D view — The mouse opens the View menu and clicks "2D view". Keys: F2.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-view_3d"><code>view_3d</code></h3>
+<p>3D view — The mouse opens the View menu and clicks "3D view". Keys: F3.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-view_fit"><code>view_fit</code></h3>
+<p>Fit view — The mouse opens the View menu and clicks "Fit view". Keys: F4.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-view_toggle_dimensions"><code>view_toggle_dimensions</code></h3>
+<p>Show dimensions — The mouse opens the View menu and clicks "Show dimensions".</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_profile"><code>toolpath_profile</code></h3>
+<p>Profile — The mouse opens the Toolpaths menu and clicks "Profile". Opens the Profil toolpath editor for the selected shapes.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_pocket"><code>toolpath_pocket</code></h3>
+<p>Pocket — The mouse opens the Toolpaths menu and clicks "Pocket". Opens the Tasche (pocket) toolpath editor.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_drill"><code>toolpath_drill</code></h3>
+<p>Drilling — The mouse opens the Toolpaths menu and clicks "Drilling". Opens the Bohren (drill) toolpath editor.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_vcarve"><code>toolpath_vcarve</code></h3>
+<p>V-carving — The mouse opens the Toolpaths menu and clicks "V-carving". Opens the V-Carving toolpath editor.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_cutout"><code>toolpath_cutout</code></h3>
+<p>Cutout — The mouse opens the Toolpaths menu and clicks "Cutout". Opens the Ausschnitt (cutout) toolpath editor.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_recompute_all"><code>toolpath_recompute_all</code></h3>
+<p>Recalculate all — The mouse opens the Toolpaths menu and clicks "Recalculate all".</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_preview"><code>toolpath_preview</code></h3>
+<p>Preview — Toolpaths panel › Preview. The mouse opens the toolpaths panel on the right if needed and clicks Preview: the finished cut in 3D.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_simulate"><code>toolpath_simulate</code></h3>
+<p>Simulate — Toolpaths panel › Simulate. The mouse opens the toolpaths panel on the right if needed and clicks Simulate: the cut animated in 3D.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_gcode_motion_on"><code>toolpath_gcode_motion_on</code></h3>
+<p>Show G-code motion — Toolpaths panel › Show G-code motion. The mouse clicks the "G-code motion in 3D" checkbox so the machine's moves are drawn over the 3D view (does nothing if already on).</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-toolpath_gcode_motion_off"><code>toolpath_gcode_motion_off</code></h3>
+<p>Hide G-code motion — Toolpaths panel › Hide G-code motion. The mouse clicks the "G-code motion in 3D" checkbox so the moves are hidden (does nothing if already off).</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> Text saying what is being done, e.g. "opening Edit › Undo in the menu" (the mouse opens the menu and clicks the item) or "clicking Preview in the toolpaths panel".</p>
+<h3 id="cmd-cursor"><code>cursor</code></h3>
+<p>Show or hide the virtual mouse cursor.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>on</code></td><td>boolean</td><td>yes</td><td></td><td>true shows the cursor, false hides it.</td></tr>
+</table>
+<p><em>Returns:</em> Text "cursor on" or "cursor off".</p>
+<h3 id="cmd-move_to"><code>move_to</code></h3>
+<p>Glide the cursor to a screen point (pixels from the top-left of the window).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>x</code></td><td>number</td><td>yes</td><td></td><td>Screen x in pixels from the left of the window.</td></tr>
+<tr><td><code>y</code></td><td>number</td><td>yes</td><td></td><td>Screen y in pixels from the top of the window.</td></tr>
+</table>
+<p><em>Returns:</em> Text "moving"; the cursor glides there.</p>
+<h3 id="cmd-click"><code>click</code></h3>
+<p>Click at a screen point with the left (default) or right button.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>x</code></td><td>number</td><td>yes</td><td></td><td>Screen x in pixels from the left of the window.</td></tr>
+<tr><td><code>y</code></td><td>number</td><td>yes</td><td></td><td>Screen y in pixels from the top of the window.</td></tr>
+<tr><td><code>button</code></td><td>string</td><td>no</td><td>left, right</td><td>Which mouse button (default left).</td></tr>
+</table>
+<p><em>Returns:</em> Text "clicked"; the click plays on the visible cursor.</p>
+<h3 id="cmd-double_click"><code>double_click</code></h3>
+<p>Double-click at a screen point.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>x</code></td><td>number</td><td>yes</td><td></td><td>Screen x in pixels from the left of the window.</td></tr>
+<tr><td><code>y</code></td><td>number</td><td>yes</td><td></td><td>Screen y in pixels from the top of the window.</td></tr>
+</table>
+<p><em>Returns:</em> Text "double-clicked"; it plays on the visible cursor.</p>
+<h3 id="cmd-long_press"><code>long_press</code></h3>
+<p>Long-press at a screen point (to open a value for editing, like a person holding the mouse).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>x</code></td><td>number</td><td>yes</td><td></td><td>Screen x in pixels from the left of the window.</td></tr>
+<tr><td><code>y</code></td><td>number</td><td>yes</td><td></td><td>Screen y in pixels from the top of the window.</td></tr>
+</table>
+<p><em>Returns:</em> Text "long-pressed"; it plays on the visible cursor.</p>
+<h3 id="cmd-drag"><code>drag</code></h3>
+<p>Press at (x1,y1), drag to (x2,y2) and release.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>x1</code></td><td>number</td><td>yes</td><td></td><td>Start x in screen pixels (where the button goes down).</td></tr>
+<tr><td><code>y1</code></td><td>number</td><td>yes</td><td></td><td>Start y in screen pixels.</td></tr>
+<tr><td><code>x2</code></td><td>number</td><td>yes</td><td></td><td>End x in screen pixels (where the button is released).</td></tr>
+<tr><td><code>y2</code></td><td>number</td><td>yes</td><td></td><td>End y in screen pixels.</td></tr>
+</table>
+<p><em>Returns:</em> Text "dragged"; it plays on the visible cursor.</p>
+<h3 id="cmd-type_text"><code>type_text</code></h3>
+<p>Type text into the focused field.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>text</code></td><td>string</td><td>yes</td><td></td><td>The text to type into the focused field.</td></tr>
+</table>
+<p><em>Returns:</em> Text "typed".</p>
+<h3 id="cmd-press_key"><code>press_key</code></h3>
+<p>Press a key (Enter, Escape, Tab, Delete, Backspace, Space, arrows, or a single letter/digit) with optional modifiers cmd/shift/alt/ctrl.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>key</code></td><td>string</td><td>yes</td><td></td><td>The key: Enter, Escape, Tab, Delete, Backspace, Space, Up, Down, Left, Right, or a single letter/digit.</td></tr>
+<tr><td><code>alt</code></td><td>boolean</td><td>no</td><td></td><td>Hold Alt/Option.</td></tr>
+<tr><td><code>cmd</code></td><td>boolean</td><td>no</td><td></td><td>Hold ⌘ (Ctrl on Windows/Linux).</td></tr>
+<tr><td><code>ctrl</code></td><td>boolean</td><td>no</td><td></td><td>Hold Ctrl (treated like cmd).</td></tr>
+<tr><td><code>shift</code></td><td>boolean</td><td>no</td><td></td><td>Hold Shift.</td></tr>
+</table>
+<p><em>Returns:</em> Text "key"; the keys show as keycaps next to the big mouse.</p>
+<h3 id="cmd-wait"><code>wait</code></h3>
+<p>Pause for a number of seconds (a beat for the viewer).</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>seconds</code></td><td>number</td><td>yes</td><td></td><td>How long to pause, in seconds (decimals allowed).</td></tr>
+</table>
+<p><em>Returns:</em> Text "waiting".</p>
+<h3 id="cmd-replay_speed"><code>replay_speed</code></h3>
+<p>Set how fast the visible cursor plays its moves, clicks and pauses: 1 is normal, 2 twice as fast, 0.5 half as fast (0.25 to 4). A long press is never made shorter than it must be. Without speed, it reports the current one. Returns {"speed": ...}.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>speed</code></td><td>number</td><td>no</td><td></td><td>The replay speed: 1 normal, 2 twice as fast, 0.5 half as fast (kept between 0.25 and 4).</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"speed": N} — the speed now in use.</p>
+<h3 id="cmd-text_title"><code>text_title</code></h3>
+<p>Show a standing title over the window (e.g. the app's name), kept until it is replaced or cleared, like the text in TikTok or tutorial videos: wrapped on a rounded box, fading in and out. An empty text removes it. It does not wait; add wait to hold the scene. Defaults: top centre, 40 pt, no time limit. Headline and subtitle are independent — both can show at once.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>text</code></td><td>string</td><td>yes</td><td></td><td>The caption. An empty text takes the current one away.</td></tr>
+<tr><td><code>bg_color</code></td><td>string</td><td>no</td><td></td><td>Box colour as #RRGGBB, #RRGGBBAA or r,g,b,a (default black at 70%). Also accepted as bg-color.</td></tr>
+<tr><td><code>color</code></td><td>string</td><td>no</td><td></td><td>Text colour as #RRGGBB, #RRGGBBAA or r,g,b,a with 0-255 (default white).</td></tr>
+<tr><td><code>duration</code></td><td>number</td><td>no</td><td></td><td>How long it shows, in seconds (0 keeps it until replaced).</td></tr>
+<tr><td><code>font</code></td><td>number</td><td>no</td><td></td><td>Font size in points.</td></tr>
+<tr><td><code>horizontal</code></td><td>string</td><td>no</td><td>left, center, right</td><td>Where it sits horizontally, and how its lines align (default center).</td></tr>
+<tr><td><code>opacity</code></td><td>number</td><td>no</td><td></td><td>Overall opacity from 0 to 1 (default 1).</td></tr>
+<tr><td><code>vertical</code></td><td>string</td><td>no</td><td>top, center, bottom</td><td>Where it sits vertically.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"shown": true, "duration": seconds}, or {"shown": false} when the text was empty (the caption is taken away).</p>
+<h3 id="cmd-text_subtitle"><code>text_subtitle</code></h3>
+<p>Show the subtitle that says what is happening, replaced each time it is called, like the text in TikTok or tutorial videos: wrapped on a rounded box, fading in and out. An empty text removes it. It does not wait; add wait to hold the scene. Defaults: bottom centre, 28 pt, 3 seconds. Headline and subtitle are independent — both can show at once.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>text</code></td><td>string</td><td>yes</td><td></td><td>The caption. An empty text takes the current one away.</td></tr>
+<tr><td><code>bg_color</code></td><td>string</td><td>no</td><td></td><td>Box colour as #RRGGBB, #RRGGBBAA or r,g,b,a (default black at 70%). Also accepted as bg-color.</td></tr>
+<tr><td><code>color</code></td><td>string</td><td>no</td><td></td><td>Text colour as #RRGGBB, #RRGGBBAA or r,g,b,a with 0-255 (default white).</td></tr>
+<tr><td><code>duration</code></td><td>number</td><td>no</td><td></td><td>How long it shows, in seconds (0 keeps it until replaced).</td></tr>
+<tr><td><code>font</code></td><td>number</td><td>no</td><td></td><td>Font size in points.</td></tr>
+<tr><td><code>horizontal</code></td><td>string</td><td>no</td><td>left, center, right</td><td>Where it sits horizontally, and how its lines align (default center).</td></tr>
+<tr><td><code>opacity</code></td><td>number</td><td>no</td><td></td><td>Overall opacity from 0 to 1 (default 1).</td></tr>
+<tr><td><code>vertical</code></td><td>string</td><td>no</td><td>top, center, bottom</td><td>Where it sits vertically.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"shown": true, "duration": seconds}, or {"shown": false} when the text was empty (the caption is taken away).</p>
+<h3 id="cmd-clear_overlays"><code>clear_overlays</code></h3>
+<p>Remove both captions (the title and the subtitle) from the window at once.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"cleared": true}.</p>
+<h3 id="cmd-recording_start"><code>recording_start</code></h3>
+<p>Start recording the window to an .mp4 video (H.264, encoded inside the app). Everything shown is captured, including the virtual mouse and captions. Stop it with recording_stop. Set the window size with window first, since the video keeps the size it starts with.</p>
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Required</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>file</code></td><td>string</td><td>yes</td><td></td><td>Absolute path of the .mp4 file to write.</td></tr>
+<tr><td><code>fps</code></td><td>number</td><td>no</td><td></td><td>Frames per second (default 30, 1 to 60).</td></tr>
+<tr><td><code>max_side</code></td><td>number</td><td>no</td><td></td><td>Largest side of the video in pixels (default 1920); a bigger window is scaled down by a whole factor.</td></tr>
+</table>
+<p><em>Returns:</em> JSON {"recording": path, "fps": N}.</p>
+<h3 id="cmd-recording_stop"><code>recording_stop</code></h3>
+<p>Stop the video recording and close the .mp4 file. Returns where it was written and how long it is.</p>
+<p><em>No parameters.</em></p>
+<p><em>Returns:</em> JSON {"file", "frames", "seconds", "width", "height"}.</p>
+
+</article><div class="blaettern"><a href="../../../../hilfe/Help/page/materialien/index.html"><small>Back</small>Materials and limits</a><a class="weiter" href="../../../../hilfe/Help/page/version-0-1-0/index.html"><small>Next</small>Version 0.1.0 – feature set</a></div></main></div><footer class="fuss"><div class="innen">
 <div><strong>CncCraft</strong> · Design, generate toolpaths, mill.</div>
 <div>CncCraft is a standalone, independent re-creation whose layout and handling follow the Spark program by Vectric. “Spark” and “Vectric” are trademarks of their owners; CncCraft has no connection to them. Every text and image on this site was made specifically for CncCraft.</div>
 <div>Sister apps: <a href="https://freegroup.github.io/patternmaster/" target="_blank" rel="noopener">PatternMaster</a> – mill patterns · <a href="https://freegroup.github.io/HoruCNC/" target="_blank" rel="noopener">HoruCNC</a> – from image to G-code</div>
