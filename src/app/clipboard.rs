@@ -46,7 +46,7 @@ impl App {
             self.toolpaths.push(copy);
         }
         if self.toolpaths.len() != before {
-            self.paste_log.push((map.iter().map(|(_, n)| *n).collect(), before));
+            self.undo.note_paste(map.iter().map(|(_, n)| *n).collect(), before);
             self.recompute_all();
         }
         self.vars_dirty = true;

@@ -17,7 +17,7 @@ mod guide_add;
 mod guide_move;
 mod guide_remove;
 
-pub use stack::{Command, CommandStack, Snapshot};
+pub use stack::{Command, CommandStack, HistoryChange, Snapshot};
 pub use snapshot::SnapshotCommand;
 pub use layer_add::LayerAddCommand;
 pub use layer_delete::LayerDeleteCommand;

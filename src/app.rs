@@ -582,8 +582,6 @@ pub struct App {
     output_scope: OutputScope,
     /// What was copied with ⌘C: shapes, their own constraints and the toolpaths that cut them.
     clipboard: Clip,
-    /// Pastes whose toolpaths an undo takes back: (the new shapes, how many toolpaths there were before).
-    paste_log: Vec<(Vec<u64>, usize)>,
     /// The form of the tool chosen in the tool column, beside it.
     tool_form: Option<ToolForm>,
     /// What the vector operations remember between clicks (see `vector_ops`).
@@ -854,7 +852,6 @@ impl App {
             gl3d: Default::default(),
             paths_in_3d: cc.storage.and_then(|s| s.get_string("cnccraft_gcode_in_3d")).is_some_and(|v| v == "true"),
             clipboard: Clip::default(),
-            paste_log: vec![],
             tool_form: None,
             vops: vector_ops::VectorOps::new(),
             tool_choice: [0; layout::GROUP_COUNT],
@@ -1549,30 +1546,30 @@ impl App {
     // ---------------- UI ----------------
 
     fn do_undo(&mut self) {
-        if self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns) {
-            self.edit.retain_existing(&self.shapes);
-            while let Some((ids, before)) = self.paste_log.last() {
-                if ids.iter().all(|id| !self.shapes.iter().any(|s| s.id == *id)) {
-                    self.toolpaths.truncate((*before).min(self.toolpaths.len()));
-                    self.tp_gen += 1;
-                    self.tp_selected = None;
-                    self.sim = None;
-                    self.paste_log.pop();
-                } else {
-                    break;
-                }
-            }
-            self.vars_dirty = true;
-            self.recompute_all();
-        }
+        let change = self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
+        self.after_history_change(change);
     }
 
     fn do_redo(&mut self) {
-        if self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns) {
-            self.edit.retain_existing(&self.shapes);
-            self.vars_dirty = true;
-            self.recompute_all();
+        let change = self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
+        self.after_history_change(change);
+    }
+
+    /// React to an undo/redo the CommandStack just applied: reconcile only the caches the app owns
+    /// (the selection, the derived variables, the toolpath simulation). The stack itself has
+    /// already restored the document and rolled back any toolpaths an undone paste had grown.
+    fn after_history_change(&mut self, change: crate::commandstack::HistoryChange) {
+        if !change.changed {
+            return;
         }
+        self.edit.retain_existing(&self.shapes);
+        if change.toolpaths_truncated {
+            self.tp_gen += 1;
+            self.tp_selected = None;
+            self.sim = None;
+        }
+        self.vars_dirty = true;
+        self.recompute_all();
     }
 
     fn properties(&mut self, ui: &mut egui::Ui) {
