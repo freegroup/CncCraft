@@ -34,6 +34,7 @@
 <li><a href="../../../../hilfe/Help/page/tastenkuerzel/index.html">Tastenkürzel<span class="pille">Neu</span></a></li>
 <li><a href="../../../../hilfe/Help/page/dateien-speichern/index.html">Dateien speichern und öffnen<span class="pille">Neu</span></a></li>
 <li><a href="../../../../hilfe/Help/page/rueckgaengig-wiederholen/index.html">Rückgängig und Wiederholen</a></li>
+<li><a href="../../../../hilfe/Help/page/skript-automatisierung/index.html">Skripte und Automatisierung<span class="pille">Neu</span></a></li>
 </ul>
 <h2>Entwurfswerkzeuge</h2><ul>
 <li><a href="../../../../hilfe/Help/page/auswahlwerkzeug/index.html">Auswählen und verschieben</a></li>
@@ -87,24 +88,38 @@
 <li><a href="../../../../hilfe/Help/page/version-0-1-0/index.html">Version 0.1.0 – Funktionsumfang</a></li>
 </ul>
 </nav><main><article><div class="brotkrumen"><a href="../../../../hilfe/Help/page/home/index.html">Hilfe</a><span>›</span>Entwurfswerkzeuge<span>›</span>Einrasten</div><h1>Einrasten </h1><p class="einleitung">Beim Zeichnen und Verschieben rastet der Zeiger an Hilfspunkten ein, damit alles genau sitzt.</p>
-<p>CncCraft kennt fünf Arten von Einrastpunkten:</p>
+<p>Beim Verschieben einer Form richtet CncCraft sie mit drei Einrast-Methoden an den anderen Formen
+und Gruppen aus. Jede hat einen eigenen Schalter in der Kopfleiste, in der Gruppe
+<strong>Einrasten</strong>, und lässt sich einzeln oder gemeinsam ein- und ausschalten:</p>
 <ul>
-<li><strong>Knoten</strong> – Eckpunkte bestehender Formen,</li>
-<li><strong>Mitte</strong> – Mittelpunkte,</li>
-<li><strong>Halbe Strecke</strong> – die Mitte einer Kante,</li>
-<li><strong>Job-Punkt</strong> – die Ecken und die Mitte des Werkstücks,</li>
-<li><strong>Raster</strong> – die Kreuzungen des Rasters.</li>
+<li><strong>An Geometrie einrasten (Bounding-Box)</strong> – die Bounding-Box der Form richtet sich
+an Kanten, Ecken und Knoten anderer Formen und ganzer Gruppen aus. X und Y rasten getrennt ein, so
+kann eine weit entfernte Form trotzdem auf gleicher Höhe wie eine andere sitzen. Eine gestrichelte
+Linie durch die eingerastete Kante zeigt die Ausrichtung.</li>
+<li><strong>An Mitte einrasten</strong> – die Mitte der Form rastet auf die Mitte einer anderen Form
+oder Gruppe.</li>
+<li><strong>An gleichen Abstand einrasten</strong> – die Form nimmt denselben Abstand zu einem
+Nachbarn an, den zwei andere Formen zueinander haben (gleicher Abstand). Der passende Abstand wird
+als beschrifteter Pfeil gezeichnet – sowohl der gewählte Abstand als auch der Referenzabstand, an
+den er angeglichen wurde.</li>
 </ul>
-<p>Ein kleiner Hinweis neben dem Zeiger nennt, woran er gerade einrastet.</p>
+<p>Einrastanker sind nur die Elemente und Gruppen auf dem Blatt – das Werkstück selbst nicht.</p>
+<h2>Beim Zeichnen</h2>
+<p>Mit einem Zeichenwerkzeug rastet der Zeiger an den <strong>Ecken und Mitten</strong> bestehender
+Formen und, getrennt davon, am <strong>Raster</strong> ein. Eine kleine Markierung und ein Hinweis
+neben dem Zeiger nennen, woran er gerade einrastet.</p>
 <h2>Einstellen</h2>
-<p>Die Schalter <strong>Am Raster einrasten</strong> und <strong>An Geometrie einrasten</strong> in der Kopfleiste (Gruppe „Dekoration“) schalten die Arten ein und aus. Im Menü <em>Ansicht ▸ Einrasten</em> gibt es zusätzlich:</p>
-<ul>
-<li><em>An Geometrie (Knoten, Mitten)</em> und <em>An Job-Ecken und -Mitte</em> getrennt,</li>
-<li><strong>Radius</strong> – wie nah in Bildschirmpunkten der Zeiger sein muss,</li>
-<li><strong>Am Raster</strong> mit dem Rasterabstand in Millimetern.</li>
-</ul>
-<p>Mit gedrückter <kbd>⇧</kbd>-Taste beim Ziehen rastet nichts ein.</p>
-<div class="neu-box"><p>Das Raster ist nur zu sehen, solange <strong>Am Raster einrasten</strong> an ist – was man sieht, rastet auch ein. Zusätzlich rasten verschobene Formen an <a href="../../../../hilfe/Help/page/hilfslinien/index.html">Hilfslinien</a> ein: mit einer Kante oder ihrer Mitte, und die Linie färbt die Form rot, solange sie einrasten würde.</p></div>
+<p>Die drei Einrast-Schalter liegen in der Gruppe <strong>Einrasten</strong>; <strong>Am Raster
+einrasten</strong> liegt in der Gruppe <strong>Dekoration</strong>. Mit gedrückter <kbd>⇧</kbd>-Taste
+beim Ziehen rastet nichts ein. Das Raster rastet mit seinem Abstand in Millimetern, und der
+Winkelschritt beim Zeichnen einer Linie reicht von 0° bis 90° – genau wie im Originalprogramm.</p>
+<div class="pilot-box"><p><strong>Pilot-Funktion.</strong> Die drei Einrast-Methoden und ihre
+Hilfslinien sind neu in CncCraft und werden noch verfeinert; bitte melden, wenn etwas unstimmig
+wirkt.</p></div>
+<div class="neu-box"><p>Das Raster ist nur zu sehen, solange <strong>Am Raster einrasten</strong> an
+ist – was man sieht, rastet auch ein. Zusätzlich rasten verschobene Formen an
+<a href="../../../../hilfe/Help/page/hilfslinien/index.html">Hilfslinien</a> ein: mit einer Kante oder ihrer Mitte, und die Linie färbt die Form rot,
+solange sie einrasten würde.</p></div>
 </article><div class="blaettern"><a href="../../../../hilfe/Help/page/kopieren-einfuegen/index.html"><small>Zurück</small>Kopieren, Einfügen und Duplizieren</a><a class="weiter" href="../../../../hilfe/Help/page/eigenschaften-masse/index.html"><small>Weiter</small>Maße und Eigenschaften</a></div></main></div><footer class="fuss"><div class="innen">
 <div><strong>CncCraft</strong> · Entwerfen, Werkzeugwege berechnen, fräsen.</div>
 <div>CncCraft ist ein eigenständiger, unabhängiger Nachbau, der sich in Aufbau und Bedienung am Programm Spark von Vectric orientiert. „Spark“ und „Vectric“ sind Marken ihrer Inhaber; CncCraft hat keine Verbindung zu ihnen. Alle Texte und Abbildungen dieser Seite sind eigens für CncCraft entstanden.</div>

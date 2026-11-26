@@ -34,6 +34,7 @@
 <li><a href="../../../../hilfe/Help/page/tastenkuerzel/index.html">Keyboard shortcuts<span class="pille">New</span></a></li>
 <li><a href="../../../../hilfe/Help/page/dateien-speichern/index.html">Saving and opening files<span class="pille">New</span></a></li>
 <li><a href="../../../../hilfe/Help/page/rueckgaengig-wiederholen/index.html">Undo and redo</a></li>
+<li><a href="../../../../hilfe/Help/page/skript-automatisierung/index.html">Scripts and automation<span class="pille">New</span></a></li>
 </ul>
 <h2>Design tools</h2><ul>
 <li><a href="../../../../hilfe/Help/page/auswahlwerkzeug/index.html">Select and move</a></li>
@@ -87,24 +88,35 @@
 <li><a href="../../../../hilfe/Help/page/version-0-1-0/index.html">Version 0.1.0 – feature set</a></li>
 </ul>
 </nav><main><article><div class="brotkrumen"><a href="../../../../hilfe/Help/page/home/index.html">Help</a><span>›</span>Design tools<span>›</span>Snapping</div><h1>Snapping </h1><p class="einleitung">While drawing and moving, the pointer snaps to help points so everything sits exactly.</p>
-<p>CncCraft has five kinds of snap point:</p>
+<p>While moving a shape, CncCraft lines it up on the other shapes and groups with three snap
+methods. Each has its own button in the header, in the <strong>Snapping</strong> group, and you
+turn them on and off on their own or all together:</p>
 <ul>
-<li><strong>Node</strong> – corner points of existing shapes,</li>
-<li><strong>Centre</strong> – centre points,</li>
-<li><strong>Midpoint</strong> – the middle of an edge,</li>
-<li><strong>Job point</strong> – the corners and the centre of the workpiece,</li>
-<li><strong>Grid</strong> – the grid intersections.</li>
+<li><strong>Snap to geometry (bounding box)</strong> – the moved shape's bounding box lines up with
+the edges, corners and nodes of other shapes and whole groups. X and Y line up on their own, so a
+shape far to the side can still sit at the same height as another. A dashed line through the caught
+edge shows the alignment.</li>
+<li><strong>Snap to centre</strong> – the centre of the shape lines up on the centre of another
+shape or group.</li>
+<li><strong>Snap to equal gap</strong> – the shape takes the same gap to a neighbour as another pair
+of shapes has between them (equal spacing). The matching distance is drawn as a labelled arrow, both
+for the gap you have chosen and for the reference gap it matched.</li>
 </ul>
-<p>A small hint beside the pointer names what it is snapping to.</p>
+<p>Only the elements and groups on the sheet are snap anchors – the workpiece itself is not.</p>
+<h2>While drawing</h2>
+<p>With a drawing tool the pointer snaps to the <strong>corners and centres</strong> of existing
+shapes and, separately, to the <strong>grid</strong>. A small marker and a hint beside the pointer
+name what it caught.</p>
 <h2>Settings</h2>
-<p>The switches <strong>Snap to grid</strong> and <strong>Snap to geometry</strong> in the header (“Decoration” group) turn the kinds on and off. In <em>View ▸ Snapping</em> there is also:</p>
-<ul>
-<li><em>To geometry (nodes, centres)</em> and <em>To job corners and centre</em> separately,</li>
-<li><strong>Radius</strong> – how close in screen points the pointer must be,</li>
-<li><strong>To grid</strong> with the grid spacing in millimetres.</li>
-</ul>
-<p>Hold <kbd>⇧</kbd> while dragging and nothing snaps.</p>
-<div class="neu-box"><p>The grid is only visible while <strong>Snap to grid</strong> is on – what you see is what snaps. In addition, moved shapes snap to <a href="../../../../hilfe/Help/page/hilfslinien/index.html">construction lines</a>: with an edge or their centre, and the line colours the shape red while it would snap.</p></div>
+<p>The three snap buttons sit in the <strong>Snapping</strong> group; <strong>Snap to grid</strong>
+is in the <strong>Decoration</strong> group. Hold <kbd>⇧</kbd> while dragging and nothing snaps. The
+grid snaps with its spacing in millimetres and the angle step while drawing a line goes from 0° up
+to 90°, exactly as in the original program.</p>
+<div class="pilot-box"><p><strong>Pilot feature.</strong> The three snap methods and their guide
+lines are new in CncCraft and still being refined; please report anything that looks off.</p></div>
+<div class="neu-box"><p>The grid is only visible while <strong>Snap to grid</strong> is on – what you
+see is what snaps. In addition, moved shapes snap to <a href="../../../../hilfe/Help/page/hilfslinien/index.html">construction lines</a>: with an edge
+or their centre, and the line colours the shape red while it would snap.</p></div>
 </article><div class="blaettern"><a href="../../../../hilfe/Help/page/kopieren-einfuegen/index.html"><small>Back</small>Copy, paste and duplicate</a><a class="weiter" href="../../../../hilfe/Help/page/eigenschaften-masse/index.html"><small>Next</small>Dimensions and properties</a></div></main></div><footer class="fuss"><div class="innen">
 <div><strong>CncCraft</strong> · Design, generate toolpaths, mill.</div>
 <div>CncCraft is a standalone, independent re-creation whose layout and handling follow the Spark program by Vectric. “Spark” and “Vectric” are trademarks of their owners; CncCraft has no connection to them. Every text and image on this site was made specifically for CncCraft.</div>

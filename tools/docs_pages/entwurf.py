@@ -336,44 +336,69 @@ PAGES = [
         "lead": "Beim Zeichnen und Verschieben rastet der Zeiger an Hilfspunkten ein, damit alles genau sitzt.",
         "lead_en": "While drawing and moving, the pointer snaps to help points so everything sits exactly.",
         "body_en": """
-<p>CncCraft has five kinds of snap point:</p>
+<p>While moving a shape, CncCraft lines it up on the other shapes and groups with three snap
+methods. Each has its own button in the header, in the <strong>Snapping</strong> group, and you
+turn them on and off on their own or all together:</p>
 <ul>
-<li><strong>Node</strong> – corner points of existing shapes,</li>
-<li><strong>Centre</strong> – centre points,</li>
-<li><strong>Midpoint</strong> – the middle of an edge,</li>
-<li><strong>Job point</strong> – the corners and the centre of the workpiece,</li>
-<li><strong>Grid</strong> – the grid intersections.</li>
+<li><strong>Snap to geometry (bounding box)</strong> – the moved shape's bounding box lines up with
+the edges, corners and nodes of other shapes and whole groups. X and Y line up on their own, so a
+shape far to the side can still sit at the same height as another. A dashed line through the caught
+edge shows the alignment.</li>
+<li><strong>Snap to centre</strong> – the centre of the shape lines up on the centre of another
+shape or group.</li>
+<li><strong>Snap to equal gap</strong> – the shape takes the same gap to a neighbour as another pair
+of shapes has between them (equal spacing). The matching distance is drawn as a labelled arrow, both
+for the gap you have chosen and for the reference gap it matched.</li>
 </ul>
-<p>A small hint beside the pointer names what it is snapping to.</p>
+<p>Only the elements and groups on the sheet are snap anchors – the workpiece itself is not.</p>
+<h2>While drawing</h2>
+<p>With a drawing tool the pointer snaps to the <strong>corners and centres</strong> of existing
+shapes and, separately, to the <strong>grid</strong>. A small marker and a hint beside the pointer
+name what it caught.</p>
 <h2>Settings</h2>
-<p>The switches <strong>Snap to grid</strong> and <strong>Snap to geometry</strong> in the header (“Decoration” group) turn the kinds on and off. In <em>View ▸ Snapping</em> there is also:</p>
-<ul>
-<li><em>To geometry (nodes, centres)</em> and <em>To job corners and centre</em> separately,</li>
-<li><strong>Radius</strong> – how close in screen points the pointer must be,</li>
-<li><strong>To grid</strong> with the grid spacing in millimetres.</li>
-</ul>
-<p>Hold <kbd>⇧</kbd> while dragging and nothing snaps.</p>
-<div class="neu-box"><p>The grid is only visible while <strong>Snap to grid</strong> is on – what you see is what snaps. In addition, moved shapes snap to [[hilfslinien|construction lines]]: with an edge or their centre, and the line colours the shape red while it would snap.</p></div>
+<p>The three snap buttons sit in the <strong>Snapping</strong> group; <strong>Snap to grid</strong>
+is in the <strong>Decoration</strong> group. Hold <kbd>⇧</kbd> while dragging and nothing snaps. The
+grid snaps with its spacing in millimetres and the angle step while drawing a line goes from 0° up
+to 90°, exactly as in the original program.</p>
+<div class="pilot-box"><p><strong>Pilot feature.</strong> The three snap methods and their guide
+lines are new in CncCraft and still being refined; please report anything that looks off.</p></div>
+<div class="neu-box"><p>The grid is only visible while <strong>Snap to grid</strong> is on – what you
+see is what snaps. In addition, moved shapes snap to [[hilfslinien|construction lines]]: with an edge
+or their centre, and the line colours the shape red while it would snap.</p></div>
 """,
         "body": """
-<p>CncCraft kennt fünf Arten von Einrastpunkten:</p>
+<p>Beim Verschieben einer Form richtet CncCraft sie mit drei Einrast-Methoden an den anderen Formen
+und Gruppen aus. Jede hat einen eigenen Schalter in der Kopfleiste, in der Gruppe
+<strong>Einrasten</strong>, und lässt sich einzeln oder gemeinsam ein- und ausschalten:</p>
 <ul>
-<li><strong>Knoten</strong> – Eckpunkte bestehender Formen,</li>
-<li><strong>Mitte</strong> – Mittelpunkte,</li>
-<li><strong>Halbe Strecke</strong> – die Mitte einer Kante,</li>
-<li><strong>Job-Punkt</strong> – die Ecken und die Mitte des Werkstücks,</li>
-<li><strong>Raster</strong> – die Kreuzungen des Rasters.</li>
+<li><strong>An Geometrie einrasten (Bounding-Box)</strong> – die Bounding-Box der Form richtet sich
+an Kanten, Ecken und Knoten anderer Formen und ganzer Gruppen aus. X und Y rasten getrennt ein, so
+kann eine weit entfernte Form trotzdem auf gleicher Höhe wie eine andere sitzen. Eine gestrichelte
+Linie durch die eingerastete Kante zeigt die Ausrichtung.</li>
+<li><strong>An Mitte einrasten</strong> – die Mitte der Form rastet auf die Mitte einer anderen Form
+oder Gruppe.</li>
+<li><strong>An gleichen Abstand einrasten</strong> – die Form nimmt denselben Abstand zu einem
+Nachbarn an, den zwei andere Formen zueinander haben (gleicher Abstand). Der passende Abstand wird
+als beschrifteter Pfeil gezeichnet – sowohl der gewählte Abstand als auch der Referenzabstand, an
+den er angeglichen wurde.</li>
 </ul>
-<p>Ein kleiner Hinweis neben dem Zeiger nennt, woran er gerade einrastet.</p>
+<p>Einrastanker sind nur die Elemente und Gruppen auf dem Blatt – das Werkstück selbst nicht.</p>
+<h2>Beim Zeichnen</h2>
+<p>Mit einem Zeichenwerkzeug rastet der Zeiger an den <strong>Ecken und Mitten</strong> bestehender
+Formen und, getrennt davon, am <strong>Raster</strong> ein. Eine kleine Markierung und ein Hinweis
+neben dem Zeiger nennen, woran er gerade einrastet.</p>
 <h2>Einstellen</h2>
-<p>Die Schalter <strong>Am Raster einrasten</strong> und <strong>An Geometrie einrasten</strong> in der Kopfleiste (Gruppe „Dekoration“) schalten die Arten ein und aus. Im Menü <em>Ansicht ▸ Einrasten</em> gibt es zusätzlich:</p>
-<ul>
-<li><em>An Geometrie (Knoten, Mitten)</em> und <em>An Job-Ecken und -Mitte</em> getrennt,</li>
-<li><strong>Radius</strong> – wie nah in Bildschirmpunkten der Zeiger sein muss,</li>
-<li><strong>Am Raster</strong> mit dem Rasterabstand in Millimetern.</li>
-</ul>
-<p>Mit gedrückter <kbd>⇧</kbd>-Taste beim Ziehen rastet nichts ein.</p>
-<div class="neu-box"><p>Das Raster ist nur zu sehen, solange <strong>Am Raster einrasten</strong> an ist – was man sieht, rastet auch ein. Zusätzlich rasten verschobene Formen an [[hilfslinien|Hilfslinien]] ein: mit einer Kante oder ihrer Mitte, und die Linie färbt die Form rot, solange sie einrasten würde.</p></div>
+<p>Die drei Einrast-Schalter liegen in der Gruppe <strong>Einrasten</strong>; <strong>Am Raster
+einrasten</strong> liegt in der Gruppe <strong>Dekoration</strong>. Mit gedrückter <kbd>⇧</kbd>-Taste
+beim Ziehen rastet nichts ein. Das Raster rastet mit seinem Abstand in Millimetern, und der
+Winkelschritt beim Zeichnen einer Linie reicht von 0° bis 90° – genau wie im Originalprogramm.</p>
+<div class="pilot-box"><p><strong>Pilot-Funktion.</strong> Die drei Einrast-Methoden und ihre
+Hilfslinien sind neu in CncCraft und werden noch verfeinert; bitte melden, wenn etwas unstimmig
+wirkt.</p></div>
+<div class="neu-box"><p>Das Raster ist nur zu sehen, solange <strong>Am Raster einrasten</strong> an
+ist – was man sieht, rastet auch ein. Zusätzlich rasten verschobene Formen an
+[[hilfslinien|Hilfslinien]] ein: mit einer Kante oder ihrer Mitte, und die Linie färbt die Form rot,
+solange sie einrasten würde.</p></div>
 """,
     },
     {
