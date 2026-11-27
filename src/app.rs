@@ -1099,6 +1099,13 @@ impl App {
             if std::env::var("CNCCRAFT_SHOW_GCODE").is_ok() {
                 app.paths_in_3d = true;
             }
+            // a short caption over the window for the help screenshots (set through the same overlay
+            // the script engine uses), so a picture says what it shows
+            if let Ok(caption) = std::env::var("CNCCRAFT_CAPTION") {
+                if !caption.is_empty() {
+                    let _ = app.agent_set_overlay(&cc.egui_ctx, OverlaySlot::Title, &caption, Some(0.0), None, None, Some("#1f2937d0"), Some(34.0), None, None);
+                }
+            }
             // a couple of construction lines, to review them on the ruler
             if std::env::var("CNCCRAFT_SHOW_GUIDES").is_ok() {
                 app.guides.push(crate::guides::Guide::new(1, crate::guides::GuideAxis::Vertical, 120.0));
