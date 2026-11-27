@@ -1,3 +1,10 @@
+## [1.30.1](https://github.com/freegroup/CncCraft/compare/v1.30.0...v1.30.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* skip auto-fix for docs:/chore: commits and tolerate notes push failure ([1bd5024](https://github.com/freegroup/CncCraft/commit/1bd50241e4eadd3221068e5202f10f2812412241))
+
 # [1.30.0](https://github.com/freegroup/CncCraft/compare/v1.29.0...v1.30.0) (2026-11-27)
 
 
