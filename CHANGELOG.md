@@ -1,3 +1,10 @@
+# [1.32.0](https://github.com/freegroup/CncCraft/compare/v1.31.0...v1.32.0) (2026-11-27)
+
+
+### Features
+
+* arc (Kreissegment) tool, edited via the new Eigenschaften panel ([351d8cd](https://github.com/freegroup/CncCraft/commit/351d8cd51a734efb2bf2d87da3cd8ccba119c819))
+
 # [1.31.0](https://github.com/freegroup/CncCraft/compare/v1.30.1...v1.31.0) (2026-11-27)
 
 
