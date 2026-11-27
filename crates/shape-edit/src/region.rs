@@ -81,12 +81,9 @@ impl Region {
         if lines.is_empty() {
             return Region::empty();
         }
-        // buffer every stroke, then union them all into one area
-        Region(geo::MultiLineString::new(lines).buffer(r)).simplify_in_place(r * 0.02)
-    }
-
-    fn simplify_in_place(self, eps: f64) -> Self {
-        Region(self.0.simplify(eps.max(1e-6)))
+        // buffer every stroke, then union them all into one area. No simplify: the rounded joins
+        // at corners (the cutter's radius) must survive — a round cutter cannot leave a sharp corner.
+        Region(geo::MultiLineString::new(lines).buffer(r))
     }
 
     /// Everything covered by any of the shapes.
