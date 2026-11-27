@@ -1,3 +1,10 @@
+# [1.30.0](https://github.com/freegroup/CncCraft/compare/v1.29.0...v1.30.0) (2026-11-27)
+
+
+### Features
+
+* dimension gap between parallel lines and show G-code motion in 2D ([626179c](https://github.com/freegroup/CncCraft/commit/626179c8c0c1db9c4f948e277afe8ab743ac104c))
+
 # [1.29.0](https://github.com/freegroup/CncCraft/compare/v1.28.0...v1.29.0) (2026-11-27)
 
 
