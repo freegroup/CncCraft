@@ -12,6 +12,20 @@
 * MCP tool modules, scripting, recording, text overlay, agent scripts ([b5b09dd](https://github.com/freegroup/CncCraft/commit/b5b09ddd3aa784a558359db3e34115cb5389412e))
 * show version number next to app name on start page ([b9b2f7c](https://github.com/freegroup/CncCraft/commit/b9b2f7cc50eb6c76079c3282342cab57d585d1ba))
 
+# [1.29.0](https://github.com/freegroup/CncCraft/compare/v1.28.0...v1.29.0) (2026-11-27)
+
+
+### Bug Fixes
+
+* move paste/undo toolpath bookkeeping into CommandStack ([25626c5](https://github.com/freegroup/CncCraft/commit/25626c50d72331d27d024455141fc9ac1fb63db1))
+
+
+### Features
+
+* constrain line drawing to 45° steps when Shift is held ([e424451](https://github.com/freegroup/CncCraft/commit/e424451348195a38d2bbdccdbb32703a5df16b03))
+* MCP tool modules, scripting, recording, text overlay, agent scripts ([b5b09dd](https://github.com/freegroup/CncCraft/commit/b5b09ddd3aa784a558359db3e34115cb5389412e))
+* show version number next to app name on start page ([b9b2f7c](https://github.com/freegroup/CncCraft/commit/b9b2f7cc50eb6c76079c3282342cab57d585d1ba))
+
 # [1.29.0](https://github.com/freegroup/CncCraft/compare/v1.28.0...v1.29.0) (2026-11-26)
 
 
