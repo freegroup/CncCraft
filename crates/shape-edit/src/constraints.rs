@@ -68,6 +68,12 @@ impl Constrains for Align {
     }
 }
 
+impl Constrains for OnLine {
+    fn shapes(&self) -> Vec<u64> {
+        vec![self.point.shape(), self.line.shape()]
+    }
+}
+
 /// A size of one shape that was set to a number or a formula (a dimension tied to a variable).
 pub struct SizeConstraint {
     pub shape: u64,
@@ -698,8 +704,90 @@ impl Align {
     }
 }
 
+/// "This point lies on this line" — the Fusion "Coincident" case of a point on a line/edge. The
+/// point's perpendicular distance to the (infinite) line through the edge is kept at zero. The
+/// line is the reference; between two shapes the shape of the point moves (translated, solved
+/// together with the distances and aligns), on a vector the point's own node moves.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OnLine {
+    pub point: Anchor,
+    pub line: Anchor,
+}
+
+impl OnLine {
+    /// A point-on-line constraint from a picked point and a picked line (any order from the UI is
+    /// sorted here: the [`Anchor::Point`] is the point, the [`Anchor::Edge`] is the line).
+    pub fn between(a: Anchor, b: Anchor) -> Option<OnLine> {
+        match (a, b) {
+            (Anchor::Point(..), Anchor::Edge(..)) => Some(OnLine { point: a, line: b }),
+            (Anchor::Edge(..), Anchor::Point(..)) => Some(OnLine { point: b, line: a }),
+            _ => None,
+        }
+    }
+
+    /// The point and the line's two end points, as they are now.
+    fn parts(&self, items: &[Item]) -> Option<(Pt, Pt, Pt)> {
+        let Anchor::Point(ip, i) = self.point else { return None };
+        let Anchor::Edge(il, k) = self.line else { return None };
+        let p = point_of(find(items, ip)?, i)?;
+        let (e0, e1) = edge_of(find(items, il)?, k)?;
+        Some((p, e0, e1))
+    }
+
+    /// The point's signed perpendicular distance to the line (0 when it lies on it), in mm.
+    pub fn error(&self, items: &[Item]) -> Option<f64> {
+        let (p, e0, e1) = self.parts(items)?;
+        let n = normal(e0, e1)?;
+        Some(dot([p[0] - e0[0], p[1] - e0[1]], n))
+    }
+
+    /// Both ends exist and the pair makes sense (a point and a line), or why it doesn't.
+    pub fn check(&self, items: &[Item]) -> Result<(), String> {
+        if !matches!((self.point, self.line), (Anchor::Point(..), Anchor::Edge(..))) {
+            return Err("Punkt auf Linie braucht einen Punkt und eine Linie".into());
+        }
+        if self.parts(items).is_none() {
+            return Err("Punkt oder Linie gibt es nicht mehr".into());
+        }
+        if self.point.shape() == PLATE {
+            return Err("Die Platte bleibt, wo sie ist: zuerst den Punkt der Form, dann die Linie wählen".into());
+        }
+        if self.point.shape() == self.line.shape() {
+            // on one shape only a vector's node can move to reach its own line; a box corner sits on
+            // its own side already, anything else can't move by itself
+            let Anchor::Point(_, i) = self.point else { return Err("Nur ein Punkt".into()) };
+            let node = i >= 5 && find(items, self.point.shape()).is_some_and(|it| it.nodes().is_some());
+            if !node && self.error(items).is_some_and(|e| e.abs() > 1e-6) {
+                return Err("Auf derselben Form geht das nur an den Knoten eines Vektors".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// On one vector: the point's node moves perpendicularly onto its line. Between two shapes the
+    /// solver does it (see [`solve_all_with`]). Returns whether anything changed.
+    pub fn apply_nodes(&self, items: &mut [Item]) -> bool {
+        if self.point.shape() != self.line.shape() || self.check(items).is_err() {
+            return false;
+        }
+        let Anchor::Point(id, i) = self.point else { return false };
+        if i < 5 {
+            return false;
+        }
+        let Some((p, e0, e1)) = self.parts(items) else { return false };
+        let Some(n) = normal(e0, e1) else { return false };
+        let off = dot([p[0] - e0[0], p[1] - e0[1]], n);
+        if off.abs() < 1e-9 {
+            return false;
+        }
+        let moved = [p[0] - n[0] * off, p[1] - n[1] * off];
+        let Some(item) = items.iter_mut().find(|it| it.id == id) else { return false };
+        *item = item.with_node(i - 5, moved);
+        true
+    }
+}
+
 /// How far a distance is from its value (absolute, in mm), or `None` when an end is missing.
-/// Zero (within a hair) means it holds; anything else is a constraint the others prevent.
 pub fn shortfall(c: &Distance, items: &[Item], value: f64) -> Option<f64> {
     Some((c.measure(items)?.d.abs() - value).abs())
 }

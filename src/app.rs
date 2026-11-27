@@ -96,6 +96,7 @@ pub enum DrawTool {
     Spline,
     Rect,
     Circle,
+    Arc,
     Ellipse,
     Polygon,
     Text,
@@ -121,6 +122,7 @@ impl DrawTool {
             DrawTool::Spline => t!("Spline zeichnen (Doppelklick oder Enter beendet, Klick auf Anfang schließt)"),
             DrawTool::Rect => t!("Rechteck zeichnen"),
             DrawTool::Circle => t!("Kreis zeichnen"),
+            DrawTool::Arc => t!("Kreissegment zeichnen"),
             DrawTool::Ellipse => t!("Ellipse zeichnen"),
             DrawTool::Polygon => t!("Polygon zeichnen"),
             DrawTool::Text => t!("Text einfügen"),
@@ -764,6 +766,10 @@ impl App {
         }
         let dark = theme_choice.dark(cc.egui_ctx.system_theme());
         crate::theme::apply(&cc.egui_ctx, dark);
+        // a desktop CNC program has no "press and hold for a context menu": on a touchscreen egui
+        // treats a held press as a long-touch and paints a filling progress bar on the field under
+        // the finger (and keeps repainting for it). Turn that off so the number fields just edit.
+        cc.egui_ctx.options_mut(|o| o.input_options.max_click_duration = f64::INFINITY);
         let mut app = App {
             job: Job::default(),
             shapes: vec![],
@@ -1352,6 +1358,13 @@ impl App {
         self.edit.selection.iter().filter_map(|id| self.shapes.iter().find(|s| s.id == *id)).map(|s| s.shape.clone()).collect()
     }
 
+    /// Where the selection's centre mark (the move handle) sits, in world coordinates. The editor
+    /// decides: normally the middle of the bounding box, but a single arc puts it on the circle's
+    /// centre, which can lie outside the box. `lo`/`hi` are the selection bounds already to hand.
+    fn selection_centre(&self, lo: Pt, hi: Pt) -> Pt {
+        self.edit.centre_mark(&self.shapes).unwrap_or([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0])
+    }
+
     /// Replace every selected shape by `f(shape)`, keeping its id, as one undo step.
     fn map_selected(&mut self, f: impl Fn(&Shape) -> Shape) {
         if self.edit.selection.is_empty() {
@@ -1924,14 +1937,17 @@ impl App {
                 }
             }
             // the centre mark: a handle that moves the selection (the original's centre image is
-            // the rotation centre, `Handles/handle_rotation_centre.png`; moving by it is ours)
-            let centre = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+            // the rotation centre, `Handles/handle_rotation_centre.png`; moving by it is ours).
+            // A single arc is special: its centre is the circle's centre, which can sit outside the
+            // bounding box, not the box's middle.
+            let centre = self.selection_centre(lo, hi);
+            let centre_screen = self.to_screen(centre);
             let on_centre = self.tool == DrawTool::Select && !self.edit.rotate_mode && mouse.is_some_and(|m| (m[0] - centre[0]).hypot(m[1] - centre[1]) <= view.tolerance);
             if on_centre {
-                painter.circle(r.center(), 5.0, ACCENT, Stroke::new(1.2_f32, SELECT));
+                painter.circle(centre_screen, 5.0, ACCENT, Stroke::new(1.2_f32, SELECT));
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             } else {
-                painter.circle_stroke(r.center(), 4.0, Stroke::new(1.0_f32, SELECT));
+                painter.circle_stroke(centre_screen, 4.0, Stroke::new(1.0_f32, SELECT));
             }
         }
 
@@ -2115,6 +2131,7 @@ impl App {
             DrawTool::Rect => RectShape::from_drag(a, b).into(),
             DrawTool::Ellipse => Ellipse::from_drag(a, b).into(),
             DrawTool::Circle => Circle::from_drag(a, b).into(),
+            DrawTool::Arc => shape_edit::Arc::from_drag(a, b).into(),
             DrawTool::Polygon => Polygon::from_drag(a, b).into(),
             _ => return None,
         })
@@ -2198,6 +2215,12 @@ impl App {
                             if let Some(src) = self.pattern_child_source_at(p, view) {
                                 self.edit.selection = vec![src];
                             }
+                        }
+                        // a double-click on a shape opens its "Eigenschaften" panel (the same
+                        // fields as the Transform tool); no conflict in Select mode, where a
+                        // double-click otherwise only selects like a single click
+                        if resp.double_clicked() && self.tool == DrawTool::Select && !self.edit.selection.is_empty() {
+                            self.tool_form = Some(ToolForm::Transform);
                         }
                     }
                 }

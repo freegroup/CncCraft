@@ -50,6 +50,22 @@ fn circle(ui: &mut egui::Ui, c: &mut Circle) {
     doubled(ui, &t!("Durchmesser"), &mut c.radius);
 }
 
+fn arc(ui: &mut egui::Ui, a: &mut shape_edit::Arc) {
+    center(ui, &mut a.center);
+    row(ui, &t!("Radius"), |ui| {
+        ui.add(mm(&mut a.radius).range(0.1..=10000.0));
+    });
+    // the two angles that bound the segment, shown and edited in degrees
+    for (label, angle) in [(t!("Startwinkel"), &mut a.start), (t!("Endwinkel"), &mut a.end)] {
+        let mut d = angle.to_degrees();
+        row(ui, &label, |ui| {
+            if ui.add(egui::DragValue::new(&mut d).speed(1.0).max_decimals(1).suffix(" °")).changed() {
+                *angle = d.to_radians();
+            }
+        });
+    }
+}
+
 fn ellipse(ui: &mut egui::Ui, e: &mut Ellipse) {
     center(ui, &mut e.center);
     doubled(ui, &t!("Breite"), &mut e.rx);
@@ -116,6 +132,7 @@ pub fn edit(ui: &mut egui::Ui, shape: &mut Shape) -> bool {
         match shape {
             Shape::Rect(r) => rect(ui, r),
             Shape::Circle(c) => circle(ui, c),
+            Shape::Arc(a) => arc(ui, a),
             Shape::Ellipse(e) => ellipse(ui, e),
             Shape::Polygon(p) => polygon(ui, p),
             Shape::Text(t) => text(ui, t),

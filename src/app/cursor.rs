@@ -42,6 +42,7 @@ impl App {
             DrawTool::Spline => Some(Badge::SplineBadge),
             DrawTool::Rect => Some(Badge::Rect),
             DrawTool::Circle => Some(Badge::Circle),
+            DrawTool::Arc => Some(Badge::Circle),
             DrawTool::Ellipse => Some(Badge::Ellipse),
             DrawTool::Polygon => Some(Badge::Polygon),
             DrawTool::Text => Some(Badge::Text),

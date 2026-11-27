@@ -378,6 +378,17 @@ impl Pen<'_> {
             }
             Icon::Draw(DrawTool::Rect) => self.solid(self.rrect(0.0, 0.0, 20.0, 15.0, 2.5)),
             Icon::Draw(DrawTool::Circle) => self.solid(self.disc(0.0, 0.0, 9.5)),
+            Icon::Draw(DrawTool::Arc) => {
+                // an open arc (about 270°) with a dot at each end: a piece of a circle
+                let r = 9.5;
+                let (a0, a1) = (-FRAC_PI_2 * 0.5, TAU - FRAC_PI_2 * 0.5 - FRAC_PI_2);
+                let pts: Vec<Pos2> = (0..=28).map(|i| a0 + (a1 - a0) * i as f32 / 28.0).map(|a| self.at(r * a.cos(), r * a.sin())).collect();
+                let ends = [pts[0], pts[pts.len() - 1]];
+                self.p.add(Shape::line(pts, Stroke::new(LINE, self.k.line)));
+                for e in ends {
+                    self.p.circle_filled(e, 2.3, self.k.line);
+                }
+            }
             Icon::Draw(DrawTool::Ellipse) => self.solid(self.ellipse(0.0, 0.0, 11.0, 7.0)),
             Icon::Draw(DrawTool::Polygon) => self.solid(self.polygon(6, 10.5, None, 0.0, 0.5)),
             Icon::Draw(DrawTool::Trim) => {

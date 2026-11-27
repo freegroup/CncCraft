@@ -439,12 +439,27 @@ impl App {
                 self.distance_lines.iter().find(|(_, [a, b])| distance_to_segment(p, *a, *b) <= LINE_GRAB_PX).map(|(i, _)| *i)
             })
         };
+        let shapes = &self.shapes;
+        // a decoration drawn out of the shape's own centre (a radius line, `outward == [0,0]`) ends
+        // on the move handle, so grabbing along it would fight dragging the shape — those grab only
+        // on their number. A diameter/width line sits beside the shape and stays line-grabbable.
+        let centre_line = |id: u64, dim: shape_edit::Dim| {
+            shapes
+                .iter()
+                .find(|s| s.id == id)
+                .map(|s| s.shape.decoration().iter().any(|l| l.dim == dim && l.outward == [0.0, 0.0]))
+                .unwrap_or(false)
+        };
         let over_dim = |p: Pos2| {
             self.dim_labels.iter().find(|(_, _, r)| r.contains(p)).map(|(id, dim, _)| (*id, *dim)).or_else(|| {
                 if !grab_lines {
                     return None;
                 }
-                self.dim_lines.iter().find(|(_, _, [a, b])| distance_to_segment(p, *a, *b) <= LINE_GRAB_PX).map(|(id, dim, _)| (*id, *dim))
+                self.dim_lines
+                    .iter()
+                    .filter(|(id, dim, _)| !centre_line(*id, *dim))
+                    .find(|(_, _, [a, b])| distance_to_segment(p, *a, *b) <= LINE_GRAB_PX)
+                    .map(|(id, dim, _)| (*id, *dim))
             })
         };
         let align_labels = &self.align_labels;

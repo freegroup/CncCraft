@@ -3,6 +3,7 @@
 //! (a circle scaled evenly stays a circle) and changes it when it isn't (a circle stretched
 //! sideways becomes an ellipse; a rotated rectangle stretched sideways becomes a curve).
 
+mod arc;
 mod circle;
 mod compound;
 mod ellipse;
@@ -13,6 +14,7 @@ mod ref_image;
 mod spline;
 mod text;
 
+pub use arc::Arc;
 pub use circle::Circle;
 pub use compound::Compound;
 pub use ellipse::Ellipse;
@@ -105,6 +107,7 @@ pub trait Form {
 pub enum Shape {
     Rect(Rect),
     Circle(Circle),
+    Arc(Arc),
     Ellipse(Ellipse),
     Polygon(Polygon),
     Path(Path),
@@ -120,6 +123,7 @@ macro_rules! each {
         match $shape {
             Shape::Rect($f) => $body,
             Shape::Circle($f) => $body,
+            Shape::Arc($f) => $body,
             Shape::Ellipse($f) => $body,
             Shape::Polygon($f) => $body,
             Shape::Path($f) => $body,
@@ -140,7 +144,7 @@ macro_rules! from_class {
         })*
     };
 }
-from_class!(Rect, Circle, Ellipse, Polygon, Path, Compound, Text, Spline, RefImage);
+from_class!(Rect, Circle, Arc, Ellipse, Polygon, Path, Compound, Text, Spline, RefImage);
 
 impl Shape {
     pub fn label(&self) -> &'static str {
@@ -185,6 +189,7 @@ impl Shape {
         match self {
             Shape::Rect(r) => Rect { center: turn(r.center), rotation: r.rotation + deg, ..r.clone() }.into(),
             Shape::Circle(c) => Circle { center: turn(c.center), ..*c }.into(),
+            Shape::Arc(a) => Arc { center: turn(a.center), start: a.start + deg.to_radians(), end: a.end + deg.to_radians(), ..*a }.into(),
             Shape::Ellipse(e) => Ellipse { center: turn(e.center), rotation: e.rotation + deg, ..e.clone() }.into(),
             Shape::Polygon(p) => Polygon { center: turn(p.center), rotation: p.rotation + deg, ..p.clone() }.into(),
             Shape::Text(t) => Text { center: turn(t.center), rotation: t.rotation + deg, ..t.clone() }.into(),
@@ -230,8 +235,16 @@ impl Shape {
     /// it was, so a larger height grows the shape upwards and a larger width to the right instead
     /// of both sides moving. This is what a size bound to a variable uses: change the variable and
     /// the top moves, not the whole shape.
+    ///
+    /// A radius or diameter is the exception: a round shape grows about its own centre, so the
+    /// centre stays put (not a corner of the bounds — otherwise the circle would drift sideways
+    /// as it grows). [`Shape::with_dimension`] already keeps the centre, so for those we return it
+    /// as is.
     pub fn with_dimension_anchored(&self, dim: Dim, value: f64) -> Shape {
         let grown = self.with_dimension(dim, value);
+        if matches!(dim, Dim::Radius | Dim::Diameter) {
+            return grown;
+        }
         match (self.bounds(), grown.bounds()) {
             (Some((before, _)), Some((after, _))) => grown.translated(before[0] - after[0], before[1] - after[1]),
             _ => grown,
@@ -250,6 +263,7 @@ impl Shape {
             (Shape::Rect(r), Dim::Height) => r.height = value,
             // diameter × 0.5, as the polygon tool applies a typed diameter (0x10085765c)
             (Shape::Circle(c), Dim::Diameter) => c.radius = value * 0.5,
+            (Shape::Arc(a), Dim::Radius) => a.radius = value,
             (Shape::Ellipse(e), Dim::Width) => e.rx = value / 2.0,
             (Shape::Ellipse(e), Dim::Height) => e.ry = value / 2.0,
             (Shape::Polygon(p), Dim::Radius) => p.radius = value,
@@ -502,10 +516,16 @@ mod tests {
         // width grows to the right
         let (lo3, hi3) = r.with_dimension_anchored(Dim::Width, 50.0).bounds().unwrap();
         assert!(close(lo3, [10.0, 30.0]) && close(hi3, [60.0, 40.0]));
-        // works for the other classes too
+        // a round shape grows about its centre, not a corner: the centre stays put
         let c: Shape = Circle::new([5.0, 5.0], 5.0).into();
-        let (lo4, _) = c.with_dimension_anchored(Dim::Diameter, 30.0).bounds().unwrap();
-        assert!(close(lo4, [0.0, 0.0]));
+        let (lo4, hi4) = c.with_dimension_anchored(Dim::Diameter, 30.0).bounds().unwrap();
+        let centre4 = [(lo4[0] + hi4[0]) / 2.0, (lo4[1] + hi4[1]) / 2.0];
+        assert!(close(centre4, [5.0, 5.0]), "the circle's centre stays: {centre4:?}");
+        assert!(close(lo4, [-10.0, -10.0]) && close(hi4, [20.0, 20.0]), "it grows both ways about the centre");
+        // an arc's centre must stay put when its radius changes (its bounds are not centred on it)
+        let a: Shape = Arc::new([7.0, 3.0], 5.0, 0.0, std::f64::consts::FRAC_PI_2).into();
+        let bigger = a.with_dimension_anchored(Dim::Radius, 12.0);
+        assert!(matches!(bigger, Shape::Arc(b) if close(b.center, [7.0, 3.0]) && (b.radius - 12.0).abs() < 1e-9), "arc centre fixed, radius set");
     }
 
     #[test]

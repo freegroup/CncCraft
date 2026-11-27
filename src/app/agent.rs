@@ -553,6 +553,7 @@ impl App {
             let kind = match &s.shape {
                 Shape::Rect(_) => "rectangle",
                 Shape::Circle(_) => "circle",
+                Shape::Arc(_) => "arc",
                 Shape::Ellipse(_) => "ellipse",
                 Shape::Polygon(_) => "polygon",
                 Shape::Text(_) => "text",

@@ -215,7 +215,7 @@ fn rotation_of(shape: &Shape) -> f64 {
         Shape::Ellipse(s) => s.rotation,
         Shape::Polygon(s) => s.rotation,
         Shape::Text(s) => s.rotation,
-        Shape::Circle(_) | Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) | Shape::RefImage(_) => 0.0,
+        Shape::Circle(_) | Shape::Arc(_) | Shape::Path(_) | Shape::Compound(_) | Shape::Spline(_) | Shape::RefImage(_) => 0.0,
     }
 }
 
@@ -277,6 +277,14 @@ impl Editable for Item {
 
     fn bounds(&self) -> Option<(Pt, Pt)> {
         self.shape.bounds()
+    }
+
+    fn centre_point(&self) -> Option<Pt> {
+        // an arc's centre is the circle's centre, which can sit outside its bounding box
+        if let Shape::Arc(a) = &self.shape {
+            return Some(a.center);
+        }
+        self.bounds().map(|(lo, hi)| [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0])
     }
 
     fn hidden(&self) -> bool {
@@ -379,6 +387,7 @@ impl Editable for Item {
         let centre = match &self.shape {
             Shape::Rect(r) => Some(r.center),
             Shape::Circle(c) => Some(c.center),
+            Shape::Arc(a) => Some(a.center),
             Shape::Ellipse(e) => Some(e.center),
             Shape::Polygon(p) => Some(p.center),
             Shape::Text(t) => Some(t.center),
@@ -402,6 +411,12 @@ impl Editable for Item {
         if let Shape::Spline(s) = &self.shape {
             out.extend(s.nodes.iter().map(|n| (n.pos, SnapKind::Node)));
         }
+        // an arc, like a line, offers its two end points for measuring and snapping
+        if let Shape::Arc(a) = &self.shape {
+            let end = |angle: f64| [a.center[0] + a.radius * angle.cos(), a.center[1] + a.radius * angle.sin()];
+            out.push((end(a.start), SnapKind::Node));
+            out.push((end(a.end), SnapKind::Node));
+        }
         out
     }
 
@@ -419,7 +434,9 @@ impl Editable for Item {
     }
 
     fn keeps_proportions(&self) -> bool {
-        matches!(self.shape, Shape::Circle(_) | Shape::RefImage(_))
+        // an arc is a piece of a circle: a handle may only grow it evenly (changing the radius), it
+        // must never be stretched into an ellipse. Circles and reference images keep proportions too.
+        matches!(self.shape, Shape::Circle(_) | Shape::Arc(_) | Shape::RefImage(_))
     }
 
     /// A circle and an ellipse show a ring with side handles, a straight line (an open vector of
@@ -634,9 +651,63 @@ mod tests {
         assert_eq!((kinds(&open, SnapKind::Node), kinds(&open, SnapKind::MidPoint), kinds(&open, SnapKind::Centre)), (3, 2, 0));
     }
 
+    #[test]
+    fn centre_mark_is_the_circle_centre_for_an_arc() {
+        use crate::forms::Arc;
+        use std::f64::consts::FRAC_PI_2;
+        // a quarter arc in the first quadrant: its bounds middle is not the circle centre
+        let arc = Item::new(1, Arc::new([0.0, 0.0], 10.0, 0.0, FRAC_PI_2));
+        let (lo, hi) = arc.bounds().unwrap();
+        let box_mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+        assert!(box_mid != [0.0, 0.0], "the box middle differs from the circle centre");
+        assert_eq!(arc.centre_point(), Some([0.0, 0.0]), "the mark sits on the circle centre");
+        // other shapes keep the box middle
+        let rect = Item::new(2, Rect::new([5.0, 5.0], 10.0, 4.0));
+        assert_eq!(rect.centre_point(), Some([5.0, 5.0]));
+    }
+
+    #[test]
+    fn an_arc_centre_is_a_move_snap_target() {
+        use crate::editor::Editor;
+        use crate::forms::Arc;
+        use std::f64::consts::FRAC_PI_2;
+        // a resting arc whose circle centre sits outside its bounding box
+        let arc = Item::new(1, Arc::new([0.0, 0.0], 10.0, 0.0, FRAC_PI_2));
+        let rect = Item::new(2, Rect::new([50.0, 50.0], 4.0, 4.0));
+        let shapes = vec![arc, rect];
+        // moving the rect (skip id 2): the arc's circle centre is among the snap targets
+        let targets = Editor::<Item>::move_targets(&shapes, &[2]);
+        assert!(
+            targets.iter().any(|(p, k)| *k == SnapKind::Centre && (p[0]).abs() < 1e-6 && (p[1]).abs() < 1e-6),
+            "the arc's circle centre [0,0] is a move-snap target: {targets:?}"
+        );
+    }
+
     fn dots(n: u64) -> Vec<Item> {
         (1..=n).map(|id| Item::new(id, Circle::new([id as f64 * 10.0, 0.0], 2.0))).collect()
     }
+
+    #[test]
+    fn resizing_an_arc_keeps_it_an_arc_never_an_ellipse() {
+        use crate::editor::Editor;
+        use crate::forms::Arc;
+        use crate::{Handle, Tool};
+        use std::f64::consts::FRAC_PI_2;
+        // an arc keeps its proportions: a side handle grows it evenly (radius changes), so it can
+        // never be stretched into an ellipse — that is why the handles no longer morph it
+        let arc = Item::new(1, Arc::new([0.0, 0.0], 10.0, 0.0, FRAC_PI_2));
+        assert!(arc.keeps_proportions(), "an arc keeps proportions");
+        let mut items = vec![arc];
+        let mut ed = Editor::default();
+        ed.selection = vec![1];
+        // press the right-edge handle and drag it outward (a non-uniform pull if it were free)
+        let (lo, hi) = items[0].bounds().unwrap();
+        let right = crate::handle_point(lo, hi, VIEW.handle_pad, Handle::Right);
+        assert!(matches!(ed.press(&items, right, VIEW, Tool::Select, false), crate::Started::Resize(_)));
+        ed.drag(&mut items, [right[0] + 10.0, right[1]], false);
+        assert!(matches!(items[0].shape, Shape::Arc(_)), "still an arc after a side-handle drag: {:?}", items[0].shape);
+    }
+
 
     #[test]
     fn a_click_on_a_member_picks_the_whole_group() {

@@ -232,8 +232,29 @@ impl<S: Editable> Editor<S> {
     /// every block — each loose shape and each whole group. Bounding boxes, not raw facet nodes, so
     /// snapping lands edges exactly and is the same at every zoom (a facetted circle has dozens of
     /// nodes; snapping to one of them, not its extent, left a gap when zoomed out — the user's bug).
+    ///
+    /// Plus each shape's own centre where that is not the middle of its box (an arc's circle
+    /// centre, which can sit outside the box): a real, zoom-stable anchor a move should catch.
     pub fn move_targets(shapes: &[S], skip: &[u64]) -> Vec<(Pt, SnapKind)> {
-        Self::target_boxes(shapes, skip).into_iter().flat_map(|(lo, hi)| bbox_snap_points(lo, hi)).collect()
+        let mut out: Vec<(Pt, SnapKind)> = Self::target_boxes(shapes, skip).into_iter().flat_map(|(lo, hi)| bbox_snap_points(lo, hi)).collect();
+        out.extend(Self::offbox_centres(shapes, skip).into_iter().map(|c| (c, SnapKind::Centre)));
+        out
+    }
+
+    /// The real centres of the non-skipped, visible shapes that do not sit at the middle of their
+    /// bounding box (an arc's circle centre). These are extra move anchors on top of the box points.
+    fn offbox_centres(shapes: &[S], skip: &[u64]) -> Vec<Pt> {
+        shapes
+            .iter()
+            .filter(|s| !skip.contains(&s.id()) && !s.hidden())
+            .filter_map(|s| match (s.centre_point(), s.bounds()) {
+                (Some(c), Some((lo, hi))) => {
+                    let box_mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+                    (dist(c, box_mid) > 1e-6).then_some(c)
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Where `p` snaps to among all shapes (for drawing tools, outside a gesture).
@@ -314,6 +335,18 @@ impl<S: Editable> Editor<S> {
     /// The grip under `p`, if any.
     pub fn grip_under(&self, shapes: &[S], p: Pt, view: View) -> Option<Grip> {
         self.grips(shapes).into_iter().filter(|g| dist(g.at, p) <= view.tolerance).min_by(|a, b| dist(a.at, p).total_cmp(&dist(b.at, p)))
+    }
+
+    /// Where the selection's centre mark (the move handle) sits. Normally the middle of the
+    /// bounding box, but when exactly one shape is selected the shape decides (an arc puts it on
+    /// the circle's centre, which can lie outside the box).
+    pub fn centre_mark(&self, shapes: &[S]) -> Option<Pt> {
+        if let [id] = self.selection.as_slice() {
+            if let Some(c) = find(shapes, *id).and_then(Editable::centre_point) {
+                return Some(c);
+            }
+        }
+        selection_bounds(shapes, &self.selection).map(|(lo, hi)| [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0])
     }
 
     /// The topmost shape under `p`. Shapes on the priority layer are preferred.
@@ -420,8 +453,7 @@ impl<S: Editable> Editor<S> {
         }
         // the centre mark of the selection moves it, as the shape's own line does
         if !additive && !self.rotate_mode && self.style(shapes) != SelectionStyle::Ends {
-            if let Some((lo, hi)) = selection_bounds(shapes, &self.selection) {
-                let centre = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+            if let Some(centre) = self.centre_mark(shapes) {
                 if dist(centre, p) <= view.tolerance {
                     self.clicked_selected = true;
                     self.gesture = Some(Gesture::Move { start: p, orig: self.selected(shapes) });
@@ -525,7 +557,12 @@ impl<S: Editable> Editor<S> {
                     // resting blocks' bounding boxes, each axis independently — bounding boxes, not
                     // facet nodes, so the result is edge-exact and the same at every zoom
                     let (slo, shi) = source_box;
-                    let sources = bbox_snap_points(slo, shi);
+                    let mut sources = bbox_snap_points(slo, shi);
+                    // plus the moved shapes' own off-box centres (an arc's circle centre), moved by the
+                    // tentative offset, so the centre itself can catch a guide
+                    for c in Self::offbox_centres(orig, &[]) {
+                        sources.push(([c[0] + dx, c[1] + dy], SnapKind::Centre));
+                    }
                     if let Some(snap) = self.snapping.snap_move(&sources, source_box, &self.targets, &self.target_boxes) {
                         dx += snap.offset[0];
                         dy += snap.offset[1];

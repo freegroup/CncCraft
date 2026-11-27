@@ -25,7 +25,7 @@ pub(in crate::app) enum ToolForm {
 const GROUPS: [&[Icon]; GROUP_COUNT] = [
     &[Icon::Draw(DrawTool::Select), Icon::Transform, Icon::Draw(DrawTool::NodeEdit)],
     &[Icon::Draw(DrawTool::Polyline), Icon::Draw(DrawTool::Spline)],
-    &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon), Icon::ImportDxf],
+    &[Icon::Draw(DrawTool::Rect), Icon::Draw(DrawTool::Circle), Icon::Draw(DrawTool::Arc), Icon::Draw(DrawTool::Ellipse), Icon::Draw(DrawTool::Polygon), Icon::ImportDxf],
     &[Icon::Draw(DrawTool::Text)],
     &[Icon::Curves],
     &[Icon::Center, Icon::MirrorH, Icon::MirrorV],
@@ -67,6 +67,7 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Draw(DrawTool::Spline) => Tip::new(t!("Spline"), t!("Eine weiche Kurve durch die geklickten Punkte. Doppelklick oder Enter beendet, ein Klick auf den Anfang schließt sie.")).shortcut("P"),
         Icon::Draw(DrawTool::Rect) => Tip::new(t!("Rechteck"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe lassen sich danach genau eintippen.")).shortcut("R"),
         Icon::Draw(DrawTool::Circle) => Tip::new(t!("Kreis"), t!("Vom Mittelpunkt aus aufziehen. Den Durchmesser danach genau eintippen.")).shortcut("C"),
+        Icon::Draw(DrawTool::Arc) => Tip::new(t!("Kreissegment"), t!("Vom Mittelpunkt aus aufziehen; es entsteht ein halber Bogen. Radius, Start- und Endwinkel danach unter „Eigenschaften“ einstellen.")),
         Icon::Draw(DrawTool::Ellipse) => Tip::new(t!("Ellipse"), t!("Von Ecke zu Ecke aufziehen. Breite und Höhe danach genau eintippen.")),
         Icon::Draw(DrawTool::Polygon) => Tip::new(t!("Polygon"), t!("Ein regelmäßiges Vieleck vom Mittelpunkt aus aufziehen. Die Zahl der Ecken unter \u{201e}Eigenschaften\u{201c} ändern.")),
         Icon::Draw(DrawTool::Text) => Tip::new(t!("Text"), t!("Ein Klick setzt einen Text; den Inhalt unter \u{201e}Eigenschaften\u{201c} ändern. Die Buchstaben lassen sich fräsen oder gravieren.")),
@@ -75,7 +76,7 @@ pub(in crate::app) fn tool_tip(icon: Icon) -> Tip {
         Icon::Draw(DrawTool::Connect) => Tip::new(t!("Verbinden"), t!("Zwei Punkte nacheinander anklicken: Sie werden mit einer Linie verbunden. Beide Enden eines Linienzugs schließen ihn.")),
         Icon::Draw(DrawTool::FilletOuter) => Tip::new(t!("Ohr"), t!("Eine Ecke anklicken: Sie bekommt einen Kreis um den Eckpunkt, damit ein runder Fräser ganz in die Ecke kommt. Radius im Formular links.")),
         Icon::Draw(DrawTool::FilletInner) => Tip::new(t!("Abrunden"), t!("Eine Ecke anklicken: Sie wird mit dem Radius aus dem Formular links abgerundet. Der Radius bleibt jederzeit änderbar.")),
-        Icon::Transform => Tip::new(t!("Transformieren"), t!("Lage und Größe der Auswahl genau eintippen.")),
+        Icon::Transform => Tip::new(t!("Eigenschaften"), t!("Die Eigenschaften der Auswahl eintippen: Lage, Größe und – je nach Form – Radius, Winkel, Eckenzahl oder Text.")),
         Icon::Offset => Tip::new(t!("Versetzen"), t!("Eine neue Kontur im festen Abstand außen oder innen um die Auswahl.")).shortcut("O"),
         Icon::Array => Tip::new(t!("Vervielfältigen"), t!("Macht aus einer Form ein rechteckiges Muster aus verbundenen Kopien. Doppelklick auf das Muster-Zeichen ändert es wieder.")).when_disabled(pick_one),
         Icon::MirrorH => Tip::new(t!("Waagrecht spiegeln"), t!("Spiegelt die Auswahl an ihrer senkrechten Mitte (links wird rechts).")).when_disabled(pick_one),
@@ -332,7 +333,7 @@ impl App {
         egui::SidePanel::left("tool_form").exact_width(250.0).resizable(false).frame(egui::Frame::none().fill(crate::theme::panel()).inner_margin(10.0).stroke(Stroke::new(1.0_f32, crate::theme::separator()))).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let title = match form {
-                    ToolForm::Transform => t!("Objekte transformieren"),
+                    ToolForm::Transform => t!("Eigenschaften"),
                     ToolForm::Offset => t!("Versatz"),
                     ToolForm::Corner => t!("Abrunden"),
                 };
