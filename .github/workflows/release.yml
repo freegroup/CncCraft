@@ -36,8 +36,15 @@ jobs:
       # Regel: Änderungen an .rs-Dateien sollen immer mindestens ein Release erzeugen.
       # Fehlt seit dem letzten Tag ein feat:/fix:-Commit, wird automatisch ein leerer
       # fix:-Commit angelegt – semantic-release macht daraus einen Patch (statt abzubrechen).
+      # Ausnahme: Hat der aktuelle Commit einen Conventional-Commit-Prefix der explizit
+      # kein Release auslöst (docs:, chore:, ci: usw.), wird kein Auto-fix erzeugt.
       - name: "Code-Änderungen ohne feat:/fix: automatisch als fix: freigeben"
         run: |
+          current_msg=$(git log -1 --format='%s')
+          if echo "$current_msg" | grep -qE '^(docs|chore|ci|style|test|refactor|build|revert)(\([^)]+\))?!?:'; then
+            echo "Auto-fix übersprungen: '${current_msg}' soll kein Release auslösen."
+            exit 0
+          fi
           base=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n1)
           echo "Basis seit letztem Release: $base"
           if git diff --name-only "$base"..HEAD | grep -qE '\.rs$' \
@@ -49,8 +56,18 @@ jobs:
           else
             echo "Kein Auto-fix nötig (keine .rs-Änderung oder bereits feat:/fix: vorhanden)."
           fi
+      # git notes werden von actions/checkout nicht mitgefetcht; ohne Fetch würde
+      # semantic-release beim Schreiben neuer Notes einen leeren lokalen Stand sehen
+      # und ggf. einen ungültigen Push-Delta erzeugen.
+      - name: Fetch git notes
+        run: git fetch origin 'refs/notes/*:refs/notes/*' || true
       - uses: cycjimmy/semantic-release-action@v4
         id: sr
+        # Notes-Push schlägt manchmal fehl (GitHub lehnt refs/notes/* ab), obwohl
+        # Tag, Commit und GitHub-Release bereits erfolgreich erstellt wurden.
+        # continue-on-error verhindert, dass dieser Nebenfehler den gesamten Job
+        # und damit die linux/windows-Build-Jobs blockiert.
+        continue-on-error: true
         with:
           extra_plugins: |
             @semantic-release/changelog
@@ -58,6 +75,15 @@ jobs:
             @semantic-release/git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prüfen ob Release fehlgeschlagen
+        if: steps.sr.outcome == 'failure'
+        run: |
+          published="${{ steps.sr.outputs.new_release_published }}"
+          if [ "$published" != "true" ]; then
+            echo "::error::semantic-release ist fehlgeschlagen und kein Release wurde veröffentlicht."
+            exit 1
+          fi
+          echo "Hinweis: Notes-Push fehlgeschlagen, aber Release v${{ steps.sr.outputs.new_release_version }} wurde erfolgreich veröffentlicht."
 
   linux:
     needs: release
