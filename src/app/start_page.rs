@@ -70,7 +70,13 @@ impl App {
             let avail = ui.available_width();
             ui.vertical_centered(|ui| {
                 ui.add_space(24.0);
-                ui.label(egui::RichText::new(t!("Willkommen bei CncCraft")).size(28.0).strong().color(ink()));
+                // the app name with its version beside it at the same size, the version in the accent
+                // colour; one laid-out label so it stays centred as a single block
+                let mut job = egui::text::LayoutJob::default();
+                let font = egui::FontId::proportional(28.0);
+                job.append(&t!("Willkommen bei CncCraft"), 0.0, egui::text::TextFormat { font_id: font.clone(), color: ink(), ..Default::default() });
+                job.append(&format!("  v{}", env!("CARGO_PKG_VERSION")), 0.0, egui::text::TextFormat { font_id: font, color: ACCENT, ..Default::default() });
+                ui.label(job);
                 ui.label(egui::RichText::new(t!("Das komplette Werkzeugset für CNC-Einsteiger")).color(muted()));
                 ui.add_space(26.0);
             });
