@@ -117,8 +117,14 @@
 <tr><td>Alle / Ausgewählter / Sichtbare</td><td>Welche Werkzeugwege die Vorschau zeigt: alle, der in der Liste angeklickte oder die sichtbaren.</td></tr>
 <tr><td><strong>Tempo</strong></td><td>Wie schnell die Animation läuft.</td></tr>
 <tr><td><strong>Darstellung</strong></td><td>Wie fein das Material gezeichnet wird: „schneller“ links, „genauer“ rechts. Das ändert nur die Anzeige, nicht die Werkzeugwege.</td></tr>
-<tr><td>Werkzeugpfade im 3D einblenden</td><td>Legt die Werkzeugwege als farbige Linien über das Werkstück.</td></tr>
+<tr><td>G-Code-Fahrt einblenden</td><td>Zeigt, wo der Fräser fährt: in 2D als Band, in 3D als die Fahrten des Postprozessors (siehe unten).</td></tr>
 </table>
+<div class="neu-box"><p><strong>G-Code-Fahrt einblenden</strong> wirkt in beiden Ansichten:</p>
+<ul>
+<li>In der <strong>2D-Entwurfsansicht</strong> wird die Fläche, die der Fräser überstreicht, über die Zeichnung gelegt – als Band in der Farbe des Werkzeugwegs mit 20 % Deckkraft und in Fräserbreite; beim V-Fräser folgt die Breite der Tiefe. Das Band wird als echte Vereinigung (Union) der Fräserbahn berechnet, nicht als viele übereinander gezeichnete Striche, sodass man gut sieht, wo der Fräser läuft und ob er eine benachbarte Kontur berührt oder zerstört.</li>
+<li>In der <strong>3D-Vorschau</strong> werden die Fahrten der Maschine so eingeblendet, wie der Postprozessor sie schreibt: Eilgang gestrichelt, Eintauchen gelb.</li>
+</ul>
+<figure><a href="../../../../assets/img/gcode-fahrt-2d.png"><img src="../../../../assets/img/gcode-fahrt-2d.png" alt="Die Fräserbahnen als Bänder in der 2D-Ansicht" loading="lazy"></a><figcaption>Die Fräserbahnen als Bänder in der 2D-Ansicht</figcaption></figure></div>
 <div class="neu-box"><p>Der Regler <strong>Darstellung</strong> (0–100 %) lässt Sie zwischen einer schnellen Grobansicht und einer feinen Darstellung wählen. In der 3D-Ansicht helfen außerdem der Ansichtswürfel und das Achsenkreuz des Nullpunkts bei der Orientierung.</p></div>
 <h2>Fräszeit</h2>
 <p>Die Liste nennt je Werkzeugweg eine geschätzte Fräszeit und darunter die Gesamtzeit der sichtbaren Werkzeugwege (<a href="../../../../hilfe/Help/page/werkzeugwegliste/index.html">Die Werkzeugwegliste</a>). Die Schätzung rechnet mit den eingestellten Vorschüben und einer pauschalen Eilganggeschwindigkeit; die echte Zeit hängt von Ihrer Maschine ab.</p>

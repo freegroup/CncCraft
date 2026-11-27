@@ -956,6 +956,9 @@ impl App {
         }
         if app.shot.is_some() || app.selftest.is_some() {
             app.load_example();
+            // the cutter-path overlay starts off for screenshots, so only the shot that asks for it
+            // (CNCCRAFT_SHOW_GCODE, applied below) shows the bands and the others stay uncluttered
+            app.paths_in_3d = false;
             // for the review screenshot: show the start page (with the sister-app cards) if asked
             if std::env::var("CNCCRAFT_SHOW_START").is_ok() {
                 app.start_page = true;
@@ -1140,18 +1143,18 @@ impl App {
 
     fn push_undo(&mut self) {
         let s = self.snapshot();
-        let cmd = crate::commandstack::SnapshotCommand::new("edit", s.0, s.1, s.2);
+        let cmd = crate::commandstack::SnapshotCommand::new("edit", s.0, s.1, s.2, self.distances.clone());
         self.undo.push_executed(Box::new(cmd));
     }
 
     fn push_undo_from(&mut self, before: crate::commandstack::Snapshot) {
-        let mut cmd = crate::commandstack::SnapshotCommand::new("edit", before.0, before.1, before.2);
-        cmd.capture_after(&self.shapes, &self.layers, &self.patterns);
+        let mut cmd = crate::commandstack::SnapshotCommand::new("edit", before.0, before.1, before.2, self.distances.clone());
+        cmd.capture_after(&self.shapes, &self.layers, &self.patterns, &self.distances);
         self.undo.push_executed(Box::new(cmd));
     }
 
     fn execute_command(&mut self, cmd: Box<dyn crate::commandstack::Command>) {
-        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
+        self.undo.execute(cmd, &mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns, &mut self.distances);
     }
 
     fn add_shape(&mut self, shape: impl Into<Shape>) -> u64 {
@@ -1170,6 +1173,10 @@ impl App {
         self.toolpaths.clear();
         self.tp_gen += 1;
         self.layers = crate::layers::Layers::default();
+        // the example's layer is marker-yellow, so the "Show G-code motion" bands read nicely
+        if let Some(l) = self.layers.list.first_mut() {
+            l.colour = crate::layers::PALETTE.len() - 1; // the yellow at the end of the palette
+        }
         let frame = self.add_shape(RectShape { corner_radius: 12.0, ..RectShape::new([150.0, 100.0], 270.0, 170.0) });
         let text = self.add_shape(Text::new([150.0, 118.0], "CncCraft", 42.0));
         let hexagon = self.add_shape(Polygon::new([62.0, 52.0], 22.0, 6));
@@ -1546,12 +1553,12 @@ impl App {
     // ---------------- UI ----------------
 
     fn do_undo(&mut self) {
-        let change = self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
+        let change = self.undo.undo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns, &mut self.distances);
         self.after_history_change(change);
     }
 
     fn do_redo(&mut self) {
-        let change = self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns);
+        let change = self.undo.redo(&mut self.shapes, &mut self.layers, &mut self.toolpaths, &mut self.guides, &mut self.patterns, &mut self.distances);
         self.after_history_change(change);
     }
 
@@ -1715,6 +1722,12 @@ impl App {
                 let img_rect = Rect::from_two_pos(tl, br);
                 painter.image(tex.id(), img_rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), tint);
             }
+        }
+
+        // the cutter paths as coloured bands, under the shapes, when "Show G-code motion" is on
+        // (the 2D counterpart of the 3D G-code overlay)
+        if self.paths_in_3d {
+            self.draw_toolpath_bands(&painter);
         }
 
         // shapes
@@ -2988,6 +3001,90 @@ fn block_sketch(ui: &mut egui::Ui) {
 }
 
 impl App {
+    /// Draw, in the 2D view, the cutter's path of every visible toolpath as a band in the tool's
+    /// colour at 20 % opacity and the width of the cutter — like Estlcam's yellow marker. The width
+    /// is the cutter diameter; for a V-bit it is the engraved width at that depth
+    /// (2·depth·tan(angle/2), capped at the diameter), so a deeper V-cut draws a wider band. Rapid
+    /// moves (the cutter lifted) are not drawn. This shows where the cutter really travels, so an
+    /// overlap with another contour is easy to see.
+    /// Draw, in the 2D view, the area every visible toolpath's cutter sweeps — like Estlcam's
+    /// yellow marker. The real swept area is computed once as a polygon union (so five overlapping
+    /// passes do not stack into dark marker-over-marker artefacts) and filled in the tool's colour
+    /// at 20 %. The band is the cutter's width; for a V-bit it is the engraved width at that depth
+    /// (2·depth·tan(angle/2), capped at the diameter), so a deeper V-cut is wider. Rapid moves
+    /// (cutter lifted) are left out. This shows exactly where the cutter travels and which contours
+    /// it would touch.
+    fn draw_toolpath_bands(&self, painter: &egui::Painter) {
+        for &i in &self.preview_indices() {
+            let tp = &self.toolpaths[i];
+            let half_angle = (tp.tool.angle / 2.0).to_radians();
+            let is_v = tp.tool.kind == crate::tools::ToolKind::VBit && half_angle > 0.0;
+            // the cutter radius at depth `d` below the surface, in mm
+            let radius_at = |d: f64| -> f64 {
+                if is_v {
+                    (d.max(0.0) * half_angle.tan()).min(tp.tool.diameter / 2.0).max(0.1)
+                } else {
+                    tp.tool.diameter / 2.0
+                }
+            };
+            // group the cutting moves into polylines, bucketed by cutter radius (a V-bit's radius
+            // grows with depth; a flat cutter has one bucket). Each bucket's polylines are swept
+            // and the buckets are unioned into one area.
+            let mut buckets: std::collections::BTreeMap<i64, Vec<Vec<shape_edit::Pt>>> = std::collections::BTreeMap::new();
+            let mut run: Vec<shape_edit::Pt> = Vec::new();
+            let mut run_key: Option<i64> = None;
+            let flush = |run: &mut Vec<shape_edit::Pt>, run_key: &mut Option<i64>, buckets: &mut std::collections::BTreeMap<i64, Vec<Vec<shape_edit::Pt>>>| {
+                if run.len() >= 2 {
+                    if let Some(k) = *run_key {
+                        buckets.entry(k).or_default().push(std::mem::take(run));
+                    }
+                }
+                run.clear();
+                *run_key = None;
+            };
+            for pair in tp.moves.windows(2) {
+                let (a, b) = (pair[0], pair[1]);
+                if b.rapid {
+                    flush(&mut run, &mut run_key, &mut buckets);
+                    continue;
+                }
+                let depth = ((-a.to[2]).max(0.0) + (-b.to[2]).max(0.0)) / 2.0;
+                let key = (radius_at(depth) * 50.0).round() as i64; // bucket radii to 0.02 mm
+                if run_key.is_some() && run_key != Some(key) {
+                    // width changed (a V-bit going deeper): close this run, start one at the join
+                    let last = [a.to[0], a.to[1]];
+                    flush(&mut run, &mut run_key, &mut buckets);
+                    run.push(last);
+                }
+                if run.is_empty() {
+                    run.push([a.to[0], a.to[1]]);
+                }
+                run.push([b.to[0], b.to[1]]);
+                run_key = Some(key);
+            }
+            flush(&mut run, &mut run_key, &mut buckets);
+
+            let mut region = shape_edit::Region::empty();
+            for (k, polylines) in &buckets {
+                let r = *k as f64 / 50.0;
+                region = region.union(&shape_edit::Region::swept(polylines, r));
+            }
+            if region.is_empty() {
+                continue;
+            }
+            let col = self.tp_layer_color(tp).gamma_multiply(0.2);
+            let mut mesh = egui::epaint::Mesh::default();
+            for tri in region.triangles() {
+                let base = mesh.vertices.len() as u32;
+                for p in tri {
+                    mesh.colored_vertex(self.to_screen(p), col);
+                }
+                mesh.add_triangle(base, base + 1, base + 2);
+            }
+            painter.add(egui::epaint::Shape::mesh(mesh));
+        }
+    }
+
     fn tp_layer_color(&self, tp: &crate::toolpath::Toolpath) -> Color32 {
         let layer_id = tp.shape_ids.iter()
             .find_map(|&sid| self.shapes.iter().find(|s| s.id == sid))

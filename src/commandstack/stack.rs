@@ -1,13 +1,14 @@
 use crate::layers::Layers;
 use crate::toolpath::Toolpath;
 use crate::guides::Guide;
+use shape_edit::constraints::Distance;
 use shape_edit::Item;
 
 pub type Snapshot = (Vec<Item>, Layers, Vec<crate::app::Pattern>);
 
 pub trait Command: std::fmt::Debug {
-    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>);
-    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>);
+    fn execute(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>, distances: &mut Vec<Distance>);
+    fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>, distances: &mut Vec<Distance>);
     #[allow(dead_code)]
     fn description(&self) -> &str;
 }
@@ -43,8 +44,8 @@ impl CommandStack {
         self.paste_log.push((ids, toolpaths_before));
     }
 
-    pub fn execute(&mut self, mut cmd: Box<dyn Command>, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) {
-        cmd.execute(shapes, layers, toolpaths, guides, patterns);
+    pub fn execute(&mut self, mut cmd: Box<dyn Command>, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>, distances: &mut Vec<Distance>) {
+        cmd.execute(shapes, layers, toolpaths, guides, patterns, distances);
         self.undo.push(cmd);
         if self.undo.len() > self.limit {
             self.undo.remove(0);
@@ -60,18 +61,18 @@ impl CommandStack {
         self.redo.clear();
     }
 
-    pub fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) -> HistoryChange {
+    pub fn undo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>, distances: &mut Vec<Distance>) -> HistoryChange {
         let Some(mut cmd) = self.undo.pop() else { return HistoryChange::default() };
-        cmd.undo(shapes, layers, toolpaths, guides, patterns);
+        cmd.undo(shapes, layers, toolpaths, guides, patterns, distances);
         self.redo.push(cmd);
         // undoing may have removed pasted shapes: drop the toolpaths those pastes grew
         let truncated = self.truncate_undone_pastes(shapes, toolpaths);
         HistoryChange { changed: true, toolpaths_truncated: truncated }
     }
 
-    pub fn redo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>) -> HistoryChange {
+    pub fn redo(&mut self, shapes: &mut Vec<Item>, layers: &mut Layers, toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, patterns: &mut Vec<crate::app::Pattern>, distances: &mut Vec<Distance>) -> HistoryChange {
         let Some(mut cmd) = self.redo.pop() else { return HistoryChange::default() };
-        cmd.execute(shapes, layers, toolpaths, guides, patterns);
+        cmd.execute(shapes, layers, toolpaths, guides, patterns, distances);
         self.undo.push(cmd);
         HistoryChange { changed: true, toolpaths_truncated: false }
     }

@@ -47,7 +47,7 @@ impl GuideMoveCommand {
 }
 
 impl Command for GuideMoveCommand {
-    fn execute(&mut self, shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
+    fn execute(&mut self, shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>, _distances: &mut Vec<shape_edit::constraints::Distance>) {
         Self::shift_attached(self.id, self.to - self.from, shapes, guides);
         if let Some(g) = guides.iter_mut().find(|g| g.id == self.id) {
             if !self.captured {
@@ -59,7 +59,7 @@ impl Command for GuideMoveCommand {
         }
     }
 
-    fn undo(&mut self, shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
+    fn undo(&mut self, shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>, _distances: &mut Vec<shape_edit::constraints::Distance>) {
         Self::shift_attached(self.id, self.from - self.to, shapes, guides);
         if let Some(g) = guides.iter_mut().find(|g| g.id == self.id) {
             g.offset = self.from;
@@ -84,11 +84,12 @@ mod tests {
         let mut shapes = vec![Item::new(9, shape_edit::Rect::from_drag([0.0, 0.0], [10.0, 10.0]))];
         let (mut layers, mut tps) = (Layers::default(), vec![]);
         let mut patterns = vec![];
+        let mut distances = vec![];
         let mut cmd = GuideMoveCommand::new(1, 50.0, 80.0);
-        cmd.execute(&mut shapes, &mut layers, &mut tps, &mut guides, &mut patterns);
+        cmd.execute(&mut shapes, &mut layers, &mut tps, &mut guides, &mut patterns, &mut distances);
         assert_eq!(guides[0].offset, 80.0);
         assert!((shapes[0].shape.bounds().unwrap().0[0] - 30.0).abs() < 1e-9, "shape followed by +30 in x");
-        cmd.undo(&mut shapes, &mut layers, &mut tps, &mut guides, &mut patterns);
+        cmd.undo(&mut shapes, &mut layers, &mut tps, &mut guides, &mut patterns, &mut distances);
         assert_eq!(guides[0].offset, 50.0);
         assert!((shapes[0].shape.bounds().unwrap().0[0]).abs() < 1e-9, "shape back at x=0");
     }

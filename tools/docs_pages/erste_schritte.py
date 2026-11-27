@@ -289,7 +289,7 @@ ersten Start eine Sicherheitswarnung; ohne Apple-Entwicklerkonto lässt sie sich
 <li><strong>Origin axis cross:</strong> draws the router's axis cross (X red, Y green, Z blue) at the job's origin. It follows the chosen origin (corner or centre, surface or table).</li>
 </ul></div>
 <p>The origin button shows or hides the axis cross in both views at once.</p>
-<p>The toolpaths themselves you overlay on the workpiece as lines with the “Show G-code motion in 3D” option; more under [[vorschau-werkzeugwege]].</p>
+<p>The toolpaths themselves you overlay with the “Show G-code motion” option — here in 3D as the machine's moves, and in the 2D view as a band in the cutter's width; more under [[vorschau-werkzeugwege]].</p>
 """,
         "body": """
 <p>Mit dem Knopf <strong>2D/3D</strong> rechts oben (oder <kbd>F2</kbd> für 2D und <kbd>F3</kbd> für 3D) wechseln Sie die Ansicht. In 3D sehen Sie das Material als Körper; was die Werkzeugwege abtragen, ist ausgespart.</p>
@@ -308,7 +308,7 @@ ersten Start eine Sicherheitswarnung; ohne Apple-Entwicklerkonto lässt sie sich
 <li><strong>Nullpunkt-Achsenkreuz:</strong> zeichnet das Achsenkreuz der Fräse (X rot, Y grün, Z blau) an den Nullpunkt des Jobs. Es folgt dem eingestellten Nullpunkt (Ecke oder Mitte, Oberfläche oder Tisch).</li>
 </ul></div>
 <p>Der Knopf für den Nullpunkt blendet das Achsenkreuz in beiden Ansichten zugleich ein oder aus.</p>
-<p>Die Werkzeugwege selbst legen Sie über die Option „Werkzeugpfade im 3D einblenden“ als Linien über das Werkstück; mehr dazu unter [[vorschau-werkzeugwege]].</p>
+<p>Die Werkzeugwege selbst blenden Sie mit der Option „G-Code-Fahrt einblenden“ ein — hier in 3D als die Fahrten der Maschine, und in der 2D-Ansicht als Band in Fräserbreite; mehr dazu unter [[vorschau-werkzeugwege]].</p>
 """,
         "neu": True,
     },

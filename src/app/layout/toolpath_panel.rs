@@ -234,8 +234,8 @@ impl App {
                 });
             });
         });
-        let resp = ui.checkbox(&mut self.paths_in_3d, t!("G-Code-Fahrt im 3D einblenden"))
-            .on_hover_text(t!("Zeigt die Fahrt so, wie der Postprozessor sie schreibt: von Home über die sichere Höhe zum ersten Werkzeugweg, zwischen den Werkzeugwegen und am Ende. Eilgang gestrichelt, Eintauchen gelb."));
+        let resp = ui.checkbox(&mut self.paths_in_3d, t!("G-Code-Fahrt einblenden"))
+            .on_hover_text(t!("Zeigt die Fahrt des Fräsers: in 2D als Band in Werkzeugfarbe und Fräserbreite (beim V-Fräser nach Tiefe), in 3D so, wie der Postprozessor sie schreibt (Eilgang gestrichelt, Eintauchen gelb). So sieht man, wo der Fräser fährt und welche Konturen er berührt."));
         // where the toggle is, for the gcode_motion command to click it with the visible mouse
         self.control_rects.insert("milling.gcode_motion", resp.rect);
     }

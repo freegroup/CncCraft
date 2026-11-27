@@ -20,13 +20,13 @@ impl GuideRemoveCommand {
 }
 
 impl Command for GuideRemoveCommand {
-    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
+    fn execute(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>, _distances: &mut Vec<shape_edit::constraints::Distance>) {
         if let Some(i) = guides.iter().position(|g| g.id == self.id) {
             self.removed = Some((i, guides.remove(i)));
         }
     }
 
-    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>) {
+    fn undo(&mut self, _shapes: &mut Vec<Item>, _layers: &mut Layers, _toolpaths: &mut Vec<Toolpath>, guides: &mut Vec<Guide>, _patterns: &mut Vec<crate::app::Pattern>, _distances: &mut Vec<shape_edit::constraints::Distance>) {
         if let Some((i, g)) = self.removed.take() {
             guides.insert(i.min(guides.len()), g);
         }

@@ -329,8 +329,14 @@ PAGES = [
 <tr><td>All / Selected / Visible</td><td>Which toolpaths the preview shows: all, the one clicked in the list, or the visible ones.</td></tr>
 <tr><td><strong>Speed</strong></td><td>How fast the animation runs.</td></tr>
 <tr><td><strong>Detail</strong></td><td>How finely the material is drawn: “faster” on the left, “more precise” on the right. This only changes the display, not the toolpaths.</td></tr>
-<tr><td>Show G-code motion in 3D</td><td>Overlays the toolpaths as coloured lines on the workpiece.</td></tr>
+<tr><td>Show G-code motion</td><td>Shows where the cutter travels: in 2D as a band, in 3D as the post-processor's moves (see below).</td></tr>
 </table>
+<div class="neu-box"><p><strong>Show G-code motion</strong> works in both views:</p>
+<ul>
+<li>In the <strong>2D design view</strong> the cutter's swept area is drawn over the drawing as a band in the toolpath's colour at 20 % opacity and the width of the cutter — for a V-bit the width follows the depth. The band is computed as the real union of the cutter's path (not many overlaid strokes), so you see clearly where the cutter runs and whether it touches or destroys a neighbouring contour.</li>
+<li>In the <strong>3D preview</strong> it overlays the machine's moves as the post-processor writes them: rapid moves dashed, plunges yellow.</li>
+</ul>
+{{img:gcode-fahrt-2d.png|The cutter paths as bands in the 2D view}}</div>
 <div class="neu-box"><p>The <strong>Detail</strong> slider (0–100 %) lets you choose between a fast rough view and a fine one. In the 3D view the view cube and the origin axis cross also help you keep your bearings.</p></div>
 <h2>Milling time</h2>
 <p>The list gives an estimated milling time per toolpath and, below it, the total time of the visible toolpaths ([[werkzeugwegliste]]). The estimate uses the set feeds and a flat rapid speed; the real time depends on your machine.</p>
@@ -346,8 +352,14 @@ PAGES = [
 <tr><td>Alle / Ausgewählter / Sichtbare</td><td>Welche Werkzeugwege die Vorschau zeigt: alle, der in der Liste angeklickte oder die sichtbaren.</td></tr>
 <tr><td><strong>Tempo</strong></td><td>Wie schnell die Animation läuft.</td></tr>
 <tr><td><strong>Darstellung</strong></td><td>Wie fein das Material gezeichnet wird: „schneller“ links, „genauer“ rechts. Das ändert nur die Anzeige, nicht die Werkzeugwege.</td></tr>
-<tr><td>Werkzeugpfade im 3D einblenden</td><td>Legt die Werkzeugwege als farbige Linien über das Werkstück.</td></tr>
+<tr><td>G-Code-Fahrt einblenden</td><td>Zeigt, wo der Fräser fährt: in 2D als Band, in 3D als die Fahrten des Postprozessors (siehe unten).</td></tr>
 </table>
+<div class="neu-box"><p><strong>G-Code-Fahrt einblenden</strong> wirkt in beiden Ansichten:</p>
+<ul>
+<li>In der <strong>2D-Entwurfsansicht</strong> wird die Fläche, die der Fräser überstreicht, über die Zeichnung gelegt – als Band in der Farbe des Werkzeugwegs mit 20 % Deckkraft und in Fräserbreite; beim V-Fräser folgt die Breite der Tiefe. Das Band wird als echte Vereinigung (Union) der Fräserbahn berechnet, nicht als viele übereinander gezeichnete Striche, sodass man gut sieht, wo der Fräser läuft und ob er eine benachbarte Kontur berührt oder zerstört.</li>
+<li>In der <strong>3D-Vorschau</strong> werden die Fahrten der Maschine so eingeblendet, wie der Postprozessor sie schreibt: Eilgang gestrichelt, Eintauchen gelb.</li>
+</ul>
+{{img:gcode-fahrt-2d.png|Die Fräserbahnen als Bänder in der 2D-Ansicht}}</div>
 <div class="neu-box"><p>Der Regler <strong>Darstellung</strong> (0–100 %) lässt Sie zwischen einer schnellen Grobansicht und einer feinen Darstellung wählen. In der 3D-Ansicht helfen außerdem der Ansichtswürfel und das Achsenkreuz des Nullpunkts bei der Orientierung.</p></div>
 <h2>Fräszeit</h2>
 <p>Die Liste nennt je Werkzeugweg eine geschätzte Fräszeit und darunter die Gesamtzeit der sichtbaren Werkzeugwege ([[werkzeugwegliste]]). Die Schätzung rechnet mit den eingestellten Vorschüben und einer pauschalen Eilganggeschwindigkeit; die echte Zeit hängt von Ihrer Maschine ab.</p>

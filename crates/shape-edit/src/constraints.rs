@@ -1,5 +1,7 @@
 //! Distance constraints between two things on the sheet, as set with the dimension mode ("D"):
-//! point to point (measured horizontally, vertically or straight) and point to line.
+//! point to point (measured horizontally, vertically or straight), point to line, and line to line
+//! (two parallel lines, measured as their perpendicular gap — the constraint drops when they stop
+//! being parallel).
 //!
 //! A constraint is not stored in a shape but in the document's list and points at its two ends
 //! by shape id and index ([`Anchor`]). The ends are picked on the shapes' **corners and centre**
@@ -296,8 +298,16 @@ impl Distance {
         if self.from.shape() == PLATE && self.to.shape() == PLATE {
             return Err("Beide Enden liegen auf der Platte".into());
         }
-        if matches!((self.from, self.to), (Anchor::Edge(..), Anchor::Edge(..))) {
-            return Err("Zwei Linien lassen sich nicht bemaßen: einen Punkt und eine Linie, oder zwei Punkte wählen".into());
+        if let (Anchor::Edge(_, k), Anchor::Edge(_, l)) = (self.from, self.to) {
+            // two lines may be dimensioned only while they are parallel: the gap between them is
+            // the perpendicular distance. Non-parallel lines have no single distance.
+            let (ia, ib) = (find(items, self.from.shape()), find(items, self.to.shape()));
+            let edges = ia.and_then(|a| edge_of(a, k)).zip(ib.and_then(|b| edge_of(b, l)));
+            match edges {
+                Some(((a0, a1), (b0, b1))) if edges_parallel(a0, a1, b0, b1) => {}
+                Some(_) => return Err("Die beiden Linien sind nicht parallel: nur parallele Linien lassen sich so bemaßen".into()),
+                None => return Err("Eine der Linien gibt es nicht mehr".into()),
+            }
         }
         if self.from.shape() == self.to.shape() {
             // the corners and sides of a rectangle or ellipse are those of its box: when it is
@@ -368,7 +378,19 @@ impl Distance {
                 let d = dot([q[0] - e0[0], q[1] - e0[1]], n);
                 Some(Measured { a: [q[0] - n[0] * d, q[1] - n[1] * d], b: q, dir: n, d })
             }
-            (Anchor::Edge(..), Anchor::Edge(..)) => None,
+            (Anchor::Edge(_, k), Anchor::Edge(_, l)) => {
+                // two parallel lines: the perpendicular gap between them. Measured only while the
+                // lines are parallel; once they are not, there is no measurement (and the host drops
+                // the constraint). `a` is the foot on the first line below the second line's start.
+                let (a0, a1) = edge_of(ia, k)?;
+                let (b0, b1) = edge_of(ib, l)?;
+                if !edges_parallel(a0, a1, b0, b1) {
+                    return None;
+                }
+                let n = normal(a0, a1)?;
+                let d = dot([b0[0] - a0[0], b0[1] - a0[1]], n);
+                Some(Measured { a: [b0[0] - n[0] * d, b0[1] - n[1] * d], b: b0, dir: n, d })
+            }
         }
     }
 
@@ -409,6 +431,19 @@ impl Distance {
 fn normal(a: Pt, b: Pt) -> Option<Pt> {
     let u = unit([b[0] - a[0], b[1] - a[1]])?;
     Some([-u[1], u[0]])
+}
+
+/// How far from parallel two lines may be and still count as parallel: the cross product of their
+/// unit directions (|sin θ|) must stay under this. ~0.6° — tight enough that a visibly tilted line
+/// breaks it, loose enough to survive floating-point wobble.
+pub const PARALLEL_TOL: f64 = 0.01;
+
+/// Whether the segment a0→a1 is parallel to b0→b1 (within [`PARALLEL_TOL`]).
+pub fn edges_parallel(a0: Pt, a1: Pt, b0: Pt, b1: Pt) -> bool {
+    match (unit([a1[0] - a0[0], a1[1] - a0[1]]), unit([b1[0] - b0[0], b1[1] - b0[1]])) {
+        (Some(u), Some(v)) => (u[0] * v[1] - u[1] * v[0]).abs() <= PARALLEL_TOL,
+        _ => false,
+    }
 }
 
 /// Whether a shape's own width and height lie along the sheet's axes (a rectangle or ellipse turned
@@ -942,6 +977,25 @@ mod tests {
         c.apply(&mut items, 4.0);
         assert!((point_of(&items[1], 0).unwrap()[1] - 14.0).abs() < 1e-9);
         assert_eq!(point_of(&items[1], 0).unwrap()[0], 25.0, "moved along the normal only");
+    }
+
+    #[test]
+    fn parallel_lines_measure_their_gap_and_break_when_turned() {
+        // two open polylines, each one horizontal segment, 20 apart; edge index 4 is that segment
+        let line = |id: u64, y: f64| Item::new(id, crate::Path::new(vec![[0.0, y], [10.0, y]], false));
+        let mut items = vec![line(1, 0.0), line(2, 20.0)];
+        let c = d(Anchor::Edge(1, 4), Anchor::Edge(2, 4), Axis::Aligned);
+        assert!(c.check(&items).is_ok(), "parallel lines may be dimensioned");
+        let m = c.measure(&items).expect("parallel: has a gap");
+        assert!((m.d.abs() - 20.0).abs() < 1e-9, "the lines are 20 apart, got {}", m.d);
+        // setting the gap to 30 moves the second line along the normal
+        assert!(c.apply(&mut items, 30.0));
+        assert!((c.measure(&items).unwrap().d.abs() - 30.0).abs() < 1e-9);
+        // turn the second line: no longer parallel → no measurement and the check refuses it
+        let turned = items[1].rotated([5.0, 30.0], 20.0);
+        let items2 = vec![items[0].clone(), turned];
+        assert!(c.measure(&items2).is_none(), "not parallel → unmeasurable (host drops it)");
+        assert!(c.check(&items2).is_err(), "not parallel → refused when newly set");
     }
 
     #[test]

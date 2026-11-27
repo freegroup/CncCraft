@@ -65,6 +65,30 @@ impl Region {
         Region::from_contours(&shape.contours())
     }
 
+    /// The area a round cutter of radius `r` sweeps while its centre travels along `polylines`:
+    /// each polyline is buffered by `r` (a capsule with round caps and joins) and the results are
+    /// unioned into one real area. Drawing this once avoids the stacked-transparency artefacts of
+    /// painting many overlapping strokes. Empty when `r <= 0` or there are no segments.
+    pub fn swept(polylines: &[Vec<Pt>], r: f64) -> Self {
+        if r <= 0.0 {
+            return Region::empty();
+        }
+        let lines: Vec<LineString<f64>> = polylines
+            .iter()
+            .filter(|p| p.len() >= 2)
+            .map(|p| LineString::new(p.iter().map(|q| Coord { x: q[0], y: q[1] }).collect()))
+            .collect();
+        if lines.is_empty() {
+            return Region::empty();
+        }
+        // buffer every stroke, then union them all into one area
+        Region(geo::MultiLineString::new(lines).buffer(r)).simplify_in_place(r * 0.02)
+    }
+
+    fn simplify_in_place(self, eps: f64) -> Self {
+        Region(self.0.simplify(eps.max(1e-6)))
+    }
+
     /// Everything covered by any of the shapes.
     pub fn of_all<'a>(shapes: impl IntoIterator<Item = &'a Shape>) -> Self {
         shapes.into_iter().fold(Region::empty(), |acc, s| acc.union(&Region::of(s)))
@@ -129,6 +153,19 @@ impl Region {
             _ => Some(Shape::Compound(Compound::new(paths))),
         }
     }
+
+    /// The region as a list of filled triangles (earcut, holes handled), for drawing it as one
+    /// solid translucent area instead of many overlapping strokes.
+    pub fn triangles(&self) -> Vec<[Pt; 3]> {
+        use geo::TriangulateEarcut;
+        let mut out = Vec::new();
+        for poly in &self.0 .0 {
+            for t in poly.earcut_triangles_iter() {
+                out.push([[t.v1().x, t.v1().y], [t.v2().x, t.v2().y], [t.v3().x, t.v3().y]]);
+            }
+        }
+        out
+    }
 }
 
 #[cfg(test)]
@@ -188,5 +225,17 @@ mod tests {
         assert!(near(c.area(), std::f64::consts::PI * 100.0, 3.0));
         let o = Region::of(&Text::new([0.0, 0.0], "O", 30.0).into());
         assert!(o.rings().iter().any(|r| r.hole), "the O keeps its hole");
+    }
+
+    #[test]
+    fn swept_area_is_a_capsule_unioned_once() {
+        // a 10 mm straight pass, cutter radius 1: a 10×2 rectangle plus two half-discs of r=1.
+        // Two passes over the same line must give the SAME area (union, not double-painted).
+        let one = Region::swept(&[vec![[0.0, 0.0], [10.0, 0.0]]], 1.0);
+        let two = Region::swept(&[vec![[0.0, 0.0], [10.0, 0.0]], vec![[0.0, 0.0], [10.0, 0.0]]], 1.0);
+        let expected = 10.0 * 2.0 + std::f64::consts::PI; // body + two caps
+        assert!(near(one.area(), expected, 0.3), "one pass ≈ {expected}, got {}", one.area());
+        assert!(near(two.area(), one.area(), 0.3), "a repeated pass does not grow the area");
+        assert!(Region::swept(&[vec![[0.0, 0.0], [10.0, 0.0]]], 0.0).is_empty(), "no radius, no band");
     }
 }

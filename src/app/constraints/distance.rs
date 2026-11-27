@@ -165,6 +165,16 @@ impl App {
         if self.distances.len() != before {
             self.status = "Abstand entfernt: eine der Formen gibt es nicht mehr".into();
         }
+        // a line↔line distance only holds while the two lines are parallel. When an edit (or an
+        // undo/redo) leaves them no longer parallel, the constraint can no longer be measured, so it
+        // is dropped. Because `distances` is part of the undo snapshot, a following undo brings the
+        // lines back parallel AND restores this constraint (the removal is part of the undo).
+        let before_parallel = self.distances.len();
+        let items = self.with_plate();
+        self.distances.retain(|c| c.measure(&items).is_some());
+        if self.distances.len() != before_parallel {
+            self.status = "Abstand entfernt: die beiden Linien sind nicht mehr parallel (Rückgängig stellt beides wieder her)".into();
+        }
         let vars = &self.vars_resolved;
         let value = |e: &str| calc::eval(e, vars).ok().filter(|v| *v > 0.0);
         // the plate takes part for a moment, as the last item
@@ -248,10 +258,6 @@ impl App {
                 if h.shape() == constraints::PLATE && f.shape() != constraints::PLATE {
                     std::mem::swap(&mut f, &mut h);
                     self.dim_mode.as_mut().expect("checked above").first = Some(f);
-                }
-                if matches!((f, h), (Anchor::Edge(..), Anchor::Edge(..))) {
-                    self.status = "Zwei Linien lassen sich nicht bemaßen: einen Punkt wählen".into();
-                    return;
                 }
                 if f == h {
                     return;

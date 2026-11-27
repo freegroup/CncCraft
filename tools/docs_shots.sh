@@ -41,4 +41,6 @@ shot material-hartholz.png CNCCRAFT_SHOW_3D=1 CNCCRAFT_MATERIAL=Hardwood
 shot nut-werkzeugweg.png CNCCRAFT_SHOW_EDITOR=slot
 shot taschen-werkzeugweg.png CNCCRAFT_SHOW_EDITOR=pocket
 shot vervielfaeltigen.png CNCCRAFT_SHOW_ARRAY=1
+# the cutter paths shown in the 2D view ("Show G-code motion") as coloured bands
+shot gcode-fahrt-2d.png CNCCRAFT_SHOW_GCODE=1
 rm -rf "$TMP"

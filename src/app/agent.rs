@@ -111,7 +111,7 @@ impl App {
         Ok(format!("clicking {what} in the toolpaths panel"))
     }
 
-    /// Turn the "G-code motion in 3D" overlay on or off by clicking its checkbox in the milling
+    /// Turn the "Show G-code motion" overlay on or off by clicking its checkbox in the milling
     /// panel (the panel is opened first if folded). Nothing is clicked when it is already as asked.
     pub(crate) fn agent_gcode_motion(&mut self, on: bool) -> Result<String, String> {
         if self.paths_in_3d == on {
