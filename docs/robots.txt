@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://freegroup.github.io/CncCraft/sitemap.xml

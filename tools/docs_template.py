@@ -47,6 +47,20 @@ def e(s):
 # on the help home and the product page. Styles: .schwester* in docs_assets/site.css.
 PM_URL = "https://freegroup.github.io/patternmaster/"
 HORU_URL = "https://freegroup.github.io/HoruCNC/"
+
+# Project links: the GitHub repository and its releases (ready-made packages), plus the public base
+# URL of this site (GitHub Pages) for canonical and social-media (Open Graph / Twitter) tags.
+GITHUB_URL = "https://github.com/freegroup/CncCraft"
+RELEASES_URL = "https://github.com/freegroup/CncCraft/releases"
+BASE_URL = "https://freegroup.github.io/CncCraft"
+# A small GitHub mark for the header link.
+GITHUB_SVG = ('<svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">'
+              '<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 '
+              '0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01'
+              '1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 '
+              '0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 '
+              '1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 '
+              '3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>')
 SISTER_LINE = (f'<div>Schwester-Apps: <a href="{PM_URL}" target="_blank" rel="noopener">PatternMaster</a> – Muster fräsen · '
                f'<a href="{HORU_URL}" target="_blank" rel="noopener">HoruCNC</a> – vom Bild zum G-Code</div>')
 SISTER_LINE_EN = (f'<div>Sister apps: <a href="{PM_URL}" target="_blank" rel="noopener">PatternMaster</a> – mill patterns · '
@@ -99,8 +113,17 @@ def rel(depth):
     return "../" * depth if depth else "./"
 
 
-def head(title, depth, desc=""):
+def head(title, depth, desc="", url_tail=""):
     r = rel(depth)
+    # the public address of this page, for the canonical link and the social-media cards. English
+    # lives at BASE_URL/, German at BASE_URL/de/.
+    base = BASE_URL.rstrip("/")
+    lang_root = base if LANG == "en" else f"{base}/de"
+    page_url = f"{lang_root}/{url_tail}" if url_tail else f"{lang_root}/"
+    en_url = f"{base}/{url_tail}" if url_tail else f"{base}/"
+    de_url = f"{base}/de/{url_tail}" if url_tail else f"{base}/de/"
+    social_img = f"{base}/assets/favicon.png"
+    og_locale = "en_US" if LANG == "en" else "de_DE"
     return f"""<!doctype html>
 <html lang="{LANG}">
 <head>
@@ -108,6 +131,22 @@ def head(title, depth, desc=""):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(title)}</title>
 <meta name="description" content="{e(desc)}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{e(page_url)}">
+<link rel="alternate" hreflang="en" href="{e(en_url)}">
+<link rel="alternate" hreflang="de" href="{e(de_url)}">
+<link rel="alternate" hreflang="x-default" href="{e(en_url)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{SITE}">
+<meta property="og:locale" content="{og_locale}">
+<meta property="og:title" content="{e(title)}">
+<meta property="og:description" content="{e(desc)}">
+<meta property="og:url" content="{e(page_url)}">
+<meta property="og:image" content="{e(social_img)}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{e(title)}">
+<meta name="twitter:description" content="{e(desc)}">
+<meta name="twitter:image" content="{e(social_img)}">
 <link rel="icon" type="image/png" href="{r}assets/favicon.png">
 <link rel="stylesheet" href="{r}assets/site.css">
 </head>"""
@@ -145,7 +184,7 @@ def top(depth, current, tail=""):
         cur = ' aria-current="page"' if key == current else ""
         return f'<a href="{href}"{cur}>{label}</a>'
 
-    sub = tr("Version 0.1 · Online help", "Version 0.1 · Onlinehilfe")
+    sub = tr("Online help", "Onlinehilfe")
     return f"""<body data-help-root="{rel(depth - 1) if depth >= 1 else './'}">
 <div class="sprachleiste"><div class="innen">{lang_toggle(depth, tail)}<span>{sub}</span></div></div>
 <header class="kopf"><div class="innen">
@@ -154,6 +193,7 @@ def top(depth, current, tail=""):
 <nav aria-label="{tr("Main menu", "Hauptmenü")}">
 {nav("produkt", r + "index.html", tr("Product", "Produkt"))}
 {nav("hilfe", r + "hilfe/Help/page/home/index.html", tr("Help", "Hilfe"))}
+<a class="github" href="{GITHUB_URL}" target="_blank" rel="noopener" aria-label="GitHub">{GITHUB_SVG}<span>GitHub</span></a>
 </nav>
 <span class="luecke"></span>
 {search_box() if depth else ""}
@@ -166,7 +206,7 @@ def foot(depth):
 <div><strong>{SITE}</strong> · {tr("Design, generate toolpaths, mill.", "Entwerfen, Werkzeugwege berechnen, fräsen.")}</div>
 <div>{e(tr(DISCLAIMER_EN, DISCLAIMER))}</div>
 {tr(SISTER_LINE_EN, SISTER_LINE)}
-<div><a href="{r}hilfe/Help/page/home/index.html">{tr("Help", "Hilfe")}</a> · <a href="{r}hilfe/Help/page/parametrisch-uebersicht/index.html">{tr("Parametric design", "Parametrisch entwerfen")}</a></div>
+<div><a href="{GITHUB_URL}" target="_blank" rel="noopener">GitHub</a> · <a href="{RELEASES_URL}" target="_blank" rel="noopener">{tr("Downloads", "Downloads")}</a> · <a href="{r}hilfe/Help/page/home/index.html">{tr("Help", "Hilfe")}</a> · <a href="{r}hilfe/Help/page/parametrisch-uebersicht/index.html">{tr("Parametric design", "Parametrisch entwerfen")}</a></div>
 </div></footer>
 <script src="{r}assets/search-index.js"></script>
 <script src="{r}assets/site.js"></script>
@@ -207,7 +247,7 @@ def page_html(p, cat, body, categories, order, prev_p, next_p, depth, page_url, 
     nav += (f'<a href="{page_url(prev_p["slug"], depth)}"><small>{tr("Back", "Zurück")}</small>{e(pt(prev_p, "title"))}</a>' if prev_p else "<span></span>")
     nav += (f'<a class="weiter" href="{page_url(next_p["slug"], depth)}"><small>{tr("Next", "Weiter")}</small>{e(pt(next_p, "title"))}</a>' if next_p else "<span></span>")
     nav += "</div>"
-    return (head(f'{pt(p, "title")} – {SITE} {tr("Help", "Hilfe")}', depth, pt(p, "lead")) + top(depth, "hilfe", tail) +
+    return (head(f'{pt(p, "title")} – {SITE} {tr("Help", "Hilfe")}', depth, pt(p, "lead"), tail) + top(depth, "hilfe", tail) +
             f'<div class="rahmen">{sidebar(categories, order, p["slug"], depth, page_url)}'
             f'<main><article>{crumbs}<h1>{e(pt(p, "title"))} {neu}</h1><p class="einleitung">{e(pt(p, "lead"))}</p>{body}</article>{nav}</main></div>' +
             foot(depth))
@@ -225,7 +265,7 @@ def home_html(categories, order, pages, page_url):
                      f'<p>{e(ct(c, "text"))}</p><ul>{lis}</ul>{more}</div>')
     neue = [p for p in order if p.get("neu")]
     neu_list = "".join(f'<li><a href="{page_url(p["slug"], depth)}">{e(pt(p, "title"))}</a> – {e(pt(p, "lead"))}</li>' for p in neue)
-    return (head(f"{SITE} {tr('Help', 'Hilfe')}", depth, tr("Online help for CncCraft: design, toolpaths, preview and output.", "Onlinehilfe zu CncCraft: Entwurf, Werkzeugwege, Vorschau und Ausgabe.")) + top(depth, "hilfe", "hilfe/Help/page/home/index.html") +
+    return (head(f"{SITE} {tr('Help', 'Hilfe')}", depth, tr("Online help for CncCraft: design, toolpaths, preview and output.", "Onlinehilfe zu CncCraft: Entwurf, Werkzeugwege, Vorschau und Ausgabe."), "hilfe/Help/page/home/index.html") + top(depth, "hilfe", "hilfe/Help/page/home/index.html") +
             f'<section class="held"><div class="innen"><h1>{tr("Welcome to the CncCraft help", "Willkommen in der CncCraft-Hilfe")}</h1>'
             f'<p>{tr("Everything about designing, generating toolpaths and output for your CNC router – from the first drawing to the finished G-code file.", "Alles zum Entwerfen, Berechnen von Werkzeugwegen und Ausgeben für Ihre CNC-Fräse – von der ersten Zeichnung bis zur fertigen G-Code-Datei.")}</p>{search_box(tr("What are you looking for? e.g. pocket, variables, tabs …", "Wonach suchen Sie? z. B. Tasche, Variablen, Haltestege …"))}</div></section>'
             f'<div class="inhalt"><div class="karten">{"".join(cards)}</div>'
@@ -348,7 +388,7 @@ def product_html(categories, order, pages, page_url):
     ]
     vorteile_html = "".join(f'<div class="vorteil"><h3>{e(t)}</h3><p>{e(d)}</p></div>' for t, d in vorteile)
     return (head(tr("CncCraft – parametric CAD/CAM for CNC beginners, free", "CncCraft – parametrisches CAD/CAM für CNC-Einsteiger, kostenlos"), depth,
-                 tr("CncCraft: free parametric CAD/CAM for CNC beginners – 2D design with variables and construction lines, toolpaths for CNC routers, a material library and a 3D preview.", "CncCraft: kostenloses parametrisches CAD/CAM für CNC-Einsteiger – 2D-Entwurf mit Variablen und Hilfslinien, Werkzeugwege für CNC-Fräsen, Materialbibliothek und Vorschau in 3D.")) + top(depth, "produkt", "index.html") +
+                 tr("CncCraft: free parametric CAD/CAM for CNC beginners – 2D design with variables and construction lines, toolpaths for CNC routers, a material library and a 3D preview.", "CncCraft: kostenloses parametrisches CAD/CAM für CNC-Einsteiger – 2D-Entwurf mit Variablen und Hilfslinien, Werkzeugwege für CNC-Fräsen, Materialbibliothek und Vorschau in 3D."), "") + top(depth, "produkt", "index.html") +
             f'<section class="produkt-held"><div class="innen"><div><span class="held-marke">{tr("CAD + CAM · Free · for Mac, Windows and Linux", "CAD + CAM · Kostenlos · für Mac, Windows und Linux")}</span><h1>{tr("Parametric CAD/CAM for CNC beginners", "Parametrisches CAD/CAM für CNC-Einsteiger")}</h1>'
             f'<p>{tr("Design (CAD) and generate toolpaths (CAM) in one program: CncCraft takes you from the first drawing to the finished G-code for your CNC router – with dimensions that think along, construction lines from the ruler, cutting values matched to the material and a preview in 2D and 3D. Free, no subscription and no account.", "Entwerfen (CAD) und Werkzeugwege berechnen (CAM) in einem Programm: CncCraft führt Sie von der ersten Zeichnung bis zum fertigen G-Code für Ihre CNC-Fräse – mit Maßen, die mitdenken, Hilfslinien aus dem Lineal, Schnittwerten passend zum Material und Vorschau in 2D und 3D. Kostenlos, ohne Abo und ohne Konto.")}</p>'
             f'<div class="knoepfe"><a class="knopf primaer" href="{link("installation")}">{tr("Installation", "Installation")}</a>'

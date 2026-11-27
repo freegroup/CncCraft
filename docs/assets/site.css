@@ -61,6 +61,8 @@ kbd {
 .kopf nav { display: flex; gap: 16px; margin-left: 8px; }
 .kopf nav a { color: var(--gedaempft); font-size: 15px; }
 .kopf nav a:hover, .kopf nav a[aria-current] { color: var(--text); text-decoration: none; }
+.kopf nav a.github { display: inline-flex; align-items: center; gap: 6px; }
+.kopf nav a.github svg { display: block; }
 .kopf .luecke { flex: 1; }
 .menue-knopf { display: none; border: 1px solid var(--linie); background: var(--flaeche); color: var(--text); border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
 

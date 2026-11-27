@@ -58,9 +58,24 @@ PAGES = [
     {
         "slug": "installation", "cat": C, "title": "Installation",
         "title_en": "Installation",
-        "lead": "CncCraft wird aus dem Quelltext gebaut; das Skript <code>build.sh</code> erzeugt daraus die Pakete für macOS, Windows und Linux.",
-        "lead_en": "CncCraft is built from source; the <code>build.sh</code> script produces the packages for macOS, Windows and Linux.",
+        "lead": "Fertige Pakete für macOS, Windows und Linux gibt es bei den GitHub-Releases – oder bauen Sie CncCraft selbst aus dem Quelltext.",
+        "lead_en": "Download ready-made packages for macOS, Windows and Linux from the GitHub releases – or build CncCraft yourself from source.",
         "body_en": """
+<h2>Download (recommended)</h2>
+<p>The quickest way is a ready-made package from the releases page. Pick the file for your system,
+open it and start CncCraft – no compiler needed.</p>
+<p><a href="https://github.com/freegroup/CncCraft/releases"><strong>Downloads on GitHub →</strong></a></p>
+<table>
+<tr><th>System</th><th>File</th></tr>
+<tr><td>macOS (Apple Silicon / Intel)</td><td><code>.dmg</code> or <code>.zip</code></td></tr>
+<tr><td>Windows</td><td>the installer (<code>.exe</code>) or <code>.zip</code></td></tr>
+<tr><td>Linux (x86_64)</td><td><code>.deb</code> or <code>.tar.gz</code></td></tr>
+</table>
+<div class="hinweis"><p>The Mac app is only “ad hoc” signed. On other Macs a security warning
+appears on first launch; without an Apple developer account it cannot be avoided.</p></div>
+<p>The source code lives on GitHub too:
+<a href="https://github.com/freegroup/CncCraft">github.com/freegroup/CncCraft</a>.</p>
+<h2>Building from source</h2>
 <p>All packages are produced with one call to <code>build.sh</code> (or just <code>make</code>) in the program's folder. Finished files land in the <code>dist/</code> subfolder.</p>
 <table>
 <tr><th>Command</th><th>Result</th><th>Runs on</th></tr>
@@ -77,12 +92,26 @@ PAGES = [
 <li>For the Windows installer: Inno Setup.</li>
 </ul>
 <h2>Building packages on GitHub</h2>
-<p>If you have no Windows or Linux machines of your own, you can have all packages built on GitHub: the included workflow <code>.github/workflows/release.yml</code> starts as soon as a version tag like <code>v0.1.0</code> is pushed, and attaches the packages to the release.</p>
-<div class="hinweis"><p>The Mac app is only “ad hoc” signed. On other Macs a security warning appears on first launch; without an Apple developer account it cannot be avoided. The Windows and Linux routes are described but have not yet been tried on every system.</p></div>
+<p>If you have no Windows or Linux machines of your own, you can have all packages built on GitHub: the included workflow <code>.github/workflows/release.yml</code> starts as soon as a version tag like <code>v0.1.0</code> is pushed, and attaches the packages to the <a href="https://github.com/freegroup/CncCraft/releases">release</a>.</p>
 <h2>Checking that it runs</h2>
 <p>With <code>cnccraft --selftest</code> the program runs a self-test and reports every step. With <code>cnccraft --screenshot image.png</code> it saves a picture of the window without any input from you – that is how the pictures in this help were made.</p>
 """,
         "body": """
+<h2>Herunterladen (empfohlen)</h2>
+<p>Am schnellsten geht es mit einem fertigen Paket von der Releases-Seite. Wählen Sie die Datei für
+Ihr System, öffnen Sie sie und starten Sie CncCraft – kein Compiler nötig.</p>
+<p><a href="https://github.com/freegroup/CncCraft/releases"><strong>Downloads bei GitHub →</strong></a></p>
+<table>
+<tr><th>System</th><th>Datei</th></tr>
+<tr><td>macOS (Apple Silicon / Intel)</td><td><code>.dmg</code> oder <code>.zip</code></td></tr>
+<tr><td>Windows</td><td>das Installationsprogramm (<code>.exe</code>) oder <code>.zip</code></td></tr>
+<tr><td>Linux (x86_64)</td><td><code>.deb</code> oder <code>.tar.gz</code></td></tr>
+</table>
+<div class="hinweis"><p>Die Mac-App ist nur „ad hoc“ signiert. Auf fremden Macs erscheint daher beim
+ersten Start eine Sicherheitswarnung; ohne Apple-Entwicklerkonto lässt sie sich nicht vermeiden.</p></div>
+<p>Der Quelltext liegt ebenfalls bei GitHub:
+<a href="https://github.com/freegroup/CncCraft">github.com/freegroup/CncCraft</a>.</p>
+<h2>Selbst aus dem Quelltext bauen</h2>
 <p>Alle Pakete entstehen mit einem Aufruf von <code>build.sh</code> (oder kurz <code>make</code>) im Ordner des Programms. Fertige Dateien landen im Unterordner <code>dist/</code>.</p>
 <table>
 <tr><th>Befehl</th><th>Ergebnis</th><th>Läuft auf</th></tr>
@@ -99,8 +128,7 @@ PAGES = [
 <li>Für das Windows-Installationsprogramm: Inno Setup.</li>
 </ul>
 <h2>Pakete bei GitHub bauen lassen</h2>
-<p>Wer keine eigenen Windows- oder Linux-Rechner hat, kann alle Pakete bei GitHub bauen lassen: Die mitgelieferte Arbeitsanweisung <code>.github/workflows/release.yml</code> startet, sobald ein Versions-Tag wie <code>v0.1.0</code> hochgeladen wird, und hängt die Pakete an die Veröffentlichung.</p>
-<div class="hinweis"><p>Die Mac-App ist nur „ad hoc“ signiert. Auf fremden Macs erscheint daher beim ersten Start eine Sicherheitswarnung; ohne Apple-Entwicklerkonto lässt sie sich nicht vermeiden. Die Wege für Windows und Linux sind beschrieben, wurden aber bisher nicht auf allen Systemen ausprobiert.</p></div>
+<p>Wer keine eigenen Windows- oder Linux-Rechner hat, kann alle Pakete bei GitHub bauen lassen: Die mitgelieferte Arbeitsanweisung <code>.github/workflows/release.yml</code> startet, sobald ein Versions-Tag wie <code>v0.1.0</code> hochgeladen wird, und hängt die Pakete an die <a href="https://github.com/freegroup/CncCraft/releases">Veröffentlichung</a>.</p>
 <h2>Prüfen, ob es läuft</h2>
 <p>Mit <code>cnccraft --selftest</code> führt das Programm einen Selbsttest aus und meldet jeden Schritt. Mit <code>cnccraft --screenshot bild.png</code> speichert es ein Bild des Fensters, ohne dass Sie etwas bedienen müssen – so sind die Abbildungen dieser Hilfe entstanden.</p>
 """,

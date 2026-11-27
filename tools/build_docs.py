@@ -189,11 +189,39 @@ def main():
         shutil.rmtree(de_root / "assets")
     shutil.copytree(OUT / "assets", de_root / "assets")
     build_lang("de", de_root, pages, cats, order)
+    write_seo_files(order)
     known = {p["slug"] for p in order}
     stale = [d.name for d in (OUT / HELP / PAGE_DIR).iterdir() if d.is_dir() and d.name not in known | {"home"}]
     if stale:
         print("Hinweis: nicht mehr benutzte Seitenordner (von Hand löschen):", ", ".join(sorted(stale)))
     print(f"{len(order)} Seiten × 2 Sprachen, {len(CATEGORIES)} Kategorien -> {OUT}")
+
+
+def write_seo_files(order):
+    """Write robots.txt and a sitemap.xml so search engines find and index every page, in both
+    languages, with hreflang alternates between them."""
+    base = T.BASE_URL.rstrip("/")
+    tails = ["", "index.html", f"{HELP}/{PAGE_DIR}/home/index.html"]
+    tails += [f"{HELP}/{PAGE_DIR}/{p['slug']}/index.html" for p in order]
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">']
+    seen = set()
+    for tail in tails:
+        if tail in seen:
+            continue
+        seen.add(tail)
+        en = f"{base}/{tail}" if tail else f"{base}/"
+        de = f"{base}/de/{tail}" if tail else f"{base}/de/"
+        for loc, alt_en, alt_de in ((en, en, de), (de, en, de)):
+            lines.append("  <url>")
+            lines.append(f"    <loc>{loc}</loc>")
+            lines.append(f'    <xhtml:link rel="alternate" hreflang="en" href="{alt_en}"/>')
+            lines.append(f'    <xhtml:link rel="alternate" hreflang="de" href="{alt_de}"/>')
+            lines.append(f'    <xhtml:link rel="alternate" hreflang="x-default" href="{alt_en}"/>')
+            lines.append("  </url>")
+    lines.append("</urlset>")
+    (OUT / "sitemap.xml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (OUT / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
