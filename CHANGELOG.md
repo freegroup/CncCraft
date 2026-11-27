@@ -1,3 +1,15 @@
+# [1.31.0](https://github.com/freegroup/CncCraft/compare/v1.30.1...v1.31.0) (2026-11-27)
+
+
+### Bug Fixes
+
+* keep rounded corners in milling regions ([890d588](https://github.com/freegroup/CncCraft/commit/890d5888bff2e028fe0492cef9c9868216279ca9))
+
+
+### Features
+
+* caption overlay for help screenshots via CNCCRAFT_CAPTION ([f11d0b7](https://github.com/freegroup/CncCraft/commit/f11d0b72c57aa3f7500697e26f644d7202842866))
+
 ## [1.30.1](https://github.com/freegroup/CncCraft/compare/v1.30.0...v1.30.1) (2026-11-27)
 
 
