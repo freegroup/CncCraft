@@ -1,3 +1,10 @@
+## [1.34.1](https://github.com/freegroup/CncCraft/compare/v1.34.0...v1.34.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* split vector/trim.rs into a trim/ module ([c0a053b](https://github.com/freegroup/CncCraft/commit/c0a053b4493fefb7c9c32c1c2acdad16764694ea))
+
 # [1.34.0](https://github.com/freegroup/CncCraft/compare/v1.33.0...v1.34.0) (2026-11-28)
 
 
