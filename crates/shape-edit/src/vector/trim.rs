@@ -198,6 +198,12 @@ fn arc_contains(arc: &Arc, phi: f64) -> bool {
     rel <= sweep.abs() + 1e-9 || rel >= TAU - 1e-9
 }
 
+/// Whether the world point `p` (taken to be on the arc's circle) lies within the arc's sweep — the
+/// angle test of [`arc_contains`], for callers that have a point rather than an angle.
+pub fn arc_has_point(arc: &Arc, p: Pt) -> bool {
+    arc_contains(arc, (p[1] - arc.center[1]).atan2(p[0] - arc.center[0]))
+}
+
 /// The places (0..1 along the arc, from its start in its own direction) where `arc` crosses any of
 /// the cutters, sorted and without repeats. A full circle has no ends, so every crossing counts;
 /// an open arc's own ends are no cuts.

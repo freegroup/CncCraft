@@ -100,6 +100,17 @@ pub trait Form {
     fn scaled(&self, anchor: Pt, sx: f64, sy: f64) -> Shape;
     /// Mirror about the line through `axis`.
     fn mirrored(&self, axis: Pt, flip: Flip) -> Shape;
+
+    /// Cut this shape where it crosses the `cutters`, into the pieces it falls apart into — each
+    /// shape class decides how, so its kind is kept where it can be (see each shape's own file).
+    /// The default splits the shape's one outline into open polylines ([`crate::vector::trim`]);
+    /// a circle or an arc overrides it to stay round (arcs), a spline to split its exact curve
+    /// without reshaping it. `None` means "I don't trim that way — use my outlines" (the host then
+    /// handles compound shapes and the no-crossing case). An empty list means nothing crossed.
+    fn trim(&self, cutters: &crate::vector::trim::Cutters) -> Option<Vec<Shape>> {
+        let outline = self.contours().into_iter().next()?;
+        Some(crate::vector::trim::split_at_crossings(&outline, cutters).into_iter().map(|c| Path::new(c.pts, false).into()).collect())
+    }
 }
 
 /// Any shape.
@@ -161,6 +172,12 @@ impl Shape {
     }
     pub fn mirrored(&self, axis: Pt, flip: Flip) -> Shape {
         each!(self, f => f.mirrored(axis, flip))
+    }
+    /// Cut this shape at its crossings with `cutters`, into the pieces it falls apart into, each
+    /// keeping its kind where it can (see [`Form::trim`]). `None` leaves the host to split the
+    /// shape's outlines itself (a compound shape with holes).
+    pub fn trim(&self, cutters: &crate::vector::trim::Cutters) -> Option<Vec<Shape>> {
+        each!(self, f => f.trim(cutters))
     }
     pub fn bounds(&self) -> Option<(Pt, Pt)> {
         bounds_of(&self.contours())

@@ -116,6 +116,12 @@ impl Form for Arc {
         let (start, end) = if s <= e { (s, e) } else { (e, s) };
         Arc { center, radius: self.radius, start, end }.into()
     }
+
+    /// Trimming an arc keeps it round: it falls apart into arcs on the same circle, each one
+    /// starting and ending exactly where it was cut (see [`crate::vector::trim::split_arc_at_crossings`]).
+    fn trim(&self, cutters: &crate::vector::trim::Cutters) -> Option<Vec<Shape>> {
+        Some(crate::vector::trim::split_arc_at_crossings(self, cutters).into_iter().map(Into::into).collect())
+    }
 }
 
 #[cfg(test)]

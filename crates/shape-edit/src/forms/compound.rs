@@ -55,4 +55,10 @@ impl Form for Compound {
     fn mirrored(&self, axis: Pt, flip: Flip) -> Shape {
         self.each(|p| p.mirrored(axis, flip))
     }
+
+    /// A compound shape has several outlines (a shape with holes): trimming it is the host's job,
+    /// which cuts only the outline nearest the pointer and keeps the rest together. `None` says so.
+    fn trim(&self, _cutters: &crate::vector::trim::Cutters) -> Option<Vec<Shape>> {
+        None
+    }
 }

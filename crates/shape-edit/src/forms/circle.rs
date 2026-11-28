@@ -55,6 +55,13 @@ impl Form for Circle {
     fn mirrored(&self, axis: Pt, flip: Flip) -> Shape {
         Circle { center: flip_point(self.center, axis, flip), ..*self }.into()
     }
+
+    /// Trimming a circle keeps it round: it becomes arcs on the same circle, each cut exactly where
+    /// it crosses. A circle is the arc once round from 0° (see [`crate::Arc`]).
+    fn trim(&self, cutters: &crate::vector::trim::Cutters) -> Option<Vec<Shape>> {
+        let ring = crate::Arc::new(self.center, self.radius, 0.0, std::f64::consts::TAU);
+        Some(crate::vector::trim::split_arc_at_crossings(&ring, cutters).into_iter().map(Into::into).collect())
+    }
 }
 
 impl Copy for Circle {}
