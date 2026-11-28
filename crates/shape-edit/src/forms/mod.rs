@@ -23,6 +23,7 @@ pub use polygon::Polygon;
 pub use rect::Rect;
 pub use ref_image::RefImage;
 pub use spline::{Spline, SplineNode};
+pub(crate) use spline::cubic;
 pub use text::Text;
 
 use crate::geometry::{bounds_of, Contour};
