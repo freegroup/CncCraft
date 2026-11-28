@@ -69,6 +69,9 @@ impl App {
                     if icon_button_tip(ui, Icon::Align, self.align_mode.is_some(), Tip::new(t!("Waagrecht / Senkrecht"), t!("Eine Linie oder zwei Punkte wählen; CncCraft legt sie waagrecht oder senkrecht fest.")).shortcut("H")).clicked() {
                         self.toggle_align_mode();
                     }
+                    if icon_button_tip(ui, Icon::OnLine, self.on_line_mode.is_some(), Tip::new(t!("Punkt auf Linie"), t!("Einen Punkt und eine Linie wählen (beliebige Reihenfolge); der Punkt bleibt auf der Linie. In Fusion 360 „Coincident“.")).shortcut("K")).clicked() {
+                        self.toggle_on_line_mode();
+                    }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if icon_button(ui, Icon::ZoomSelection, false, &t!("Auf die Auswahl zoomen")).clicked() {

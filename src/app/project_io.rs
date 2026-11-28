@@ -25,7 +25,7 @@ impl App {
     /// Write the project to `path` as JSON (pattern children are left out, as references). Shared by
     /// saving and the round-trip self-test.
     pub(super) fn write_project(&self, path: &std::path::Path) -> Result<(), String> {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), on_lines: self.on_lines.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
         serde_json::to_string_pretty(&proj).map_err(|e| e.to_string()).and_then(|s| std::fs::write(path, s).map_err(|e| e.to_string()))
     }
 
@@ -48,6 +48,7 @@ impl App {
                 self.vars = p.vars;
                 self.distances = p.constraints;
                 self.aligns = p.aligns;
+                self.on_lines = p.on_lines;
                 self.guides = p.guides;
                 self.guides_locked = p.guides_locked;
                 self.patterns = p.patterns;

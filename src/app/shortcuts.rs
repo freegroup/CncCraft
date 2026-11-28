@@ -41,6 +41,8 @@ pub(super) enum Action {
     Dimension,
     /// The level/upright mode: keep a line level or upright.
     Align,
+    /// The point-on-line (Coincident) mode: keep a point sitting on a line.
+    OnLine,
     /// A drawing tool by one key: L line, R rectangle, C circle.
     Select,
     Line,
@@ -73,6 +75,7 @@ pub(super) const SHORTCUTS: &[Shortcut] = &[
     sc(Action::NodeEdit, Key::N, false, false, tr!("Ausgewählten Vektor im Knotenmodus bearbeiten / zurück"), HINT),
     sc(Action::Dimension, Key::D, false, false, tr!("Bemaßen: Abstand zwischen Punkten und Linien festlegen"), tr!("geschätzt (wie in Fusion 360)")),
     sc(Action::Align, Key::H, false, false, tr!("Waagrecht/Senkrecht: eine Linie waagrecht oder senkrecht festlegen"), tr!("gewünscht (wie in Fusion 360)")),
+    sc(Action::OnLine, Key::K, false, false, tr!("Punkt auf Linie (Coincident): einen Punkt auf einer Linie halten"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Select, Key::S, false, false, tr!("Auswählen (Selektionsmodus)"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::Line, Key::L, false, false, tr!("Linie zeichnen"), tr!("gewünscht (wie in Fusion 360)")),
     sc(Action::SplineTool, Key::P, false, false, tr!("Spline zeichnen"), tr!("gewünscht")),

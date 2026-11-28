@@ -439,12 +439,12 @@ impl Editable for Item {
         matches!(self.shape, Shape::Circle(_) | Shape::Arc(_) | Shape::RefImage(_))
     }
 
-    /// A circle and an ellipse show a ring with side handles, a straight line (an open vector of
-    /// two nodes) shows its two ends; everything else the box.
+    /// A circle and an ellipse show a ring with side handles, an open vector (a line or a polyline)
+    /// shows its nodes and segments to edit one by one; everything else the box.
     fn selection_style(&self) -> crate::SelectionStyle {
         match &self.shape {
             Shape::Circle(_) | Shape::Ellipse(_) => crate::SelectionStyle::Ring,
-            Shape::Path(p) if !p.closed && p.points.len() == 2 => crate::SelectionStyle::Ends,
+            Shape::Path(p) if !p.closed && p.points.len() >= 2 => crate::SelectionStyle::Polyline,
             _ => crate::SelectionStyle::Box,
         }
     }
@@ -937,12 +937,12 @@ mod tests {
         assert_eq!(style(&[1]), SelectionStyle::Box);
         assert_eq!(style(&[2]), SelectionStyle::Ring);
         assert_eq!(style(&[3]), SelectionStyle::Ring);
-        assert_eq!(style(&[4]), SelectionStyle::Ends, "a straight line");
-        assert_eq!(style(&[5]), SelectionStyle::Box, "a vector of three nodes");
+        assert_eq!(style(&[4]), SelectionStyle::Polyline, "a straight line");
+        assert_eq!(style(&[5]), SelectionStyle::Polyline, "an open vector of three nodes");
         assert_eq!(style(&[6]), SelectionStyle::Box);
         assert_eq!(style(&[2, 4]), SelectionStyle::Box, "several shapes: the box");
 
-        // a ring answers only on its four sides, a line has no box handles but its two ends
+        // a ring answers only on its four sides, a line has no box handles but a handle per node
         let mut ed = Editor::default();
         ed.selection = vec![2];
         assert_eq!(ed.visible_handles(&items).len(), 4);
@@ -954,7 +954,7 @@ mod tests {
         let mut items = items;
         ed.selection = vec![4];
         assert!(ed.visible_handles(&items).is_empty());
-        assert_eq!(ed.end_handles(&items).len(), 2);
+        assert_eq!(ed.node_handles(&items).len(), 2);
         // pressing on the end starts moving that end; the other stays
         assert_eq!(ed.press(&items, [30.0, 50.0], VIEW, Tool::Select, false), Started::Node);
         ed.drag(&mut items, [34.0, 56.0], false);
@@ -971,5 +971,137 @@ mod tests {
         assert!((c.radius - 10.0).abs() < 1e-6, "radius {}", c.radius);
         // the middle of the line moves the whole line
         assert_eq!(ed.press(&items, [17.0, 48.0], VIEW, Tool::Select, false), Started::Move);
+    }
+
+    #[test]
+    fn an_open_polyline_is_edited_node_by_node_and_segment_by_segment() {
+        use crate::{Outcome, SelectionStyle};
+        // an L: (0,0) → (40,0) → (40,30); open, so it shows its nodes, not a box
+        let mut items = vec![Item::new(1, Path::new(vec![[0.0, 0.0], [40.0, 0.0], [40.0, 30.0]], false))];
+        let mut ed = Editor::default();
+        ed.selection = vec![1];
+        assert_eq!(ed.style(&items), SelectionStyle::Polyline);
+        assert!(ed.visible_handles(&items).is_empty(), "no box handles");
+        assert_eq!(ed.node_handles(&items).len(), 3, "a handle on every node");
+        assert!(items[0].shape.decoration().is_empty(), "no width/height for an open polyline");
+
+        // a node drags freely, in any direction; the others stay
+        assert_eq!(ed.press(&items, [40.0, 30.0], VIEW, Tool::Select, false), Started::Node);
+        ed.drag(&mut items, [47.0, 36.0], false);
+        assert_eq!(ed.release(&items), Outcome::NodeMoved);
+        assert_eq!(items[0].nodes().unwrap(), vec![[0.0, 0.0], [40.0, 0.0], [47.0, 36.0]]);
+
+        // the bottom segment drags parallel to itself: up moves it, sideways is ignored; its free
+        // start goes straight up, its other end slides along the neighbour, which keeps its angle
+        assert_eq!(ed.press(&items, [12.0, 0.0], VIEW, Tool::Select, false), Started::Segment);
+        assert_eq!(ed.active_segment, Some((1, 0)), "the segment is picked");
+        assert_eq!(ed.active_node, None, "a node and a segment are never picked at once");
+        ed.drag(&mut items, [25.0, 5.0], false);
+        assert_eq!(ed.release(&items), Outcome::NodeMoved);
+        let n = items[0].nodes().unwrap();
+        assert_eq!(n[0], [0.0, 5.0], "the free start went straight up");
+        assert_eq!(n[2], [47.0, 36.0], "the neighbour's far node stays");
+        assert!((n[1][1] - 5.0).abs() < 1e-9, "the segment stayed level, now at y = 5");
+        let turn = |p: Pt, q: Pt| (q[1] - p[1]).atan2(q[0] - p[0]);
+        assert!((turn(n[1], n[2]) - turn([40.0, 0.0], [47.0, 36.0])).abs() < 1e-9, "the neighbour kept its angle");
+
+        // a click on a segment without moving only picks it
+        assert_eq!(ed.press(&items, [20.0, 5.0], VIEW, Tool::Select, false), Started::Segment);
+        assert_eq!(ed.release(&items), Outcome::Selected);
+        // an arrow key across it moves it across; along it does nothing
+        assert!(ed.nudge(&mut items, Tool::Select, 0.0, 1.0));
+        assert!(!ed.nudge(&mut items, Tool::Select, 1.0, 0.0), "a segment never slides along itself");
+        assert_eq!(items[0].nodes().unwrap()[0], [0.0, 6.0]);
+
+        // the centre mark moves the whole polyline
+        let c = ed.centre_mark(&items).unwrap();
+        assert_eq!(ed.press(&items, c, VIEW, Tool::Select, false), Started::Move);
+        ed.drag(&mut items, [c[0] + 10.0, c[1]], false);
+        assert_eq!(ed.release(&items), Outcome::Moved);
+        assert_eq!(items[0].nodes().unwrap()[0], [10.0, 6.0], "every node went along");
+        assert_eq!(ed.active_segment, None, "moving the whole lets the picked segment go");
+    }
+
+    #[test]
+    fn moving_a_segment_parallel_keeps_every_angle() {
+        // a U: (0,30) ↓ (0,0) → (40,0) ↑ (40,30), plus a slanted tail (40,30) → (60,50)
+        let u = |pts: Vec<Pt>| Item::new(1, Path::new(pts, false));
+        let mut items = vec![u(vec![[0.0, 30.0], [0.0, 0.0], [40.0, 0.0], [40.0, 30.0], [60.0, 50.0]])];
+        let angles = |it: &Item| it.nodes().unwrap().windows(2).map(|w| (w[1][1] - w[0][1]).atan2(w[1][0] - w[0][0])).collect::<Vec<f64>>();
+        let before = angles(&items[0]);
+        let mut ed = Editor::default();
+        // nothing selected yet: a drag on a segment picks that segment and moves it alone
+        // the bottom goes down by 10: the two uprights get longer, nothing turns
+        assert_eq!(ed.press(&items, [20.0, 0.0], VIEW, Tool::Select, false), Started::Segment);
+        ed.drag(&mut items, [20.0, -10.0], false);
+        ed.release(&items);
+        assert_eq!(items[0].nodes().unwrap(), vec![[0.0, 30.0], [0.0, -10.0], [40.0, -10.0], [40.0, 30.0], [60.0, 50.0]]);
+        // the right upright moves right by 5: the bottom gets longer, the slanted tail shorter, and
+        // its shared node slides along the tail's own direction
+        assert_eq!(ed.press(&items, [40.0, 10.0], VIEW, Tool::Select, false), Started::Segment);
+        ed.drag(&mut items, [45.0, 10.0], false);
+        ed.release(&items);
+        let n = items[0].nodes().unwrap();
+        assert!((n[2][0] - 45.0).abs() < 1e-9 && (n[2][1] + 10.0).abs() < 1e-9, "the bottom grew to x = 45: {n:?}");
+        assert!((n[3][0] - 45.0).abs() < 1e-9 && (n[3][1] - 35.0).abs() < 1e-9, "the top end slid up the 45° tail: {n:?}");
+        assert_eq!(n[4], [60.0, 50.0], "the tail's far node stays");
+        for (b, a) in before.iter().zip(angles(&items[0])) {
+            assert!((b - a).abs() < 1e-9, "every segment kept its angle: {before:?} → {:?}", angles(&items[0]));
+        }
+        // shrinking a neighbour through zero length would turn it round: that shift is refused
+        let same = items[0].clone();
+        assert_eq!(ed.press(&items, [45.0, 10.0], VIEW, Tool::Select, false), Started::Segment);
+        ed.drag(&mut items, [80.0, 10.0], false);
+        ed.release(&items);
+        assert_eq!(items[0], same, "no segment may flip, so the shape stays at its last good place");
+    }
+
+    #[test]
+    fn a_press_on_the_selection_moves_it_all_a_press_beside_it_picks_one_segment() {
+        use crate::Outcome;
+        // a Z: (0,0) → (40,0) → (0,30) → (40,30)
+        let mut items = vec![Item::new(1, Path::new(vec![[0.0, 0.0], [40.0, 0.0], [0.0, 30.0], [40.0, 30.0]], false))];
+        let mut ed = Editor::default();
+        // a selection box round it selects the whole polyline, nothing of it picked
+        assert_eq!(ed.press(&items, [-5.0, -5.0], VIEW, Tool::Select, false), Started::Band);
+        ed.drag(&mut items, [45.0, 35.0], false);
+        assert_eq!(ed.release(&items), Outcome::Selected);
+        assert_eq!(ed.selection, vec![1]);
+        assert!(ed.polyline_whole(&items), "the whole polyline is selected");
+
+        // a drag on any of its segments now moves the whole selection
+        assert_eq!(ed.press(&items, [20.0, 30.0], VIEW, Tool::Select, false), Started::Move);
+        ed.drag(&mut items, [25.0, 33.0], false);
+        assert_eq!(ed.release(&items), Outcome::Moved);
+        assert_eq!(items[0].nodes().unwrap(), vec![[5.0, 3.0], [45.0, 3.0], [5.0, 33.0], [45.0, 33.0]], "everything moved together");
+        assert!(ed.polyline_whole(&items), "still all selected after the move");
+
+        // a click on a segment of the whole selection (no drag) narrows it to that segment
+        assert_eq!(ed.press(&items, [25.0, 33.0], VIEW, Tool::Select, false), Started::Move);
+        assert_eq!(ed.release(&items), Outcome::Selected);
+        assert_eq!(ed.active_segment, Some((1, 2)), "just the top segment is picked now");
+
+        // with one segment picked, a drag on another segment picks that one and moves it alone
+        assert_eq!(ed.press(&items, [25.0, 3.0], VIEW, Tool::Select, false), Started::Segment);
+        assert_eq!(ed.active_segment, Some((1, 0)), "the bottom segment is the selection now");
+        ed.drag(&mut items, [25.0, -1.0], false);
+        assert_eq!(ed.release(&items), Outcome::NodeMoved);
+        let n = items[0].nodes().unwrap();
+        assert_eq!(n[0], [5.0, -1.0], "the bottom's free start went down");
+        assert_eq!(n[3], [45.0, 33.0], "the top segment stayed");
+        assert!((n[1][1] + 1.0).abs() < 1e-9, "the bottom moved alone, parallel");
+    }
+
+    #[test]
+    fn a_dragged_segment_snaps_its_line_onto_a_node() {
+        use crate::snap::{SnapPolicies, Snapping};
+        // the bottom segment of an L is pulled up to 9.6; a lone node of another shape sits at y = 10
+        let mut items = vec![Item::new(1, Path::new(vec![[0.0, 0.0], [40.0, 0.0], [40.0, 30.0]], false)), Item::new(2, Path::new(vec![[80.0, 10.0], [90.0, 20.0]], false))];
+        let mut ed = Editor::default();
+        ed.snapping = Snapping { policies: SnapPolicies::default(), grid: None, radius: 1.0 };
+        assert_eq!(ed.press(&items, [20.0, 0.0], VIEW, Tool::Select, false), Started::Segment);
+        ed.drag(&mut items, [20.0, 9.6], false);
+        assert_eq!(items[0].nodes().unwrap()[0], [0.0, 10.0], "the moved line runs through the node at y = 10");
+        assert!(ed.last_snap.is_some(), "the catch is marked");
     }
 }

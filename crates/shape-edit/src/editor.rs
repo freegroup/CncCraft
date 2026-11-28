@@ -35,6 +35,10 @@ pub enum Gesture<S> {
     /// (a little outside it, on the drawn handle): only the movement since then counts.
     Resize { handle: Handle, anchor: Pt, grip: Pt, start: Pt, orig: Vec<S> },
     Node { index: usize, orig: S },
+    /// Dragging one segment of an open vector parallel to itself: `index` is its place in
+    /// [`Editable::segments`], `start` where the pointer went down. Both its nodes move by the
+    /// pointer's movement across the segment; movement along it is ignored.
+    Segment { index: usize, start: Pt, orig: S },
     Band { start: Pt, end: Pt, additive: bool },
     /// Turning the selection about `center`; `angle` is the current turn in degrees.
     Rotate { center: Pt, start: Pt, angle: f64, orig: Vec<S> },
@@ -48,6 +52,8 @@ pub enum Started {
     Move,
     Resize(Handle),
     Node,
+    /// A segment of an open vector, to be dragged parallel to itself.
+    Segment,
     Rotate,
     Grip(GripKind),
     Band,
@@ -58,7 +64,7 @@ pub enum Started {
 impl Started {
     /// Whether this gesture may change the shapes (the host keeps an undo step for it).
     pub fn edits(self) -> bool {
-        matches!(self, Started::Move | Started::Resize(_) | Started::Node | Started::Rotate | Started::Grip(_))
+        matches!(self, Started::Move | Started::Resize(_) | Started::Node | Started::Segment | Started::Rotate | Started::Grip(_))
     }
 }
 
@@ -86,8 +92,11 @@ impl Outcome {
 #[derive(Clone, Debug)]
 pub struct Editor<S> {
     pub selection: Vec<u64>,
-    /// In node mode: the shape id and node index last picked.
+    /// In node mode, or on a selected open vector: the shape id and node index last picked.
     pub active_node: Option<(u64, usize)>,
+    /// On a selected open vector: the shape id and segment (its place in [`Editable::segments`])
+    /// last picked. A node and a segment are never picked at once.
+    pub active_segment: Option<(u64, usize)>,
     /// Shapes on this layer are picked first, even if another shape is on top.
     pub priority_layer: u32,
     /// Snapping used while moving, resizing and dragging nodes.
@@ -115,6 +124,9 @@ pub struct Editor<S> {
     /// The press landed on one of several selected shapes: if it ends without moving, the click
     /// narrows the selection to that shape (and its group).
     narrow_on_release: Option<u64>,
+    /// The press landed on a segment of a wholly selected open vector: the drag moves the whole
+    /// selection, but if it ends without moving the click picks just that segment (shape, segment).
+    pick_segment_on_release: Option<(u64, usize)>,
 }
 
 impl<S> Default for Editor<S> {
@@ -122,6 +134,7 @@ impl<S> Default for Editor<S> {
         Editor {
             selection: vec![],
             active_node: None,
+            active_segment: None,
             priority_layer: 0,
             snapping: Snapping::default(),
             last_snap: None,
@@ -135,6 +148,7 @@ impl<S> Default for Editor<S> {
             moved: false,
             toggle_on_release: None,
             narrow_on_release: None,
+            pick_segment_on_release: None,
         }
     }
 }
@@ -164,6 +178,25 @@ fn bbox_snap_points(lo: Pt, hi: Pt) -> Vec<(Pt, SnapKind)> {
         ([hi[0], my], SnapKind::MidPoint),
         ([mx, my], SnapKind::Centre),
     ]
+}
+
+/// The segment of `s` nearest `p` within the pick tolerance (its place in [`Editable::segments`]).
+fn segment_of<S: Editable>(s: &S, p: Pt, view: View) -> Option<usize> {
+    s.segments()
+        .into_iter()
+        .enumerate()
+        .map(|(k, (a, b))| (k, s.segment_distance(p, a, b)))
+        .filter(|(_, d)| *d <= view.tolerance)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(k, _)| k)
+}
+
+/// The unit normal of the segment a→b (its direction turned a quarter anticlockwise), or `None`
+/// for a segment of no length.
+fn unit_normal(a: Pt, b: Pt) -> Option<Pt> {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len = (dx * dx + dy * dy).sqrt();
+    (len > 1e-12).then(|| [-dy / len, dx / len])
 }
 
 /// The directions any of the shapes locks against resizing (see [`Editable::locked_axes`]).
@@ -297,23 +330,92 @@ impl<S: Editable> Editor<S> {
         match self.style(shapes) {
             SelectionStyle::Box => Handle::ALL.to_vec(),
             SelectionStyle::Ring => vec![Handle::Top, Handle::Right, Handle::Bottom, Handle::Left],
-            SelectionStyle::Ends => vec![],
+            SelectionStyle::Polyline => vec![],
         }
     }
 
-    /// The two end handles of a selected straight line: (shape, node index, place).
-    pub fn end_handles(&self, shapes: &[S]) -> Vec<(u64, usize, Pt)> {
-        if self.style(shapes) != SelectionStyle::Ends {
-            return vec![];
+    /// The selected open vector, when the selection shows as one (see [`SelectionStyle::Polyline`]).
+    fn polyline<'a>(&self, shapes: &'a [S]) -> Option<&'a S> {
+        if self.style(shapes) != SelectionStyle::Polyline {
+            return None;
         }
-        let Some(s) = self.selection.first().and_then(|id| find(shapes, *id)) else { return vec![] };
-        let nodes = s.nodes().unwrap_or_default();
-        nodes.first().zip(nodes.last()).map(|(a, b)| vec![(s.id(), 0, *a), (s.id(), nodes.len() - 1, *b)]).unwrap_or_default()
+        self.selection.first().and_then(|id| find(shapes, *id))
     }
 
-    /// The end handle of a selected line under `p`, if any.
-    pub fn end_under(&self, shapes: &[S], p: Pt, view: View) -> Option<(u64, usize)> {
-        self.end_handles(shapes).into_iter().filter(|(_, _, at)| dist(*at, p) <= view.tolerance).min_by(|a, b| dist(a.2, p).total_cmp(&dist(b.2, p))).map(|(id, i, _)| (id, i))
+    /// The node handles of a selected open vector — one on every node: (shape, node index, place).
+    pub fn node_handles(&self, shapes: &[S]) -> Vec<(u64, usize, Pt)> {
+        let Some(s) = self.polyline(shapes) else { return vec![] };
+        s.nodes().unwrap_or_default().into_iter().enumerate().map(|(i, at)| (s.id(), i, at)).collect()
+    }
+
+    /// The node handle of a selected open vector under `p`, if any.
+    pub fn node_handle_under(&self, shapes: &[S], p: Pt, view: View) -> Option<(u64, usize)> {
+        self.node_handles(shapes).into_iter().filter(|(_, _, at)| dist(*at, p) <= view.tolerance).min_by(|a, b| dist(a.2, p).total_cmp(&dist(b.2, p))).map(|(id, i, _)| (id, i))
+    }
+
+    /// The segment of a selected open vector under `p` (its place in [`Editable::segments`]), if
+    /// any. Nodes come first: a press near a node is for the node, not for its segments.
+    pub fn segment_under(&self, shapes: &[S], p: Pt, view: View) -> Option<(u64, usize)> {
+        let s = self.polyline(shapes)?;
+        segment_of(s, p, view).map(|k| (s.id(), k))
+    }
+
+    /// Whether the whole of the selected open vector is selected (by a box, a click on an
+    /// unpicked shape, …), not one of its nodes or segments: a drag on it then moves everything.
+    pub fn polyline_whole(&self, shapes: &[S]) -> bool {
+        self.polyline(shapes).is_some() && self.active_node.is_none() && self.active_segment.is_none()
+    }
+
+    /// Segment `index` of `s` as its two node indices and its two ends now.
+    pub fn segment_ends(s: &S, index: usize) -> Option<(usize, usize, Pt, Pt)> {
+        let (a, b) = *s.segments().get(index)?;
+        let nodes = s.nodes()?;
+        Some((a, b, *nodes.get(a)?, *nodes.get(b)?))
+    }
+
+    /// `s` with segment `index` moved parallel to itself by `d` along its normal, keeping the
+    /// angle of every segment: the segment's line is shifted first, then each of its ends is put
+    /// where that line meets the (unchanged) line of the neighbouring segment — so the moved
+    /// segment and its neighbours change length, never direction. An end with no neighbour (the
+    /// start or end of an open vector) simply goes across with the line; a neighbour that runs
+    /// parallel to the segment has no meeting point, and its shared end goes across too.
+    /// `None` when the shift would turn the segment or a neighbour round (shrink it through zero
+    /// length): no angle may flip, so such a shift is refused.
+    pub fn moved_parallel(s: &S, index: usize, d: f64) -> Option<S> {
+        let (ia, ib, a, b) = Self::segment_ends(s, index)?;
+        let n = unit_normal(a, b)?;
+        let nodes = s.nodes()?;
+        let segments = s.segments();
+        let u = [b[0] - a[0], b[1] - a[1]];
+        // a point of the shifted line
+        let on_line = [a[0] + n[0] * d, a[1] + n[1] * d];
+        // where the shifted line meets the neighbour that shares `end` (its far node `far` stays):
+        // the end moves along the neighbour's own line, so the neighbour keeps its direction
+        let meet = |end: usize, end_at: Pt| -> Option<Pt> {
+            let shifted = [end_at[0] + n[0] * d, end_at[1] + n[1] * d];
+            let far = segments.iter().enumerate().filter(|(k, _)| *k != index).find_map(|(_, &(x, y))| match (x == end, y == end) {
+                (true, false) => Some(y),
+                (false, true) => Some(x),
+                _ => None,
+            });
+            let Some(far) = far.and_then(|f| nodes.get(f).copied()) else { return Some(shifted) };
+            let v = [end_at[0] - far[0], end_at[1] - far[1]];
+            let cross = u[0] * v[1] - u[1] * v[0];
+            if cross.abs() < 1e-12 * (u[0].hypot(u[1]) * v[0].hypot(v[1])).max(1e-300) {
+                return Some(shifted);
+            }
+            // far + t·v lies on the shifted line: (far + t·v − on_line) · n = 0
+            let t = ((on_line[0] - far[0]) * n[0] + (on_line[1] - far[1]) * n[1]) / (v[0] * n[0] + v[1] * n[1]);
+            // t ≤ 0 would put the end at or behind the far node: the neighbour would turn round
+            (t > 1e-9).then(|| [far[0] + v[0] * t, far[1] + v[1] * t])
+        };
+        let a2 = meet(ia, a)?;
+        let b2 = meet(ib, b)?;
+        // the moved segment itself must keep its sense too
+        if (b2[0] - a2[0]) * u[0] + (b2[1] - a2[1]) * u[1] <= 1e-9 {
+            return None;
+        }
+        Some(s.with_node(ia, a2).with_node(ib, b2))
     }
 
     /// The handle under `p` on the current selection, if any (for cursors and highlights).
@@ -380,6 +482,7 @@ impl<S: Editable> Editor<S> {
         self.moved = false;
         self.toggle_on_release = None;
         self.narrow_on_release = None;
+        self.pick_segment_on_release = None;
         self.gesture = None;
         self.last_snap = None;
         self.move_snap = None;
@@ -397,6 +500,12 @@ impl<S: Editable> Editor<S> {
             Some(Gesture::Node { index, orig }) => {
                 let own = orig.nodes().and_then(|n| n.get(*index).copied());
                 Self::targets(shapes, &[]).into_iter().filter(|(q, _)| Some(*q) != own).collect()
+            }
+            // a segment snaps onto everything but its own two (moving) ends; the shape's other
+            // nodes stay, so a segment can line up with another node of the same polyline
+            Some(Gesture::Segment { index, orig, .. }) => {
+                let own = Self::segment_ends(orig, *index).map(|(_, _, a, b)| [a, b]).unwrap_or_default();
+                Self::targets(shapes, &[]).into_iter().filter(|(q, _)| !own.contains(q)).collect()
             }
             _ => vec![],
         };
@@ -417,13 +526,20 @@ impl<S: Editable> Editor<S> {
                     return Started::Grip(g.kind);
                 }
             }
-            // the ends of a selected straight line are its handles: they move that end
-            if let Some((id, index)) = self.end_under(shapes, p, view) {
+            // a selected open vector is edited part by part, as in Fusion 360: a node drags freely
+            if let Some((id, index)) = self.node_handle_under(shapes, p, view) {
                 if let Some(s) = find(shapes, id) {
                     self.active_node = Some((id, index));
+                    self.active_segment = None;
                     self.gesture = Some(Gesture::Node { index, orig: s.clone() });
                     return Started::Node;
                 }
+            }
+            // …and a segment follows the selection rule — except on the centre mark, which moves the
+            // whole (it may sit on a segment, as on a straight line)
+            let on_centre = self.centre_mark(shapes).is_some_and(|c| dist(c, p) <= view.tolerance);
+            if let Some(started) = self.press_segment(shapes, p, view).filter(|_| !on_centre) {
+                return started;
             }
             if let Some((lo, hi)) = selection_bounds(shapes, &self.selection) {
                 if let Some(handle) = self.handle_under(shapes, p, view) {
@@ -451,16 +567,22 @@ impl<S: Editable> Editor<S> {
                 }
             }
         }
-        // the centre mark of the selection moves it, as the shape's own line does
-        if !additive && !self.rotate_mode && self.style(shapes) != SelectionStyle::Ends {
+        // the centre mark of the selection moves it, as the shape's own line does (on an open
+        // vector it is the one way to move the whole, its segments being edited one by one)
+        if !additive && !self.rotate_mode {
             if let Some(centre) = self.centre_mark(shapes) {
                 if dist(centre, p) <= view.tolerance {
                     self.clicked_selected = true;
+                    self.active_node = None;
+                    self.active_segment = None;
                     self.gesture = Some(Gesture::Move { start: p, orig: self.selected(shapes) });
                     return Started::Move;
                 }
             }
         }
+        // anything else picks whole shapes: a node or segment picked before is let go
+        self.active_node = None;
+        self.active_segment = None;
         match self.shape_under(shapes, p, view) {
             Some(id) => {
                 let selected = self.selection.contains(&id);
@@ -491,6 +613,35 @@ impl<S: Editable> Editor<S> {
                 Started::Band
             }
         }
+    }
+
+    /// A press on a segment of an open vector, by the selection rule: a press on what is selected
+    /// moves all of the selection; a press on a segment that is not part of the selection picks just
+    /// that segment and moves it alone (parallel). So with the whole polyline selected (by a box,
+    /// nothing of it picked) a drag on any of its segments moves everything that is selected, and a
+    /// click without moving narrows the selection to that segment. With one segment picked, a drag
+    /// on it moves it; a drag on another segment picks that one instead. Grouped shapes keep the
+    /// group rule (the press picks the group). `None` when the press is not on such a segment.
+    fn press_segment(&mut self, shapes: &[S], p: Pt, view: View) -> Option<Started> {
+        if self.rotate_mode {
+            return None;
+        }
+        let id = self.shape_under(shapes, p, view)?;
+        let s = find(shapes, id).filter(|s| s.selection_style() == SelectionStyle::Polyline && s.group().is_none())?;
+        let k = segment_of(s, p, view)?;
+        let whole = self.selection.contains(&id) && self.active_segment.is_none() && self.active_node.is_none();
+        if whole {
+            // the press is on the selection: it all moves; a click alone picks the segment
+            self.pick_segment_on_release = Some((id, k));
+            self.gesture = Some(Gesture::Move { start: p, orig: self.selected(shapes) });
+            return Some(Started::Move);
+        }
+        // the segment that is picked moves; any other segment becomes the selection and moves alone
+        self.selection = vec![id];
+        self.active_segment = Some((id, k));
+        self.active_node = None;
+        self.gesture = Some(Gesture::Segment { index: k, start: p, orig: s.clone() });
+        Some(Started::Segment)
     }
 
     fn press_nodes(&mut self, shapes: &[S], p: Pt, view: View, additive: bool) -> Started {
@@ -607,6 +758,19 @@ impl<S: Editable> Editor<S> {
                 self.moved = true;
                 put(shapes, orig.with_node(*index, p));
             }
+            Gesture::Segment { index, start, orig } => {
+                let Some((_, _, a, b)) = Self::segment_ends(orig, *index) else { return };
+                let Some(n) = unit_normal(a, b) else { return };
+                // only the movement across the segment counts: it moves parallel, never along itself
+                let d = (p[0] - start[0]) * n[0] + (p[1] - start[1]) * n[1];
+                let (d, caught) = self.snapping.snap_across(a, n, d, &self.targets);
+                self.last_snap = caught;
+                // a shift that would turn the segment or a neighbour round keeps the last good place
+                if let Some(moved) = Self::moved_parallel(orig, *index, d) {
+                    self.moved |= d != 0.0;
+                    put(shapes, moved);
+                }
+            }
             Gesture::Band { end, start, .. } => {
                 *end = p;
                 self.moved |= dist(*start, p) > 0.0;
@@ -663,8 +827,18 @@ impl<S: Editable> Editor<S> {
         self.move_snap = None;
         let Some(g) = self.gesture.take() else { return Outcome::Unchanged };
         match g {
-            Gesture::Move { .. } if self.moved => Outcome::Moved,
+            Gesture::Move { .. } if self.moved => {
+                self.pick_segment_on_release = None;
+                Outcome::Moved
+            }
             Gesture::Move { .. } => {
+                // a click on a segment of the whole selected polyline picks just that segment
+                if let Some((id, k)) = self.pick_segment_on_release.take() {
+                    self.selection = vec![id];
+                    self.active_segment = Some((id, k));
+                    self.active_node = None;
+                    return Outcome::Selected;
+                }
                 if let Some(id) = self.toggle_on_release.take() {
                     // a shift-click on a member takes the whole group out
                     let group = find(shapes, id).and_then(|s| s.group());
@@ -691,8 +865,10 @@ impl<S: Editable> Editor<S> {
             Gesture::Grip { .. } if self.moved => Outcome::Reshaped,
             Gesture::Grip { .. } => Outcome::Unchanged,
             Gesture::Resize { .. } if self.moved => Outcome::Resized,
-            Gesture::Node { .. } if self.moved => Outcome::NodeMoved,
+            Gesture::Node { .. } | Gesture::Segment { .. } if self.moved => Outcome::NodeMoved,
             Gesture::Resize { .. } | Gesture::Node { .. } => Outcome::Unchanged,
+            // a click on a segment without moving only picks it
+            Gesture::Segment { .. } => Outcome::Selected,
             Gesture::Band { start, end, additive } => {
                 if self.moved {
                     let lo = [start[0].min(end[0]), start[1].min(end[1])];
@@ -728,19 +904,36 @@ impl<S: Editable> Editor<S> {
                     put(shapes, o);
                 }
             }
-            Some(Gesture::Node { orig, .. }) | Some(Gesture::Grip { orig, .. }) => put(shapes, orig),
+            Some(Gesture::Node { orig, .. }) | Some(Gesture::Segment { orig, .. }) | Some(Gesture::Grip { orig, .. }) => put(shapes, orig),
             _ => {}
         }
     }
 
-    /// Move the active node (node mode) or the selection by (dx, dy). Returns whether
-    /// anything moved.
+    /// Move the active node (node mode, or a picked node of a selected open vector), a picked
+    /// segment (across itself only, as when it is dragged) or else the selection by (dx, dy).
+    /// Returns whether anything moved.
     pub fn nudge(&mut self, shapes: &mut [S], tool: Tool, dx: f64, dy: f64) -> bool {
-        if tool == Tool::Nodes {
+        let part_picked = tool == Tool::Nodes || self.polyline(shapes).is_some();
+        if part_picked {
             if let Some((id, i)) = self.active_node {
                 let Some(s) = find(shapes, id).cloned() else { return false };
                 let Some(n) = s.nodes().and_then(|n| n.get(i).copied()) else { return false };
                 put(shapes, s.with_node(i, [n[0] + dx, n[1] + dy]));
+                return true;
+            }
+        }
+        if tool == Tool::Select && self.polyline(shapes).is_some() {
+            if let Some((id, k)) = self.active_segment {
+                let Some(s) = find(shapes, id).cloned() else { return false };
+                let Some((_, _, a, b)) = Self::segment_ends(&s, k) else { return false };
+                let Some(n) = unit_normal(a, b) else { return false };
+                let d = dx * n[0] + dy * n[1];
+                if d == 0.0 {
+                    // an arrow along the segment would slide it sideways: a segment only moves across
+                    return false;
+                }
+                let Some(moved) = Self::moved_parallel(&s, k, d) else { return false };
+                put(shapes, moved);
                 return true;
             }
         }
@@ -791,6 +984,12 @@ impl<S: Editable> Editor<S> {
             let ok = find(shapes, id).and_then(|s| s.nodes()).is_some_and(|n| i < n.len());
             if !ok {
                 self.active_node = None;
+            }
+        }
+        if let Some((id, k)) = self.active_segment {
+            let ok = self.selection.contains(&id) && find(shapes, id).is_some_and(|s| k < s.segments().len());
+            if !ok {
+                self.active_segment = None;
             }
         }
     }

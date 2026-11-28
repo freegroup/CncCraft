@@ -35,8 +35,25 @@ pub enum SnapKind {
 /// The largest angle step accepted. The original's settings-apply function (Spark
 /// `sub_100785420`) resets the angle step unless it is between 0 and 90 degrees: it compares the
 /// value against 0.0 and against the immediate `0x4056800000000000` = 90.0, and rejects anything
-/// below 0 or above 90 (decompiled 2026-11-26).
+/// below 0 or above 90 (decompiled 2026-11-26). The same function also tests a separate angle
+/// field against `0x4056000000000000` = 88.0 (re-read 2026-11-27); the 90.0 clamp is the one this
+/// step uses.
 pub const MAX_ANGLE_STEP: f64 = 90.0;
+
+/// Spark's relative tolerance for "has this value really changed?" — read from `sub_100785420`
+/// (the settings-apply function) as the immediate `0x3ea7000000000000` = 6.854534149169922e-07.
+/// The original forms `tol = (|value| + 1) * SETTING_EQUAL_TOL` (with an infinity guard) and treats
+/// two values as the same when their absolute difference (`fabd`) stays within `tol`, so it only
+/// re-applies a setting that moved by more than this relative amount (decompiled 2026-11-27).
+pub const SETTING_EQUAL_TOL: f64 = 6.854534149169922e-07;
+
+/// Whether two setting values count as equal by Spark's rule (see [`SETTING_EQUAL_TOL`]): their
+/// absolute difference is within `(|a| + 1) * SETTING_EQUAL_TOL`. Scales the tolerance with the
+/// magnitude, so large values aren't held to an unreachably tight absolute bound.
+pub fn setting_values_equal(a: f64, b: f64) -> bool {
+    let scale = (a.abs() + 1.0).min(f64::MAX);
+    (a - b).abs() <= scale * SETTING_EQUAL_TOL
+}
 
 /// Which of the three move-snap policies are on. Each is an independent switch; any mix is valid,
 /// and all three on at once is the usual "snap to everything".
@@ -107,14 +124,7 @@ impl Snapping {
         if self.radius <= 0.0 {
             return (p, None);
         }
-        let want = |k: SnapKind| match k {
-            SnapKind::Centre => self.policies.center,
-            SnapKind::Node => self.policies.geometry,
-            // segment midpoints are not owned by any policy, so they never snap
-            SnapKind::MidPoint => false,
-            SnapKind::Grid => true,
-        };
-        let points = targets.iter().copied().filter(|(_, k)| want(*k));
+        let points = targets.iter().copied().filter(|(_, k)| self.wants(*k));
         if let Some((q, kind)) = points.map(|(q, k)| (q, k, dist(p, q))).filter(|(_, _, d)| *d <= self.radius).min_by(|a, b| a.2.total_cmp(&b.2)).map(|(q, k, _)| (q, k)) {
             return (q, Some(kind));
         }
@@ -125,6 +135,51 @@ impl Snapping {
             }
         }
         (p, None)
+    }
+
+    /// Whether a target point of this kind may catch, by the policies switched on.
+    fn wants(&self, k: SnapKind) -> bool {
+        match k {
+            SnapKind::Centre => self.policies.center,
+            SnapKind::Node => self.policies.geometry,
+            // segment midpoints are not owned by any policy, so they never snap
+            SnapKind::MidPoint => false,
+            SnapKind::Grid => true,
+        }
+    }
+
+    /// Snap a line that moves across itself (a segment dragged parallel to itself). Before the move
+    /// the line passes through `a`; `n` is its unit normal and `d` the tentative shift along `n`.
+    /// Returns the shift that lands the line on the nearest wanted target point within the radius
+    /// (the line then runs through that point), else — for a line along an axis — on the nearest
+    /// grid line, together with the point it caught (for the marker). Unchanged when nothing is near.
+    pub fn snap_across(&self, a: Pt, n: Pt, d: f64, targets: &[(Pt, SnapKind)]) -> (f64, Option<(Pt, SnapKind)>) {
+        if self.radius <= 0.0 {
+            return (d, None);
+        }
+        let across = |q: Pt| (q[0] - a[0]) * n[0] + (q[1] - a[1]) * n[1];
+        let caught = targets
+            .iter()
+            .copied()
+            .filter(|(_, k)| self.wants(*k))
+            .map(|(q, k)| (across(q), q, k))
+            .filter(|(t, _, _)| (t - d).abs() <= self.radius)
+            .min_by(|x, y| (x.0 - d).abs().total_cmp(&(y.0 - d).abs()));
+        if let Some((t, q, k)) = caught {
+            return (t, Some((q, k)));
+        }
+        // the grid only makes a line for a segment that runs along an axis
+        if let Some(step) = self.grid.filter(|s| *s > 0.0) {
+            let axis = if n[0].abs() >= n[1].abs() { 0 } else { 1 };
+            if n[axis].abs() > 1.0 - 1e-9 {
+                let line = ((a[axis] + n[axis] * d) / step).round() * step;
+                let t = (line - a[axis]) / n[axis];
+                if (t - d).abs() <= self.radius {
+                    return (t, Some(([a[0] + n[0] * t, a[1] + n[1] * t], SnapKind::Grid)));
+                }
+            }
+        }
+        (d, None)
     }
 
     /// Snap a whole move, running each switched-on policy and keeping the closest pull on each axis.
@@ -187,9 +242,11 @@ pub struct MoveSnap {
 }
 
 /// `p` turned about `from` onto the nearest multiple of `step` degrees, keeping its distance.
-/// Steps outside 0°..90° are ignored, as in the original (Spark `sub_100785420`).
+/// Steps outside 0°..90° are ignored, as in the original (Spark `sub_100785420`). The upper bound
+/// uses Spark's own relative tolerance ([`setting_values_equal`]), so a typed 90° that float maths
+/// nudged a hair past still counts as in range.
 pub fn snap_angle(from: Pt, p: Pt, step: f64) -> Pt {
-    if !(step > 0.0 && step <= MAX_ANGLE_STEP) {
+    if !(step > 0.0 && (step <= MAX_ANGLE_STEP || setting_values_equal(step, MAX_ANGLE_STEP))) {
         return p;
     }
     let (dx, dy) = (p[0] - from[0], p[1] - from[1]);
@@ -237,6 +294,17 @@ mod tests {
         assert_ne!(snap_angle([0.0, 0.0], [3.0, 4.0], 89.0), [3.0, 4.0], "89° is inside the range and snaps");
         assert_eq!(snap_angle([0.0, 0.0], [3.0, 4.0], 91.0), [3.0, 4.0], "steps over 90° are refused");
         assert_eq!(snap_angle([0.0, 0.0], [3.0, 4.0], 0.0), [3.0, 4.0], "0 means no angle snap");
+        // a 90° nudged a hair over by float maths is still in range (Spark's relative tolerance)
+        assert_ne!(snap_angle([0.0, 0.0], [3.0, 4.0], 90.0 + 1e-6), [3.0, 4.0], "90° + float wobble still snaps");
+    }
+
+    #[test]
+    fn setting_equality_uses_the_originals_relative_tolerance() {
+        // SETTING_EQUAL_TOL = 0x3ea7000000000000 from Spark sub_100785420; tol scales with |value|
+        assert!(setting_values_equal(90.0, 90.0 + 90.0 * SETTING_EQUAL_TOL * 0.5), "within the relative band");
+        assert!(!setting_values_equal(90.0, 90.0 + 1e-3), "a real change is seen");
+        assert!(setting_values_equal(0.0, SETTING_EQUAL_TOL * 0.5), "near zero the +1 keeps a usable floor");
+        assert!((SETTING_EQUAL_TOL - 6.854534149169922e-07).abs() < 1e-18, "the exact immediate");
     }
 
     fn box_of(c: Pt, half: f64) -> (Pt, Pt) {

@@ -9,13 +9,14 @@ impl App {
         let own = |a: u64, b: u64| a == b && ids.contains(&a);
         let distances = self.distances.iter().filter(|c| own(c.from.shape(), c.to.shape())).cloned().collect();
         let aligns = self.aligns.iter().filter(|c| own(c.a.shape(), c.b.shape())).cloned().collect();
+        let on_lines = self.on_lines.iter().filter(|c| own(c.point.shape(), c.line.shape())).cloned().collect();
         let toolpaths = self
             .toolpaths
             .iter()
             .filter(|tp| tp.shape_ids.iter().any(|id| ids.contains(id)))
             .map(|tp| Toolpath { shape_ids: tp.shape_ids.iter().copied().filter(|id| ids.contains(id)).collect(), ..tp.clone() })
             .collect();
-        Clip { items, distances, aligns, toolpaths }
+        Clip { items, distances, aligns, on_lines, toolpaths }
     }
 
     /// Give the copies (old id → new id) the constraints and toolpaths of what they were copied from;
@@ -34,6 +35,11 @@ impl App {
         for c in &clip.aligns {
             if let (Some(a), Some(b)) = (anchor(c.a), anchor(c.b)) {
                 self.aligns.push(shape_edit::Align { a, b, ..c.clone() });
+            }
+        }
+        for c in &clip.on_lines {
+            if let (Some(point), Some(line)) = (anchor(c.point), anchor(c.line)) {
+                self.on_lines.push(shape_edit::OnLine { point, line });
             }
         }
         let before = self.toolpaths.len();
@@ -55,7 +61,7 @@ impl App {
     pub(super) fn copy_selection(&mut self) {
         let clip = self.make_clip(&self.edit.selection.clone());
         if !clip.is_empty() {
-            self.status = format!("{} Objekt(e) kopiert, mit {} Werkzeugweg(en) und {} eigenen Constraint(s)", clip.items.len(), clip.toolpaths.len(), clip.distances.len() + clip.aligns.len());
+            self.status = format!("{} Objekt(e) kopiert, mit {} Werkzeugweg(en) und {} eigenen Constraint(s)", clip.items.len(), clip.toolpaths.len(), clip.distances.len() + clip.aligns.len() + clip.on_lines.len());
             self.clipboard = clip;
         }
     }

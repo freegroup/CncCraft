@@ -13,6 +13,8 @@ mod update;
 mod distance;
 #[path = "app/constraints/align.rs"]
 mod align;
+#[path = "app/constraints/on_line.rs"]
+mod on_line;
 #[path = "dialogs/mod.rs"]
 mod dialogs;
 use dialogs::{dialog_buttons, dialog_group};
@@ -36,6 +38,7 @@ mod selftest;
 mod selftest_vector_ops;
 mod shortcuts;
 mod spline_deco;
+mod polyline_selection;
 pub(crate) mod tooltip;
 mod variables;
 mod vector_ops;
@@ -182,6 +185,8 @@ pub(crate) enum Icon {
     Distance,
     /// Keep a line level or upright.
     Align,
+    /// Keep a point on a line (Coincident).
+    OnLine,
     /// Show or hide the origin: the axis cross of the sheet and the zero cross of the 3D view.
     Origin,
     /// Show or hide the rulers (and, with them, the construction lines).
@@ -231,6 +236,7 @@ struct Clip {
     items: Vec<Item>,
     distances: Vec<shape_edit::Distance>,
     aligns: Vec<shape_edit::Align>,
+    on_lines: Vec<shape_edit::OnLine>,
     toolpaths: Vec<Toolpath>,
 }
 
@@ -283,6 +289,9 @@ struct Project {
     /// Lines kept level or upright. Old project files have none.
     #[serde(default)]
     aligns: Vec<shape_edit::Align>,
+    /// Point-on-line (Coincident) constraints. Old project files have none.
+    #[serde(default)]
+    on_lines: Vec<shape_edit::OnLine>,
     /// The layers and which one is active. Old project files have one layer with everything on it.
     #[serde(default)]
     layers: crate::layers::Layers,
@@ -355,6 +364,10 @@ const ANGLE_STEP: f64 = 15.0;
 /// PowerPoint, Keynote, Sketch, Affinity and Figma, where Shift constrains a drawn line to 45°
 /// increments. Still within the original's 0°..90° rule.
 const LINE_ANGLE_STEP: f64 = 45.0;
+
+/// The width (screen px) of a selected shape's solid outline (rings and open vectors). A picked or
+/// hovered part of it is drawn at this same width, in another colour — it never gets thicker.
+const SELECTED_OUTLINE_WIDTH: f32 = 2.0;
 
 struct Editor {
     tp: Toolpath,
@@ -627,6 +640,11 @@ pub struct App {
     aligns: Vec<shape_edit::Align>,
     align_mode: Option<align::AlignMode>,
     align_labels: Vec<(usize, Rect)>,
+    /// The point-on-line (Coincident) constraints, the mode that makes them, and where their
+    /// symbols were drawn last frame (for choosing and deleting them).
+    on_lines: Vec<shape_edit::OnLine>,
+    on_line_mode: Option<on_line::OnLineMode>,
+    on_line_labels: Vec<(usize, Rect)>,
     /// Construction lines and the shapes soft-attached to each (see `guides`). The guide a shape
     /// is being dragged along, while a ruler drag lasts.
     guides: Vec<crate::guides::Guide>,
@@ -890,6 +908,9 @@ impl App {
             aligns: Vec::new(),
             align_mode: None,
             align_labels: Vec::new(),
+            on_lines: Vec::new(),
+            on_line_mode: None,
+            on_line_labels: Vec::new(),
             guides: Vec::new(),
             next_guide_id: 1,
             guide_drag: None,
@@ -1231,9 +1252,20 @@ impl App {
         self.vars_dirty = true;
         self.distances.clear();
         self.aligns.clear();
+        self.on_lines.clear();
         self.patterns.clear();
         self.pattern_dialog = None;
+        // the construction lines on the rulers belong to the old job: a new job starts without any
+        self.guides.clear();
+        self.next_guide_id = 1;
+        self.guide_drag = None;
+        self.guide_selected = None;
+        self.guides_locked = false;
+        self.guide_edit = None;
+        self.guide_press = None;
+        self.guide_labels.clear();
         self.align_mode = None;
+        self.on_line_mode = None;
         self.dim_mode = None;
         self.distance_edit = None;
         self.calibrate_mode = None;
@@ -1250,7 +1282,7 @@ impl App {
 
     /// The document as project text, to tell whether it changed since it was last saved.
     fn project_text(&self) -> String {
-        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
+        let proj = Project { job: self.job.clone(), shapes: self.shapes_without_pattern_children(), toolpaths: self.toolpaths.clone(), vars: self.vars.clone(), constraints: self.distances.clone(), aligns: self.aligns.clone(), on_lines: self.on_lines.clone(), layers: self.layers.clone(), hooks: gcode::OldPostHooks::default(), postprocs: self.postprocs.clone(), guides: self.guides.clone(), guides_locked: self.guides_locked, patterns: self.patterns.clone() };
         serde_json::to_string(&proj).unwrap_or_default()
     }
 
@@ -1543,6 +1575,12 @@ impl App {
     /// Pick distances in millimetres for the current zoom: 8 px to grab, handles 4 px outside.
     /// Snapping for this frame: the pixel radius in mm at the current zoom. Snap targets are the
     /// elements' and groups' own geometry only (the workpiece itself is not a snap anchor).
+    /// Whether a mode that picks points and lines is on — the dimension (D), level/upright (H) or
+    /// point-on-line (K) mode. Its clicks pick; nothing can be moved or resized meanwhile.
+    fn picking_mode(&self) -> bool {
+        self.dim_mode.is_some() || self.align_mode.is_some() || self.on_line_mode.is_some()
+    }
+
     fn update_snapping(&mut self) {
         // whole pixels between the slider's limits, as the original keeps it (0x10054e190)
         self.snap_radius_px = self.snap_radius_px.round().clamp(SNAP_RADIUS_MIN_PX, SNAP_RADIUS_MAX_PX);
@@ -1829,7 +1867,7 @@ impl App {
                 if sel && snaps {
                     painter.add(egui::Shape::line(pts, Stroke::new(2.5_f32, guides::guide_colour())));
                 } else if sel && solid_selection {
-                    painter.add(egui::Shape::line(pts, Stroke::new(2.0_f32, col)));
+                    painter.add(egui::Shape::line(pts, Stroke::new(SELECTED_OUTLINE_WIDTH, col)));
                 } else if sel {
                     painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.5_f32, col), 6.0, 4.0));
                 } else {
@@ -1844,23 +1882,10 @@ impl App {
         }
 
         // the selection, as the selected shape's class shows it: a box with eight handles, a ring
-        // with four, or the two ends of a line
+        // with four, or an open vector's own nodes and segments
         let style = self.edit.style(&self.shapes);
         let visible_handles = self.edit.visible_handles(&self.shapes);
-        if style == shape_edit::SelectionStyle::Ends && self.tool == DrawTool::Select {
-            let hover = mouse.and_then(|m| self.edit.end_under(&self.shapes, m, view));
-            let dragging = matches!(self.edit.gesture(), Some(Gesture::Node { .. }));
-            for (id, index, at) in self.edit.end_handles(&self.shapes) {
-                let on = dragging && self.edit.active_node == Some((id, index)) || hover == Some((id, index));
-                painter.circle(self.to_screen(at), if on { 6.5 } else { 5.0 }, if on { ACCENT } else { Color32::WHITE }, Stroke::new(1.5_f32, SELECT));
-            }
-            if hover.is_some() || dragging {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            } else if hover_id.is_some() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
-            }
-        }
-        if let Some((lo, hi)) = selection_bounds(&self.shapes, &self.edit.selection).filter(|_| style != shape_edit::SelectionStyle::Ends) {
+        if let Some((lo, hi)) = selection_bounds(&self.shapes, &self.edit.selection) {
             let pad = view.handle_pad;
             let r = Rect::from_two_pos(self.to_screen([lo[0] - pad, lo[1] - pad]), self.to_screen([hi[0] + pad, hi[1] + pad]));
             if style == shape_edit::SelectionStyle::Box {
@@ -1949,6 +1974,11 @@ impl App {
             } else {
                 painter.circle_stroke(centre_screen, 4.0, Stroke::new(1.0_f32, SELECT));
             }
+        }
+        // an open vector's own selection decoration: its nodes and segments, picked one by one
+        // (drawn last, so its handles and cursor win over the shape's move cursor)
+        if style == shape_edit::SelectionStyle::Polyline && self.tool == DrawTool::Select && !self.picking_mode() {
+            self.draw_polyline_selection(&painter, ui.ctx(), mouse, view);
         }
 
         // node handles on the selected curves (spline handles, path squares)
@@ -2088,6 +2118,7 @@ impl App {
         self.draw_dimensions(&painter);
         self.draw_distances(&painter, resp.hover_pos());
         self.draw_aligns(&painter);
+        self.draw_on_lines(&painter);
         self.draw_corners(&painter);
         self.draw_pattern_markers(&painter, resp.hover_pos());
         self.distance_edit_ui(ui.ctx(), &painter);
@@ -2147,24 +2178,31 @@ impl App {
         if self.pattern_marker_interact(resp) {
             return;
         }
-        // the level/upright mode takes the clicks the same way (a drag still moves shapes)
-        if self.align_mode.is_some() {
-            let dragging_shape = resp.drag_started_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Primary) || resp.drag_stopped() || self.edit.is_busy();
-            if !dragging_shape {
-                self.align_input(resp, mouse);
+        // the picking modes — dimension (D), level/upright (H), point on line (K) — take the clicks:
+        // they pick points and lines, nothing is selected. Nothing moves while one is on either:
+        // moving and resizing belong to the select tool (S), so a drag here does nothing at all
+        if self.picking_mode() {
+            if self.edit.is_busy() {
+                // a gesture begun before the mode came on is taken back, not finished in it
+                self.edit.cancel(&mut self.shapes);
+                if self.gesture_undo {
+                    self.undo.pop_last();
+                    self.gesture_undo = false;
+                }
             }
-            if self.align_mode.is_some() && !dragging_shape {
+            let dragging = resp.drag_started_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Primary) || resp.drag_stopped();
+            if dragging {
                 return;
             }
-        }
-        // the dimension mode takes the clicks (the picks of a distance), nothing is selected or moved
-        // (a drag still moves and resizes shapes, as in Fusion: only clicks pick points and lines)
-        if self.dim_mode.is_some() {
-            let dragging_shape = resp.drag_started_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Primary) || resp.drag_stopped() || self.edit.is_busy();
-            if !dragging_shape {
+            if self.align_mode.is_some() {
+                self.align_input(resp, mouse);
+            } else if self.on_line_mode.is_some() {
+                self.on_line_input(resp, mouse);
+            } else {
                 self.dimension_input(resp, mouse);
             }
-            if self.dim_mode.is_some() && !dragging_shape {
+            // a click that ended the mode (another tool chosen) goes on to that tool below
+            if self.picking_mode() {
                 return;
             }
         }
@@ -2222,6 +2260,7 @@ impl App {
                         if resp.double_clicked() && self.tool == DrawTool::Select && !self.edit.selection.is_empty() {
                             self.tool_form = Some(ToolForm::Transform);
                         }
+                        self.polyline_status();
                     }
                 }
                 if dragging && self.edit.is_busy() {
@@ -2237,6 +2276,7 @@ impl App {
                         Some(Gesture::Move { orig, .. }) if copy => Some(orig.clone()),
                         _ => None,
                     };
+                    let segment = matches!(self.edit.gesture(), Some(Gesture::Segment { .. }));
                     let outcome = self.edit.release(&self.shapes);
                     if let (Outcome::Moved, Some(orig)) = (outcome, originals) {
                         self.keep_originals(orig);
@@ -2255,11 +2295,13 @@ impl App {
                         Outcome::Resized => self.status = "Größe geändert (Umschalt: Seitenverhältnis halten)".into(),
                         Outcome::NodeMoved => {
                             self.drop_bindings_of_selection();
-                            self.status = "Knoten verschoben".into();
+                            self.status = if segment { "Linie parallel verschoben".into() } else { "Knoten verschoben".into() };
                         }
                         Outcome::Rotated => self.status = "Gedreht (Umschalt: in Winkelschritten)".into(),
                         Outcome::Reshaped => self.status = "Form angepasst".into(),
                         Outcome::Selected if self.edit.rotate_mode => self.status = "Drehen: an einer Ecke ziehen oder Winkel eingeben · erneut klicken zum Skalieren".into(),
+                        // a selection box round an open vector: say how its parts are edited now
+                        Outcome::Selected => self.polyline_status(),
                         _ => {}
                     }
                     // a move that lands near a construction line snaps the selection onto it and
@@ -2451,7 +2493,8 @@ impl App {
             }
             d
         });
-        if nudge != [0.0, 0.0] {
+        // the arrow keys move things only outside the picking modes (D, H, K): there nothing moves
+        if nudge != [0.0, 0.0] && !self.picking_mode() {
             let before = self.snapshot();
             let tool = self.edit_tool();
             if self.edit.nudge(&mut self.shapes, tool, nudge[0], nudge[1]) {
@@ -2485,13 +2528,19 @@ impl App {
             Action::Delete if self.delete_selected_constraint() => {}
             Action::Delete => {
                 let before = self.snapshot();
-                if self.tool == DrawTool::NodeEdit && self.edit.active_node.is_some() {
+                // a node picked in node mode, or on a selected open vector (as in Fusion 360: the
+                // picked point goes, not the whole line)
+                let polyline = self.tool == DrawTool::Select && self.edit.style(&self.shapes) == shape_edit::SelectionStyle::Polyline;
+                if (self.tool == DrawTool::NodeEdit || polyline) && self.edit.active_node.is_some() {
                     if self.edit.delete_active_node(&mut self.shapes) {
                         // a deleted node on a pattern source must reach the children too
                         self.sync_patterns();
                         self.push_undo_from(before);
                         self.status = "Knoten gelöscht".into();
                         self.recompute_all();
+                    } else if polyline {
+                        // a line can't lose one of its two ends: the whole line goes
+                        self.delete_selection();
                     }
                 } else {
                     self.delete_selection();
@@ -2521,6 +2570,7 @@ impl App {
             }
             Action::Dimension => self.toggle_dim_mode(),
             Action::Align => self.toggle_align_mode(),
+            Action::OnLine => self.toggle_on_line_mode(),
             Action::Select => self.pick_tool(DrawTool::Select),
             Action::Line => self.pick_tool(DrawTool::Polyline),
             Action::SplineTool => self.pick_tool(DrawTool::Spline),
@@ -2569,6 +2619,9 @@ impl App {
             return;
         }
         if self.cancel_align_mode() {
+            return;
+        }
+        if self.cancel_on_line_mode() {
             return;
         }
         if self.cancel_dim_mode() {

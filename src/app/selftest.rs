@@ -71,6 +71,7 @@ const STAGES: &[Stage] = &[
     stage("Symbol anklicken und Entf: die Linie bleibt, das Constraint ist weg", align_delete),
     stage("Zwei Punkte zweier Formen: waagrecht, die zweite Form folgt", align_two_points),
     stage("H beendet das Werkzeug", align_mode_off),
+    stage("K: Punkt einer Form auf die Kante einer anderen, die Form rückt auf die Linie", on_line_two_shapes),
     stage("Werkzeugweg-Liste: per Ziehen am Griff an eine andere Stelle", toolpath_list_drag),
     stage("Tasten L, C, R wählen Linie, Kreis, Rechteck", tool_keys),
     stage("Taste S wählt den Selektionsmodus", tool_keys_back),
@@ -119,6 +120,9 @@ const STAGES: &[Stage] = &[
     stage("Muster: speichern und wieder laden bringt die Kinder zurück", pattern_round_trip),
     stage("Muster: den Urkreis am Griff größer ziehen macht die Kinder mit groß", pattern_circle_grip),
     stage("Muster: den Durchmesser des Urkreises eintippen macht die Kinder mit groß", pattern_circle_typed),
+    stage("D an: Ziehen bewegt nichts – weder ein Rechteck noch eine Linie (bewegt wird nur mit S)", dimension_mode_moves_nothing),
+    // last: a new job clears the document the stages before worked on
+    stage("Neuer Job: alle Hilfslinien in den Linealen sind weg", new_job_clears_guides),
 ];
 
 /// A fresh rectangle; a 3×2 pattern (centre distances 25 mm X, 15 mm Y, columns from a formula)
@@ -1117,10 +1121,11 @@ fn distance_line_length(app: &mut App) -> (Vec<Event>, Check) {
 /// A rectangle 260 from the plate's left edge (the edge and its lower-left corner): dragging it up
 /// by 20 mm must work, only the distance sideways is held.
 fn plate_constraint_drag_vertical(app: &mut App) -> (Vec<Event>, Check) {
-    // the dimension mode is on, as it stays after a distance was set: a drag must still move shapes
+    // moving belongs to the select tool (S): with the dimension mode on nothing moves (see
+    // `dimension_mode_moves_nothing`), so the drag runs with the mode off
     app.dim_mode = None;
     app.distance_edit = None;
-    app.toggle_dim_mode();
+    app.tool = DrawTool::Select;
     app.show_dims = false;
     let id = app.add_shape(shape_edit::Rect::new([270.0, 60.0], 20.0, 20.0));
     app.selftest_rect = Some(id);
@@ -1358,6 +1363,34 @@ fn align_mode_off(_app: &mut App) -> (Vec<Event>, Check) {
         }
     });
     (vec![key(egui::Key::H)], check)
+}
+
+/// K (Punkt auf Linie / Coincident): click a corner of one shape, then a side of another; the
+/// point's shape rucks onto the line, keeping its along-line place, and one constraint is stored.
+fn on_line_two_shapes(app: &mut App) -> (Vec<Event>, Check) {
+    app.tool = DrawTool::Select;
+    // A stays put; B's lower-left corner must land on A's right side (x = 70)
+    let a = app.add_shape(shape_edit::Rect::new([60.0, 40.0], 20.0, 20.0));
+    let b = app.add_shape(shape_edit::Rect::new([100.0, 50.0], 16.0, 16.0));
+    let click = |p: Pos2| {
+        [Event::PointerMoved(p), Event::PointerMoved(p), Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::default() }, Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::default() }]
+    };
+    let mut events = vec![key(egui::Key::K)];
+    // B's lower-left corner is at (92, 42); A's right side is the segment x = 70 from y 30..50
+    events.extend(click(app.to_screen([92.0, 42.0])));
+    events.extend(click(app.to_screen([70.0, 40.0])));
+    let check: Check = Box::new(move |app| {
+        let ll = |id: u64| app.shapes.iter().find(|s| s.id == id).and_then(|s| s.bounds()).map(|(lo, _)| lo);
+        let (Some(la), Some(lb)) = (ll(a), ll(b)) else { return Err("Rechtecke fehlen".into()) };
+        let msg = format!("{} Punkt-auf-Linie, A unten links {:.1}/{:.1}, B {:.1}/{:.1}", app.on_lines.len(), la[0], la[1], lb[0], lb[1]);
+        // B's corner now on x = 70 (A's right side), its y (42) kept; A did not move
+        if app.on_lines.len() == 1 && near(lb[0], 70.0, 1e-6) && near(lb[1], 42.0, 1e-6) && near(la[0], 50.0, 1e-6) {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (events, check)
 }
 
 /// D again: the mode is over and clicks select once more.
@@ -2148,4 +2181,49 @@ fn unsaved_warning(app: &mut App) -> (Vec<Event>, Check) {
         }
     });
     (vec![], check)
+}
+
+/// A new job starts without construction lines: two guides are put on the rulers, then a new job
+/// is set up; none may be left over from the old job.
+fn new_job_clears_guides(app: &mut App) -> (Vec<Event>, Check) {
+    use crate::guides::{Guide, GuideAxis};
+    app.guides.push(Guide::new(app.next_guide_id, GuideAxis::Vertical, 40.0));
+    app.guides.push(Guide::new(app.next_guide_id + 1, GuideAxis::Horizontal, 25.0));
+    app.next_guide_id += 2;
+    let before = app.guides.len();
+    app.new_job(app.job.clone());
+    let check: Check = Box::new(move |app| {
+        let msg = format!("Hilfslinien vorher {before}, nach „Neuer Job“ {}, nächste Nummer {}", app.guides.len(), app.next_guide_id);
+        if before == 2 && app.guides.is_empty() && app.next_guide_id == 1 {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (vec![], check)
+}
+
+/// With the dimension mode (D) on nothing can be moved: a drag on a rectangle and a drag on a line
+/// leave both where they are (moving belongs to the select tool, S). D is switched off again after.
+fn dimension_mode_moves_nothing(app: &mut App) -> (Vec<Event>, Check) {
+    app.tool = DrawTool::Select;
+    app.dim_mode = None;
+    let rect = app.add_shape(shape_edit::Rect::new([60.0, 150.0], 30.0, 20.0));
+    let line = app.add_shape(shape_edit::Path::new(vec![[120.0, 140.0], [180.0, 140.0], [180.0, 170.0]], false));
+    let before: Vec<Option<(Pt, Pt)>> = [rect, line].iter().map(|id| app.shapes.iter().find(|s| s.id == *id).and_then(|s| s.bounds())).collect();
+    let mut events = vec![key(egui::Key::D)];
+    // the rectangle's left side, and the polyline's level segment, each dragged well away
+    events.extend(drag(app.to_screen([45.0, 150.0]), Vec2::new(60.0, -40.0)));
+    events.extend(drag(app.to_screen([150.0, 140.0]), Vec2::new(30.0, -50.0)));
+    events.push(key(egui::Key::D));
+    let check: Check = Box::new(move |app| {
+        let now: Vec<Option<(Pt, Pt)>> = [rect, line].iter().map(|id| app.shapes.iter().find(|s| s.id == *id).and_then(|s| s.bounds())).collect();
+        let msg = format!("vorher {before:?}, nachher {now:?}, D noch an: {}", app.dim_mode.is_some());
+        if now == before && app.dim_mode.is_none() {
+            Ok(msg)
+        } else {
+            Err(msg)
+        }
+    });
+    (events, check)
 }

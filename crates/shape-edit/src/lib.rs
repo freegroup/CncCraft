@@ -35,7 +35,7 @@ pub mod snap;
 pub mod vars;
 pub mod vector;
 
-pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, Orient, SizeConstraint};
+pub use constraints::{Align, Anchor, Axis, Constrains, ConstraintView, Distance, OnLine, Orient, SizeConstraint};
 pub use editor::{Editor, Gesture, Outcome, Started, Tool, View};
 pub use forms::{Arc, Circle, Compound, Dim, DimLine, Draw, Ellipse, Flip, Form, Grip, GripKind, Path, Polygon, Rect, RefImage, Shape, Spline, SplineNode, Text};
 pub use geometry::Contour;
@@ -56,8 +56,10 @@ pub enum SelectionStyle {
     /// A ring-like shape: a solid outline, its centre, and four handles on the sides (circles and
     /// ellipses); no box.
     Ring,
-    /// A single straight line: a solid line with a handle at its start and at its end; no box.
-    Ends,
+    /// An open vector (a straight line is its two-node case), edited as in Fusion 360: a solid line
+    /// with a handle on every node, no box. A node drags freely, a segment drags parallel to itself
+    /// (both its nodes move across it, never along it), the centre mark moves the whole.
+    Polyline,
 }
 
 /// A point in world coordinates (millimetres, X right, Y up).

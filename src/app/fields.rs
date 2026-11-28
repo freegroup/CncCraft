@@ -299,6 +299,10 @@ impl App {
                 (d, constraint.or_else(|| it.bound.iter().find(|(b, _)| *b == d).map(|(_, expr)| expr.clone())).unwrap_or_else(|| fmt(v)))
             })
             .collect();
+        // a shape without sizes to type (an open line or polyline) has no fields to open
+        if fields.is_empty() {
+            return;
+        }
         let touched = vec![false; fields.len()];
         self.dims = Some(DimEdit { id, fields, touched, input: ConstraintInput::selecting(0), rects: vec![], tabs: 0, current: 0, blocked: false, menu_open: false });
         self.status = "Wert eingeben · Formel eingeben und „=“ drücken · TAB: zum nächsten Feld · ENTER zum Anwenden (oder Klick in die Arbeitsfläche) · ESC zum Abbrechen".into();

@@ -12,6 +12,7 @@ use egui::{CursorIcon, Pos2, Rect, Stroke, Vec2};
 pub(super) enum Badge {
     Dimension,
     Align,
+    OnLine,
     Rect,
     Circle,
     Ellipse,
@@ -34,6 +35,9 @@ impl App {
         }
         if self.align_mode.is_some() {
             return Some(Badge::Align);
+        }
+        if self.on_line_mode.is_some() {
+            return Some(Badge::OnLine);
         }
         match self.tool {
             DrawTool::Select => None,
@@ -126,6 +130,8 @@ fn badge_shapes(badge: Badge, c: Pos2) -> Vec<Part> {
         Badge::Dimension => vec![Part::Line(p(-6.0, -5.0), p(-6.0, 5.0)), Part::Line(p(6.0, -5.0), p(6.0, 5.0)), Part::Line(p(-6.0, 0.0), p(6.0, 0.0)), Part::Line(p(-6.0, 0.0), p(-3.0, -2.0)), Part::Line(p(-6.0, 0.0), p(-3.0, 2.0)), Part::Line(p(6.0, 0.0), p(3.0, -2.0)), Part::Line(p(6.0, 0.0), p(3.0, 2.0))],
         // a level bar over an upright one
         Badge::Align => vec![Part::Line(p(-6.0, -3.0), p(6.0, -3.0)), Part::Line(p(-6.0, -5.5), p(-6.0, -0.5)), Part::Line(p(6.0, -5.5), p(6.0, -0.5)), Part::Line(p(-3.0, 2.0), p(-3.0, 8.0)), Part::Line(p(-5.5, 2.0), p(-0.5, 2.0)), Part::Line(p(-5.5, 8.0), p(-0.5, 8.0))],
+        // a point sitting on a line
+        Badge::OnLine => vec![Part::Line(p(-6.0, 3.0), p(6.0, 3.0)), Part::Circle(p(0.0, 3.0), 2.6)],
         Badge::Rect => vec![Part::Poly(vec![p(-6.0, -4.5), p(6.0, -4.5), p(6.0, 4.5), p(-6.0, 4.5)], true)],
         Badge::Circle => vec![Part::Circle(c, 5.5)],
         Badge::Ellipse => vec![Part::Poly((0..24).map(|i| { let a = i as f32 / 24.0 * std::f32::consts::TAU; p(6.5 * a.cos(), 4.0 * a.sin()) }).collect(), true)],

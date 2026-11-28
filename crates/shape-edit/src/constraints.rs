@@ -352,6 +352,19 @@ impl Distance {
         }
     }
 
+    /// For a distance between two nodes of the same vector (indices 5 and up): the second node's
+    /// index in the node list, where it is, the measuring direction and the signed distance now.
+    /// `None` for anything else (box corners, two shapes, a shape without nodes).
+    fn node_end(&self, items: &[Item]) -> Option<(usize, Pt, Pt, f64)> {
+        let (Anchor::Point(ia, i), Anchor::Point(ib, j)) = (self.from, self.to) else { return None };
+        if ia != ib || i < 5 || j < 5 {
+            return None;
+        }
+        find(items, ia)?.nodes()?;
+        let m = self.measure(items)?;
+        Some((j - 5, m.b, m.dir, m.d))
+    }
+
     /// The distance as it is now, or `None` when an end is missing.
     pub fn measure(&self, items: &[Item]) -> Option<Measured> {
         let ia = find(items, self.from.shape())?;
@@ -408,7 +421,22 @@ impl Distance {
             return false;
         }
         if self.from.shape() == self.to.shape() {
-            // scale the shape about the first end (it stays), along the direction of the distance
+            // two nodes of one vector (a segment's length, or any two of its points): only the
+            // second node moves, along the measuring direction — the rest of the vector stays. (Scaling
+            // the whole vector instead made two lengths on one polyline fight each other: each fix
+            // rescaled everything about another point, so the shape crept away frame after frame.)
+            if let Some((index, b, dir, d)) = self.node_end(items) {
+                let target = if d < 0.0 { -value } else { value };
+                let shift = target - d;
+                if shift.abs() < 1e-9 {
+                    return false;
+                }
+                let Some(item) = items.iter_mut().find(|it| it.id == self.to.shape()) else { return false };
+                *item = item.with_node(index, [b[0] + dir[0] * shift, b[1] + dir[1] * shift]);
+                return true;
+            }
+            // anything else on one shape (its box corners: width, height) scales the shape about the
+            // first end (it stays), along the direction of the distance
             let Some(m) = self.measure(items) else { return false };
             let Some((ax, ay)) = self.scale_factors(&m) else { return false };
             let s = value / m.d.abs();
@@ -764,16 +792,23 @@ impl OnLine {
         Ok(())
     }
 
-    /// On one vector: the point's node moves perpendicularly onto its line. Between two shapes the
-    /// solver does it (see [`solve_all_with`]). Returns whether anything changed.
+    /// Whether the point end is a vector/polygon node (index 5 and up), not a box corner or centre.
+    /// Such a point is moved by itself onto the line, so reshaping the other shape leaves the rest
+    /// of the polygon alone — the one node stays on the line (the user's bug: a polygon's start node
+    /// on a line must stay there when the polygon is changed).
+    pub fn point_is_node(&self, items: &[Item]) -> bool {
+        matches!(self.point, Anchor::Point(_, i) if i >= 5) && find(items, self.point.shape()).is_some_and(|it| it.nodes().is_some())
+    }
+
+    /// Move just the point's node perpendicularly onto its line, whether the line is on the same
+    /// shape (a vector onto its own side) or another shape. Only when the point is a node (see
+    /// [`Self::point_is_node`]); between two shapes with a plain corner/centre point the translation
+    /// solver moves the whole shape instead. Returns whether anything changed.
     pub fn apply_nodes(&self, items: &mut [Item]) -> bool {
-        if self.point.shape() != self.line.shape() || self.check(items).is_err() {
+        if !self.point_is_node(items) || self.check(items).is_err() {
             return false;
         }
         let Anchor::Point(id, i) = self.point else { return false };
-        if i < 5 {
-            return false;
-        }
         let Some((p, e0, e1)) = self.parts(items) else { return false };
         let Some(n) = normal(e0, e1) else { return false };
         let off = dot([p[0] - e0[0], p[1] - e0[1]], n);
@@ -787,7 +822,14 @@ impl OnLine {
     }
 }
 
+/// The most rounds the constraints on single shapes (sizes, segment lengths, level/upright nodes,
+/// node points on lines) are applied in one solve. Constraints that agree settle in a few rounds
+/// (each round fixes what the round before disturbed further down a chain); still changing after
+/// this many means they contradict each other, and the solve leaves those shapes as they were.
+pub const SAME_SHAPE_ROUNDS: usize = 32;
+
 /// How far a distance is from its value (absolute, in mm), or `None` when an end is missing.
+/// Zero (within a hair) means it holds; anything else is a constraint the others prevent.
 pub fn shortfall(c: &Distance, items: &[Item], value: f64) -> Option<f64> {
     Some((c.measure(items)?.d.abs() - value).abs())
 }
@@ -809,15 +851,49 @@ pub fn solve_all(list: &[Distance], items: &mut [Item], value: &dyn Fn(&str) -> 
 /// a line is moved, between two shapes it is one more equation for the shapes' shifts (the two
 /// points must not differ across the line's way), solved together with the distances.
 pub fn solve_all_with(list: &[Distance], aligns: &[Align], items: &mut [Item], value: &dyn Fn(&str) -> Option<f64>) -> bool {
+    solve_all_full(list, aligns, &[], items, value)
+}
+
+/// [`solve_all_with`] together with the point-on-line (Coincident) constraints: on a vector the
+/// point's own node moves onto its line; between two shapes it is one more equation (the point's
+/// perpendicular distance to the line must be zero), solved together with the distances and aligns.
+pub fn solve_all_full(list: &[Distance], aligns: &[Align], on_lines: &[OnLine], items: &mut [Item], value: &dyn Fn(&str) -> Option<f64>) -> bool {
     let mut changed = false;
-    // 1. a shape's own size, and the nodes of a vector that must lie level or upright
-    for c in list.iter().filter(|c| c.from.shape() == c.to.shape()) {
-        if let Some(v) = value(&c.expr) {
-            changed |= c.apply(items, v);
+    // 1. a shape's own size, a vector's segment lengths, its nodes that must lie level or upright,
+    // and node points that must sit on a line. Each of these moves something the others may look
+    // at (one node is the end of two segments), so they are applied round after round until a
+    // round changes nothing. That is bounded: constraints that contradict each other would go on
+    // forever, so after `SAME_SHAPE_ROUNDS` the shapes are put back as they were and the
+    // contradiction shows (its constraints are drawn red), instead of the shapes drifting away.
+    let before: Vec<Item> = items.to_vec();
+    let mut settled = false;
+    let mut moved_any = false;
+    for _ in 0..SAME_SHAPE_ROUNDS {
+        let mut round = false;
+        for c in list.iter().filter(|c| c.from.shape() == c.to.shape()) {
+            if let Some(v) = value(&c.expr) {
+                round |= c.apply(items, v);
+            }
+        }
+        for al in aligns.iter().filter(|a| a.a.shape() == a.b.shape()) {
+            round |= al.apply_nodes(items);
+        }
+        // a point-on-line whose point is a vector/polygon node moves just that node onto the line,
+        // whether the line is on the same shape or another; the rest of the shape is left alone
+        let node_on_lines: Vec<&OnLine> = on_lines.iter().filter(|o| o.point_is_node(items)).collect();
+        for ol in node_on_lines {
+            round |= ol.apply_nodes(items);
+        }
+        moved_any |= round;
+        if !round {
+            settled = true;
+            break;
         }
     }
-    for al in aligns.iter().filter(|a| a.a.shape() == a.b.shape()) {
-        changed |= al.apply_nodes(items);
+    if settled {
+        changed |= moved_any;
+    } else {
+        items.clone_from_slice(&before);
     }
     // 2. distances between shapes, as equations in the shifts of the moving shapes
     struct Row {
@@ -854,7 +930,19 @@ pub fn solve_all_with(list: &[Distance], aligns: &[Align], items: &mut [Item], v
         }
         cross_aligns.push(al);
     }
-    if usable.is_empty() && cross_aligns.is_empty() {
+    // point-on-line between two shapes whose point is a plain corner/centre: the whole point shape
+    // moves onto the line. (A node point is handled above by moving just that node.)
+    let mut cross_on_lines: Vec<&OnLine> = Vec::new();
+    for ol in on_lines.iter().filter(|o| o.point.shape() != o.line.shape() && !o.point_is_node(items)) {
+        if ol.check(items).is_err() {
+            continue;
+        }
+        if !movers.contains(&ol.point.shape()) {
+            movers.push(ol.point.shape());
+        }
+        cross_on_lines.push(ol);
+    }
+    if usable.is_empty() && cross_aligns.is_empty() && cross_on_lines.is_empty() {
         return changed;
     }
     // how far a mover hangs from a fixed shape: the deeper one is the easier to move
@@ -870,6 +958,11 @@ pub fn solve_all_with(list: &[Distance], aligns: &[Align], items: &mut [Item], v
         for al in &cross_aligns {
             let Some(from) = movers.iter().position(|m| *m == al.a.shape()) else { continue };
             let to = movers.iter().position(|m| *m == al.b.shape()).expect("every second end is a mover");
+            depth[to] = depth[to].max(depth[from] + 1).min(movers.len() + 1);
+        }
+        for ol in &cross_on_lines {
+            let Some(from) = movers.iter().position(|m| *m == ol.line.shape()) else { continue };
+            let to = movers.iter().position(|m| *m == ol.point.shape()).expect("the point's shape is a mover");
             depth[to] = depth[to].max(depth[from] + 1).min(movers.len() + 1);
         }
     }
@@ -899,6 +992,22 @@ pub fn solve_all_with(list: &[Distance], aligns: &[Align], items: &mut [Item], v
             v0,
             dir: w,
             d0: v0[0] * w[0] + v0[1] * w[1],
+            target: 0.0,
+            straight: false,
+        });
+    }
+    for ol in &cross_on_lines {
+        // the point's perpendicular distance to its line must be zero; the point's shape moves,
+        // the line's shape is the reference. `dir` is the line's normal (fixed), `target` 0.
+        let Some((p, e0, e1)) = ol.parts(items) else { continue };
+        let Some(nrm) = normal(e0, e1) else { continue };
+        let v0 = [p[0] - e0[0], p[1] - e0[1]];
+        rows.push(Row {
+            from: movers.iter().position(|x| *x == ol.line.shape()),
+            to: movers.iter().position(|x| *x == ol.point.shape()).expect("the point's shape is a mover"),
+            v0,
+            dir: nrm,
+            d0: dot(v0, nrm),
             target: 0.0,
             straight: false,
         });
@@ -1345,6 +1454,91 @@ mod tests {
         // the plate can't be the one that moves
         let bad = Align { a: Anchor::Point(1, 0), b: Anchor::Point(PLATE, 0), orient: Orient::Horizontal };
         assert!(bad.check(&items).is_err());
+    }
+
+    #[test]
+    fn point_on_line_between_two_shapes_moves_the_point_shape_onto_the_line() {
+        // B's lower-left corner must lie on A's right side (a vertical line at A's right edge).
+        // A: box [0..10]×[0..10] → right side is x = 10. B starts to the right of it and above.
+        let mut items = vec![item(1, 5.0, 5.0, 10.0, 10.0), item(2, 40.0, 20.0, 8.0, 8.0), plate_item(300.0, 200.0)];
+        let value = |e: &str| e.parse::<f64>().ok();
+        // A's right side is edge 1 (bottom 0, right 1, top 2, left 3); B's lower-left is point 0
+        let ol = OnLine { point: Anchor::Point(2, 0), line: Anchor::Edge(1, 1) };
+        assert!(ol.error(&items).unwrap().abs() > 1.0, "B is off the line to start with");
+        assert!(solve_all_full(&[], &[], &[ol.clone()], &mut items, &value));
+        assert!(ol.error(&items).unwrap().abs() < 1e-9, "B's corner now lies on A's right side");
+        // only the perpendicular (x) place moved; B kept its along-line (y) place
+        assert!((point_of(&items[1], 0).unwrap()[0] - 10.0).abs() < 1e-9, "snapped onto x = 10");
+        assert!((point_of(&items[1], 0).unwrap()[1] - 16.0).abs() < 1e-9, "the along-line (y) place stayed");
+        // the line's shape (A) is the reference and does not move
+        assert_eq!(point_of(&items[0], 0), Some([0.0, 0.0]), "A stayed put");
+        // the plate can't be the mover; Coincident needs a point and a line, not two points
+        assert!(OnLine { point: Anchor::Point(PLATE, 0), line: Anchor::Edge(1, 1) }.check(&items).is_err());
+        assert!(OnLine::between(Anchor::Point(1, 0), Anchor::Point(2, 0)).is_none());
+        assert!(OnLine::between(Anchor::Edge(1, 1), Anchor::Point(2, 0)).is_some());
+    }
+
+    #[test]
+    fn a_polygon_node_stays_on_a_line_when_the_polygon_is_reshaped() {
+        // an open path P whose first node must lie on A's right side (x = 10); A is fixed.
+        // Reshaping P (moving its other nodes) must not take the first node off the line.
+        let a = item(1, 5.0, 5.0, 10.0, 10.0); // box 0..10 × 0..10, right side x = 10
+        let p = Item::new(2, crate::Path::new(vec![[25.0, 20.0], [40.0, 30.0], [50.0, 5.0]], false));
+        let mut items = vec![a, p, plate_item(300.0, 200.0)];
+        let value = |e: &str| e.parse::<f64>().ok();
+        // P's first node is point index 5; A's right side is edge 1
+        let ol = OnLine { point: Anchor::Point(2, 5), line: Anchor::Edge(1, 1) };
+        assert!(ol.point_is_node(&items), "the path's first node is a node point");
+        assert!(solve_all_full(&[], &[], &[ol.clone()], &mut items, &value));
+        assert!((items[1].nodes().unwrap()[0][0] - 10.0).abs() < 1e-9, "node 0 snapped to x = 10");
+        assert!((items[1].nodes().unwrap()[0][1] - 20.0).abs() < 1e-9, "its y stayed (only the node moved)");
+        // the rest of the path and A are untouched by the node move
+        assert_eq!(items[1].nodes().unwrap()[1], [40.0, 30.0], "the other nodes did not move");
+        assert_eq!(point_of(&items[0], 0), Some([0.0, 0.0]), "A did not move");
+        // now reshape P: drag node 1 somewhere else, then re-solve — node 0 is still on the line
+        items[1] = items[1].with_node(1, [70.0, 60.0]);
+        solve_all_full(&[], &[], &[ol.clone()], &mut items, &value);
+        assert!((items[1].nodes().unwrap()[0][0] - 10.0).abs() < 1e-9, "node 0 still on x = 10 after reshape");
+    }
+
+    #[test]
+    fn two_segment_lengths_on_one_polyline_settle_and_stay_put() {
+        // the user's Z: top (0,40)→(60,42), diagonal down to (5,1), bottom to (70,0)
+        let z = Item::new(1, crate::Path::new(vec![[0.0, 40.0], [60.0, 42.0], [5.0, 1.0], [70.0, 0.0]], false));
+        let mut items = vec![z, plate_item(300.0, 200.0)];
+        let value = |e: &str| e.parse::<f64>().ok();
+        let top = Distance { expr: "60".into(), ..length_of(&items, Anchor::Edge(1, 4), [0.0, 0.0]).unwrap() };
+        let diagonal = Distance { expr: "80".into(), ..length_of(&items, Anchor::Edge(1, 5), [0.0, 0.0]).unwrap() };
+        let list = [top.clone(), diagonal.clone()];
+        assert!(solve_all(&list, &mut items, &value));
+        assert!(shortfall(&top, &items, 60.0).unwrap() < 1e-9, "the top is 60");
+        assert!(shortfall(&diagonal, &items, 80.0).unwrap() < 1e-9, "the diagonal is 80");
+        // only the segments' end nodes moved: the first node and the last stay where they were
+        let nodes = items[0].nodes().unwrap();
+        assert_eq!(nodes[0], [0.0, 40.0], "the start of the Z stays");
+        assert_eq!(nodes[3], [70.0, 0.0], "the end of the Z stays");
+        // solving again (as every frame does) changes nothing: no drift
+        let settled = items.clone();
+        for _ in 0..100 {
+            assert!(!solve_all(&list, &mut items, &value), "a settled solve is a no-op");
+        }
+        assert_eq!(items, settled, "the Z does not wander");
+    }
+
+    #[test]
+    fn contradicting_lengths_leave_the_shape_alone_instead_of_drifting() {
+        // one segment asked to be both 30 and 40 long: no answer exists
+        let p = Item::new(1, crate::Path::new(vec![[0.0, 0.0], [35.0, 0.0], [35.0, 20.0]], false));
+        let mut items = vec![p, plate_item(300.0, 200.0)];
+        let value = |e: &str| e.parse::<f64>().ok();
+        let a = Distance { expr: "30".into(), ..length_of(&items, Anchor::Edge(1, 4), [0.0, 0.0]).unwrap() };
+        let b = Distance { expr: "40".into(), ..length_of(&items, Anchor::Edge(1, 4), [0.0, 0.0]).unwrap() };
+        let before = items.clone();
+        for _ in 0..100 {
+            assert!(!solve_all(&[a.clone(), b.clone()], &mut items, &value), "the bounded solve gives up and changes nothing");
+        }
+        assert_eq!(items, before, "the shape stays where it was, however often it is solved");
+        assert!(shortfall(&a, &items, 30.0).unwrap() > 1.0, "the contradiction shows (drawn red)");
     }
 
     #[test]

@@ -64,6 +64,8 @@ pub(super) enum LabelTarget {
     ShapeDim(u64, shape_edit::Dim),
     /// The symbol of a level/upright constraint.
     Align(usize),
+    /// The symbol of a point-on-line (Coincident) constraint.
+    OnLine(usize),
     /// A fillet radius label: shape id, path index, node index.
     Corner(u64, usize, usize),
 }
@@ -149,14 +151,15 @@ impl App {
         for it in &mut self.shapes {
             it.locked = shape_edit::constraints::locked_sides(it, list);
         }
-        if self.distances.is_empty() && self.aligns.is_empty() {
+        if self.distances.is_empty() && self.aligns.is_empty() && self.on_lines.is_empty() {
             return;
         }
-        // level/upright constraints whose shapes are gone are forgotten
+        // level/upright and point-on-line constraints whose shapes are gone are forgotten
         {
             let shapes = &self.shapes;
             let there = |id: u64| id == constraints::PLATE || shapes.iter().any(|s| s.id == id);
             self.aligns.retain(|al| there(al.a.shape()) && there(al.b.shape()));
+            self.on_lines.retain(|ol| there(ol.point.shape()) && there(ol.line.shape()));
         }
         let before = self.distances.len();
         let shapes = &self.shapes;
@@ -179,7 +182,7 @@ impl App {
         let value = |e: &str| calc::eval(e, vars).ok().filter(|v| *v > 0.0);
         // the plate takes part for a moment, as the last item
         self.shapes.push(constraints::plate_item(self.job.width, self.job.height));
-        let changed = constraints::solve_all_with(&self.distances, &self.aligns, &mut self.shapes, &value);
+        let changed = constraints::solve_all_full(&self.distances, &self.aligns, &self.on_lines, &mut self.shapes, &value);
         self.shapes.pop();
         if changed {
             self.distances_pending = true;
@@ -373,6 +376,7 @@ impl App {
                     let is_constraint = match lp.target {
                         LabelTarget::Distance(i) => i < self.distances.len(),
                         LabelTarget::Align(i) => i < self.aligns.len(),
+                        LabelTarget::OnLine(i) => i < self.on_lines.len(),
                         LabelTarget::ShapeDim(id, dim) => self.shapes.iter().any(|s| s.id == id && s.bound.iter().any(|(d, _)| *d == dim)),
                         LabelTarget::Corner(..) => true,
                     };
@@ -464,13 +468,15 @@ impl App {
         };
         let align_labels = &self.align_labels;
         let over_align = |p: Pos2| align_labels.iter().find(|(_, r)| r.contains(p)).map(|(i, _)| *i);
+        let on_line_labels = &self.on_line_labels;
+        let over_on_line = |p: Pos2| on_line_labels.iter().find(|(_, r)| r.contains(p)).map(|(i, _)| *i);
         let corner_labels = &self.corner_labels;
         let fillet_active = matches!(self.tool, DrawTool::FilletInner | DrawTool::FilletOuter);
         let over_corner = |p: Pos2| {
             if fillet_active { return None; }
             corner_labels.iter().find(|(_, _, _, r)| r.contains(p)).map(|(id, pi, ni, _)| (*id, *pi, *ni))
         };
-        if hover.and_then(over_distance).is_some() || hover.and_then(over_align).is_some() || hover.and_then(over_corner).is_some() || (self.dims.is_none() && hover.and_then(over_dim).is_some()) {
+        if hover.and_then(over_distance).is_some() || hover.and_then(over_align).is_some() || hover.and_then(over_on_line).is_some() || hover.and_then(over_corner).is_some() || (self.dims.is_none() && hover.and_then(over_dim).is_some()) {
             ctx.set_cursor_icon(egui::CursorIcon::Grab);
         }
         // right-click on a symbol deletes the constraint
@@ -479,6 +485,14 @@ impl App {
                 self.aligns.remove(i);
                 self.selected_constraint = None;
                 self.status = "Waagrecht/Senkrecht gelöscht".into();
+            }
+            return true;
+        }
+        if let (true, Some(i)) = (right, hover.and_then(over_on_line)) {
+            if i < self.on_lines.len() {
+                self.on_lines.remove(i);
+                self.selected_constraint = None;
+                self.status = "Punkt auf Linie gelöscht".into();
             }
             return true;
         }
@@ -497,7 +511,7 @@ impl App {
             return true;
         }
         let Some(p) = pressed_at else { return false };
-        if over_distance(p).is_none() && over_dim(p).is_none() && over_align(p).is_none() && over_corner(p).is_none() {
+        if over_distance(p).is_none() && over_dim(p).is_none() && over_align(p).is_none() && over_on_line(p).is_none() && over_corner(p).is_none() {
             self.selected_constraint = None;
         }
         let target = match (over_distance(p), over_align(p), over_corner(p), if self.dims.is_none() { over_dim(p) } else { None }) {
@@ -505,12 +519,16 @@ impl App {
             (None, Some(i), _, _) => LabelTarget::Align(i),
             (None, None, Some((id, pi, ni)), _) => LabelTarget::Corner(id, pi, ni),
             (None, None, None, Some((id, dim))) => LabelTarget::ShapeDim(id, dim),
-            _ => return false,
+            _ => match over_on_line(p) {
+                Some(i) => LabelTarget::OnLine(i),
+                None => return false,
+            },
         };
         let rect = match target {
             LabelTarget::Distance(i) => self.distance_labels.iter().find(|(n, _)| *n == i).map(|(_, r)| *r),
             LabelTarget::ShapeDim(id, dim) => self.dim_labels.iter().find(|(n, d, _)| *n == id && *d == dim).map(|(_, _, r)| *r),
             LabelTarget::Align(i) => self.align_labels.iter().find(|(n, _)| *n == i).map(|(_, r)| *r),
+            LabelTarget::OnLine(i) => self.on_line_labels.iter().find(|(n, _)| *n == i).map(|(_, r)| *r),
             LabelTarget::Corner(id, pi, ni) => self.corner_labels.iter().find(|(i, p, n, _)| *i == id && *p == pi && *n == ni).map(|(_, _, _, r)| *r),
         }
         .unwrap_or(Rect::from_center_size(p, Vec2::splat(20.0)));
@@ -557,13 +575,17 @@ impl App {
                 self.aligns.remove(i);
                 self.status = "Waagrecht/Senkrecht gelöscht: die Linie bleibt, wie sie ist".into();
             }
+            LabelTarget::OnLine(i) if i < self.on_lines.len() => {
+                self.on_lines.remove(i);
+                self.status = "Punkt auf Linie gelöscht: die Form bleibt, wo sie ist".into();
+            }
             LabelTarget::Corner(id, pi, ni) => {
                 self.push_undo();
                 self.set_corner_by_id(id, pi, ni, None);
                 self.recompute_all();
                 self.status = t!("Rundung entfernt").into();
             }
-            LabelTarget::Distance(_) | LabelTarget::Align(_) => return false,
+            LabelTarget::Distance(_) | LabelTarget::Align(_) | LabelTarget::OnLine(_) => return false,
         }
         true
     }
@@ -585,7 +607,7 @@ impl App {
             LabelTarget::ShapeDim(id, dim) => self.open_dim_label(id, dim),
             LabelTarget::Corner(id, pi, ni) => self.open_corner_edit(id, pi, ni),
             // a symbol has no value to change
-            LabelTarget::Align(_) => {}
+            LabelTarget::Align(_) | LabelTarget::OnLine(_) => {}
         }
     }
 

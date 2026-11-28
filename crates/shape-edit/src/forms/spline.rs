@@ -123,6 +123,63 @@ impl Spline {
             })
             .collect()
     }
+
+    /// Cut the spline at the parameters in `cuts` — `(segment index, t in 0..1 along that
+    /// segment)`, sorted — into open sub-splines, **without moving the curve**: each Bézier piece
+    /// is the exact de-Casteljau split of the original, so the pieces together trace the very same
+    /// path. A closed spline opens at the first cut and runs once round; an open one keeps its own
+    /// two ends. Fewer than one cut leaves it whole (returns `self`).
+    pub fn split_at(&self, cuts: &[(usize, f64)]) -> Vec<Spline> {
+        let n = self.nodes.len();
+        if n < 2 || cuts.is_empty() {
+            return vec![self.clone()];
+        }
+        let seg_count = if self.closed { n } else { n - 1 };
+        // the nodes in traversal order, starting at the first cut for a ring (so it opens there)
+        let start_seg = cuts[0].0;
+        let order: Vec<usize> = if self.closed { (0..n).map(|i| (start_seg + i) % n).collect() } else { (0..n).collect() };
+        // walk the segments in order, dropping in a new node at each cut (handles from de Casteljau)
+        let mut out: Vec<Vec<SplineNode>> = vec![vec![]];
+        let push = |out: &mut Vec<Vec<SplineNode>>, node: SplineNode| out.last_mut().unwrap().push(node);
+        let mut prev_split: Option<SplineNode> = None;
+        for (step, &si) in order.iter().take(seg_count).enumerate() {
+            let a = prev_split.take().unwrap_or(self.nodes[si]);
+            let b = self.nodes[(si + 1) % n];
+            // the cuts on this segment, in order (for a ring the first cut is at t handled by rotation)
+            let mut ts: Vec<f64> = cuts.iter().filter(|(cs, _)| *cs == si).map(|(_, t)| *t).collect();
+            // a ring cut: the starting cut sits at the seam, not inside this first segment again
+            if self.closed && step == 0 {
+                ts.retain(|t| *t > cuts[0].1 + 1e-9);
+            }
+            ts.sort_by(|x, y| x.total_cmp(y));
+            push(&mut out, a);
+            let mut cur = a;
+            let mut t0 = if self.closed && step == 0 { cuts[0].1 } else { 0.0 };
+            for &t in &ts {
+                let local = (t - t0) / (1.0 - t0);
+                let (left_out, mid, right_in) = split_bezier(cur.pos, cur.cp_out, b.cp_in, b.pos, local);
+                // close off the current piece: the start node keeps its cp_out = left_out
+                out.last_mut().unwrap().last_mut().unwrap().cp_out = left_out;
+                push(&mut out, SplineNode { pos: mid, cp_in: [0.0; 2], cp_out: [0.0; 2], smooth: false });
+                // end this piece at the split point (cp_in from the left half)
+                let end = out.last().unwrap().last().unwrap();
+                let _ = end;
+                // the split point's incoming handle for the piece that ends here
+                out.last_mut().unwrap().last_mut().unwrap().cp_in = split_bezier(cur.pos, cur.cp_out, b.cp_in, b.pos, local).0_in_unused();
+                out.push(vec![]);
+                // the next piece starts at the split point with the right half's outgoing handle
+                cur = SplineNode { pos: mid, cp_in: [0.0; 2], cp_out: right_in, smooth: false };
+                t0 = t;
+            }
+            prev_split = Some(cur);
+        }
+        // the last piece ends on the final node (with its own cp_in)
+        if let Some(last) = order.get(seg_count % n.max(1)).or(order.last()) {
+            let _ = last;
+        }
+        push(&mut out, self.nodes[*order.last().unwrap()]);
+        out.into_iter().filter(|nodes| nodes.len() >= 2).map(|nodes| Spline { nodes, closed: false }).collect()
+    }
 }
 
 const SMOOTHING: f64 = 0.3;

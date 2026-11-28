@@ -605,6 +605,11 @@ impl Pen<'_> {
                 self.line(&[(-9.0, 0.0), (-3.0, 0.0)]);
                 self.line(&[(-9.0, 10.0), (-3.0, 10.0)]);
             }
+            Icon::OnLine => {
+                // a line with a point sitting on it (Coincident: a point on a line)
+                self.line(&[(-9.0, 4.0), (9.0, 4.0)]);
+                self.solid(self.disc(0.0, 4.0, 3.2));
+            }
             Icon::Distance => {
                 // two points with a dimension line above them
                 for x in [-8.0, 8.0] {

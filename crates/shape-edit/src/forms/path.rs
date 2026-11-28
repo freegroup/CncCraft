@@ -86,7 +86,12 @@ impl Form for Path {
         vec![Contour { pts: crate::vector::fillet::outline(&self.points, self.closed, &self.corners), closed: self.closed }]
     }
 
+    /// A closed path shows the width and height of its bounds. An open one shows none: its box says
+    /// little about a line or a polyline, which is edited by its nodes and segments instead.
     fn decoration(&self) -> Vec<DimLine> {
+        if !self.closed {
+            return vec![];
+        }
         bounds_lines(&self.contours())
     }
 

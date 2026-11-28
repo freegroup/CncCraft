@@ -24,7 +24,7 @@ impl Arc {
     }
 
     /// The point on the arc at angle `a` (world).
-    fn at(&self, a: f64) -> Pt {
+    pub fn at(&self, a: f64) -> Pt {
         [self.center[0] + self.radius * a.cos(), self.center[1] + self.radius * a.sin()]
     }
 
