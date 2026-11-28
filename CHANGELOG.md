@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/freegroup/CncCraft/compare/v1.32.0...v1.33.0) (2026-11-28)
+
+
+### Features
+
+* polyline editing (Fusion 360-style), OnLine constraint, exact arc trim ([d5dc4aa](https://github.com/freegroup/CncCraft/commit/d5dc4aaa079d4fa3a4689bfdb8ee33b59c898e05))
+
 # [1.32.0](https://github.com/freegroup/CncCraft/compare/v1.31.0...v1.32.0) (2026-11-27)
 
 
