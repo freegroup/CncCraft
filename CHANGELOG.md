@@ -1,3 +1,10 @@
+# [1.34.0](https://github.com/freegroup/CncCraft/compare/v1.33.0...v1.34.0) (2026-11-28)
+
+
+### Features
+
+* spline trimming (exact sub-splines) and polymorphic Form::trim ([549bdbe](https://github.com/freegroup/CncCraft/commit/549bdbe9ffd6d18f88129c07ed0dc647dd8711a2))
+
 # [1.33.0](https://github.com/freegroup/CncCraft/compare/v1.32.0...v1.33.0) (2026-11-28)
 
 
